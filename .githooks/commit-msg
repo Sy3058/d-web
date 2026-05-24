@@ -1,0 +1,29 @@
+#!/bin/sh
+# Validates the commit message format defined in docs/GUIDE_COMMIT.md
+#   [PREFIX] type: subject   (subject 1~50 chars)
+#   PREFIX = BE | FE | ADMIN | INFRA | COMMON
+#   type   = feat | fix | refactor | test | docs | style | chore | perf
+
+msg=$(head -n1 "$1")
+
+# Let merge/revert/fixup messages through unchanged
+case "$msg" in
+  "Merge "*|"Revert "*|"fixup!"*|"squash!"*) exit 0 ;;
+esac
+
+pattern='^\[(BE|FE|ADMIN|INFRA|COMMON)\] (feat|fix|refactor|test|docs|style|chore|perf): .{1,50}$'
+
+if ! printf '%s' "$msg" | grep -qE "$pattern"; then
+  cat >&2 <<EOF
+커밋 메시지 형식 위반 (docs/GUIDE_COMMIT.md)
+
+  요구 형식: [PREFIX] type: 제목   (제목 1~50자)
+    PREFIX = BE | FE | ADMIN | INFRA | COMMON
+    type   = feat | fix | refactor | test | docs | style | chore | perf
+
+  예시: [BE] feat: add episode purchase endpoint
+
+  받은 메시지: $msg
+EOF
+  exit 1
+fi
