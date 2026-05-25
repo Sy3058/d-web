@@ -173,3 +173,9 @@ staleTime 설정 → 일정 시간 후 자동 refetch
 ❌ **환불/삭제 버튼 무조건 활성화** — 백엔드 상태 확인 후 가능/불가 표시
 
 ❌ **API 에러를 무시** — 항상 try-catch + 사용자에게 알림
+
+---
+
+## 코드 리뷰
+
+커밋 전 Opus 4.7 검증: `@docs/CODE_REVIEW_ADMIN.md` 참조

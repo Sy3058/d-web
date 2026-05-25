@@ -123,3 +123,9 @@ frontend/src/
 ❌ **React 섬 남용** — 정말 필요한 부분만 인터랙티브하게
 
 ❌ **fetch 대신 xmlHttpRequest** — 표준 API 사용
+
+---
+
+## 코드 리뷰
+
+커밋 전 Opus 4.7 검증: `@docs/CODE_REVIEW_FE.md` 참조

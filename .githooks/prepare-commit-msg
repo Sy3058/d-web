@@ -1,0 +1,43 @@
+#!/bin/sh
+# Validates branch name follows area-first convention: {be|fe|admin|common}/{feat|fix|chore|hotfix}/{description}
+# See docs/DECISIONS.md for branch naming strategy
+
+branch=$(git branch --show-current)
+
+# Allow detached HEAD, merge, rebase commits
+if [ -z "$branch" ] || [ "$branch" = "main" ]; then
+  exit 0
+fi
+
+# Branch name pattern:
+#   {be|fe|admin}/{feat|fix|chore|hotfix}/{desc}
+#   common/{docs|chore|setup|...}/{desc}
+pattern='^((be|fe|admin)/(feat|fix|chore|hotfix)|common/[a-z-]+)/.+$'
+
+if ! printf '%s' "$branch" | grep -qE "$pattern"; then
+  cat >&2 <<EOF
+브랜치명 형식 위반 (docs/DECISIONS.md)
+
+  요구 형식: {area}/{type}/{description}
+    area = be | fe | admin | common
+    type = feat | fix | chore | hotfix
+    desc = kebab-case (예: auth-jwt, episode-viewer)
+
+  예시:
+    be/feat/auth-jwt
+    fe/fix/viewer-scroll
+    admin/feat/upload-form
+    common/docs/code-review
+
+  현재 브랜치: $branch
+
+주의: 이 브랜치에서는 커밋할 수 없습니다.
+올바른 브랜치명으로 다시 생성하세요:
+  git branch -m $(printf '%s' "$branch" | sed 's#.*/#be/feat/#') 또는
+  git checkout -b be/feat/description
+
+EOF
+  exit 1
+fi
+
+exit 0
