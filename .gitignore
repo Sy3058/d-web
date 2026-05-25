@@ -11,6 +11,7 @@ venv/
 .env
 .env.*
 .env.production
+!.env.example
 
 # ========================
 # Node / Astro / Vite (frontend, admin)
