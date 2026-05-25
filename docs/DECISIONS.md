@@ -200,32 +200,36 @@
 
 ## 브랜치 전략 결정
 
-### GitHub Flow + 영역 prefix
+### GitHub Flow + 영역 prefix (area-first)
 
 **흐름**
 ```
 main (항상 배포 가능 상태)
-  └── feat/be/auth-jwt
-  └── feat/fe/episode-viewer
-  └── feat/admin/upload-form
-  └── fix/be/payment-webhook
-  └── chore/docker-setup
+  └── be/feat/auth-jwt
+  └── be/fix/payment-webhook
+  └── fe/feat/episode-viewer
+  └── fe/fix/viewer-scroll
+  └── admin/feat/upload-form
+  └── common/docs/code-review
+  └── common/chore/env-setup
 ```
 
 **브랜치 패턴**
 
 | 타입 | 패턴 | 예시 |
 |------|------|------|
-| 기능 | `feat/{영역}/{기능}` | `feat/be/auth-jwt` |
-| 버그 | `fix/{영역}/{내용}` | `fix/fe/viewer-scroll` |
-| 공통/설정/문서 | `chore/{내용}` | `chore/env-setup` |
-| 긴급 핫픽스 | `hotfix/{내용}` | `hotfix/payment-duplicate` |
+| 기능 | `{영역}/feat/{기능}` | `be/feat/auth-jwt` |
+| 버그 | `{영역}/fix/{내용}` | `fe/fix/viewer-scroll` |
+| 공통/설정/문서 | `common/{type}/{내용}` | `common/docs/code-review` |
+| 긴급 핫픽스 | `{영역}/hotfix/{내용}` | `be/hotfix/payment-duplicate` |
 
-영역 prefix: `be` (백엔드), `fe` (프론트), `admin`, `common`
+영역: `be` (백엔드), `fe` (프론트), `admin`, `common`
 
 **이유**
 - 1인 프로젝트 → GitFlow 오버스펙, GitHub Flow가 적합
-- 영역 prefix로 3개 레포 구조에서 어느 영역 작업인지 한눈에 확인
+- 영역 prefix를 맨 앞에 두고 area-first로 구성
+  - `git branch`에서 `be/`, `fe/`, `admin/`, `common/` 별로 자동 그룹화
+  - 어느 영역 작업인지 한눈에 확인, 영역별 진행 상황 파악 용이
 
 ---
 

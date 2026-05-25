@@ -89,3 +89,9 @@ backend/src/
 ❌ 환경변수 하드코딩
 ❌ 개인정보 plaintext 로깅
 ❌ TOTP 시크릿 클라이언트 노출
+
+---
+
+## 코드 리뷰
+
+커밋 전 Opus 4.7 검증: `@docs/CODE_REVIEW_BE.md` 참조
