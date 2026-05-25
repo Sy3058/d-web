@@ -198,6 +198,37 @@
 
 ---
 
+## 브랜치 전략 결정
+
+### GitHub Flow + 영역 prefix
+
+**흐름**
+```
+main (항상 배포 가능 상태)
+  └── feat/be/auth-jwt
+  └── feat/fe/episode-viewer
+  └── feat/admin/upload-form
+  └── fix/be/payment-webhook
+  └── chore/docker-setup
+```
+
+**브랜치 패턴**
+
+| 타입 | 패턴 | 예시 |
+|------|------|------|
+| 기능 | `feat/{영역}/{기능}` | `feat/be/auth-jwt` |
+| 버그 | `fix/{영역}/{내용}` | `fix/fe/viewer-scroll` |
+| 공통/설정/문서 | `chore/{내용}` | `chore/env-setup` |
+| 긴급 핫픽스 | `hotfix/{내용}` | `hotfix/payment-duplicate` |
+
+영역 prefix: `be` (백엔드), `fe` (프론트), `admin`, `common`
+
+**이유**
+- 1인 프로젝트 → GitFlow 오버스펙, GitHub Flow가 적합
+- 영역 prefix로 3개 레포 구조에서 어느 영역 작업인지 한눈에 확인
+
+---
+
 ## 모니터링 결정
 
 | 도구 | 역할 |
