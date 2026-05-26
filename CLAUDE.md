@@ -67,21 +67,6 @@
 - 프론트엔드: @frontend/CLAUDE.md
 - 백엔드: @backend/CLAUDE.md
 - 기획 결정: @docs/DECISIONS.md
+- 워크플로우 (브랜치/커밋/PR/블로그/세션종료/검색): @docs/GUIDE_WORKFLOW.md
+- 커밋 메시지 형식: @docs/GUIDE_COMMIT.md
 - 반복 실수: @docs/MISTAKES.md (필요할 때만 호출)
-
-## 세션 종료 규칙
-
-세션이 끝나거나 작업이 완료되면 자동으로 아래를 수행할 것:
-1. 이번 세션에서 실수하거나 막혔던 것 확인
-2. 심각도에 따라 분류:
-   - 치명적 → 루트 CLAUDE.md "절대 하면 안 되는 것들"에 추가
-   - 영역별 반복 → backend/ 또는 frontend/CLAUDE.md에 추가
-   - 가끔 참고 → docs/MISTAKES.md에 추가
-3. 변경사항 없으면 생략
-
-## 검색 규칙
-
-아래 작업 시 반드시 WebSearch로 최신 버전 확인 후 진행할 것:
-- 패키지/라이브러리 설치
-- 버전 명시가 필요한 모든 작업
-- nvm, pip, apt 등으로 뭔가 설치할 때
