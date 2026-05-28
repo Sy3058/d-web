@@ -94,4 +94,4 @@ backend/src/
 
 ## 코드 리뷰
 
-커밋 전 Opus 4.7 검증: `@docs/CODE_REVIEW_BE.md` 참조
+커밋 전 Opus 4.7 검증: `@docs/reviews/CODE_REVIEW_BE.md` (+ 원칙은 `@docs/reviews/GUIDE_REVIEW.md`)
