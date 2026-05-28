@@ -44,7 +44,7 @@
 - 선행: 없음
 - 산출물: `backend/src/` (routers, services, models, lib), `pyproject.toml`, ruff 설정
 - DoD: `uvicorn main:app` 실행 시 `GET /` 응답 200
-- 결정 필요: Python 버전 (3.12 vs 3.13), 패키지 매니저 (uv vs poetry)
+- 결정: **Python 3.12 + uv** (DECISIONS "Python 버전" / "패키지 매니저")
 
 ### B2. SQLModel + Alembic + asyncpg
 - 선행: B1
@@ -74,19 +74,19 @@
 - 선행: 없음
 - 산출물: `frontend/` (frontend/CLAUDE.md 구조), Tailwind, React 통합, `BaseLayout.astro`
 - DoD: `astro dev` 실행 시 `/` 응답
-- 결정 필요: Node 버전 (20 vs 22 LTS)
+- 결정: **Node 24 LTS** (DECISIONS "Node 버전")
 
 ### B7. Vite React SPA 관리자
 - 선행: 없음
-- 산출물: `admin/`, Tailwind, 라우터
+- 산출물: `admin/`, Tailwind, TanStack Router
 - DoD: `vite dev` 실행 시 `/` 응답
-- 결정 필요: 라우터 (React Router vs TanStack Router)
+- 결정: **TanStack Router** (DECISIONS "관리자 라우터")
 
 ### B8. 공통 api / zod 래퍼
 - 선행: B6, B7
-- 산출물: 각각 `lib/api.ts` (`credentials: 'include'` 기본), `lib/validation.ts` Zod 골격
-- DoD: 더미 API 함수 + 타입 검증 통과
-- 결정 필요: 양쪽 공유 방식 (monorepo workspace vs 복붙 vs 사설 패키지)
+- 산출물: `packages/shared/`에 `lib/api.ts` (`credentials: 'include'` 기본) + `lib/validation.ts` Zod 골격, frontend/admin에서 import
+- DoD: 더미 API 함수 + 타입 검증 통과, 양쪽 빌드 성공
+- 결정: **pnpm workspace + `packages/shared`** (DECISIONS "FE/Admin 공유 코드")
 
 ### B9. Sentry FE 양쪽
 - 선행: B6, B7, A7

@@ -31,6 +31,40 @@
 - Vite+React SPA 단독: SEO 약해서 검색 유입 불가
 - SvelteKit/React Router v7: 한국 자료/결제 가이드 부족
 
+### Node 버전: 24 LTS
+
+**이유**
+- Node 20은 2026-04-30 EOL (이미 만료)
+- Node 22 (LTS, 2027-04까지) / Node 24 (Active LTS, 더 긴 지원 + npm 11 + 최신 V8) 중 새 프로젝트는 24 권장
+- 26은 2026-10에 LTS 승격 예정이므로 현 시점 선택 X
+
+### 관리자 라우터: TanStack Router
+
+**이유**
+- 타입 안전 라우팅 + search params 스키마 검증이 빌트인 → 관리자 페이지의 폼·필터·페이지네이션 처리에 강함
+- loader 패턴으로 데이터 페칭과 라우팅 결합 명확
+- React Router v7도 후보였으나 search params 타입 처리는 TanStack이 우위
+
+### FE/Admin 공유 코드: pnpm workspace + `packages/shared`
+
+**이유**
+- `lib/api.ts` (fetch 래퍼, `credentials: 'include'`), `lib/validation.ts` (Zod 스키마), BE 응답 타입이 양쪽에서 동일하게 필요
+- 복붙은 한쪽 수정 누락 사고가 잦음 (특히 Zod 스키마/API 응답 타입)
+- 사설 npm 패키지는 1인 프로젝트에 publish 사이클 오버스펙
+- pnpm: 디스크·속도 우위, monorepo 표준
+
+**구조**
+```
+/
+├── package.json          # workspace 루트
+├── pnpm-workspace.yaml
+├── packages/shared/      # api 래퍼, zod 스키마, 공통 타입
+├── frontend/             # Astro
+└── admin/                # Vite React
+```
+
+향후 FastAPI OpenAPI → TS 타입 자동 생성으로 발전 가능.
+
 ---
 
 ## 백엔드 스택 결정
@@ -41,6 +75,25 @@
 - FastAPI: Python 기반, 비동기 처리, 자동 API 문서, AI 기능 확장 용이
 - SQLModel: FastAPI 제작자가 만든 ORM. 코드 중복 없이 DB 모델을 API 응답 타입으로 재사용
 - PostgreSQL: 안정적, FastAPI 궁합 좋음, VPS 안에서 직접 운영
+
+### Python 버전: 3.12
+
+**이유**
+- 3.13도 안정화됐지만 일부 C 확장(asyncpg, pydantic-core 등) 휠 배포·호환성이 3.12가 더 안전
+- FastAPI/SQLModel/Alembic 전부 3.12에서 가장 검증됨
+- 3.13의 free-threaded/JIT 기능은 이 프로젝트에서 필요 없음
+
+### 패키지 매니저: uv
+
+**이유**
+- 2026 기준 새 Python 프로젝트의 사실상 디폴트 (poetry 대비 10~100× 빠름)
+- 가상환경 + 의존성 + Python 버전 + lockfile을 한 도구로 관리
+- Docker 이미지 빌드 시간·이미지 크기 모두 작음
+- 이 프로젝트 의존성(FastAPI, SQLModel, asyncpg, pydantic) 모두 휠 잘 배포되어 uv의 약점(C 확장)과 무관
+
+**탈락한 후보**
+- poetry: publish 워크플로우만 약간 우위, 그 외 모든 면에서 uv 우위
+- pip + venv 수동: lockfile/재현성 약함
 
 ---
 
