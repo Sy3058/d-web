@@ -1,0 +1,24 @@
+[project]
+name = "dweb-backend"
+version = "0.1.0"
+description = "웹툰 작가 개인 사이트 - 백엔드"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "fastapi>=0.136.3",
+    "uvicorn[standard]>=0.48.0",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.15",
+]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
