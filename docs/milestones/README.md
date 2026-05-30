@@ -52,12 +52,12 @@ M1 (인증) ──┐
 - [ ] PostgreSQL **일 1회 풀 덤프 → R2 30일 보관** 스크립트 + cron 등록 (Q18)
 
 ### 백엔드 기반
-- [ ] FastAPI 프로젝트 구조 잡기 (routers/services/models/lib)
-- [ ] SQLModel + Alembic + asyncpg 세팅
-- [ ] Pydantic Settings로 `.env` 로딩 + 베이스 URL에서 OAuth/CORS 조립 (DECISIONS "환경 베이스 URL")
-- [ ] structlog JSON 로깅
-- [ ] Sentry 백엔드 연결
-- [ ] pytest 기본 골격 + DB 픽스처
+- [x] FastAPI 프로젝트 구조 잡기 (routers/services/models/lib)
+- [x] SQLModel + Alembic + asyncpg 세팅
+- [x] Pydantic Settings로 `.env` 로딩 + 베이스 URL에서 OAuth/CORS 조립 (DECISIONS "환경 베이스 URL")
+- [x] structlog JSON 로깅
+- [x] Sentry 백엔드 연결
+- [x] pytest 기본 골격 + DB 픽스처
 
 ### 프론트엔드 기반
 - [ ] Astro 프로젝트 생성 + React 통합 + Tailwind
