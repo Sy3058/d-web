@@ -34,9 +34,13 @@
 
 ## 📝 문서
 
-- [ ] `feat` → `docs/MODULES/ADMIN/{기능명}/IMPLEMENTATION_*.md` 작성
-- [ ] `fix` → `docs/MODULES/ADMIN/{기능명}/TROUBLESHOOTING_*.md` 작성
-- [ ] `refactor` / 기존 흐름 변경 → `CHANGELOG_*.md` 업데이트
+> 이번 PR에서 작성/수정한 것만 체크하고 옆에 파일을 적는다.
+
+- [ ] IMPLEMENTATION 작성 - 
+- [ ] TROUBLESHOOTING 작성 - 
+- [ ] CHANGELOG 작성 - 
+- [ ] 마일스톤 업데이트 - 
+- [ ] 그 외 문서/설정 수정 - 
 
 ## 🚫 구현 범위 (feat PR인 경우)
 
