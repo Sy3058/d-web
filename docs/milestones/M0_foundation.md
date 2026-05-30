@@ -56,7 +56,7 @@
 - 선행: B1
 - 산출물: `config.py` (`APP_BASE_URL`/`ADMIN_BASE_URL`에서 OAuth `REDIRECT_URI`, `CORS_ORIGINS` 조립 — DECISIONS "환경 베이스 URL"), `.env.example`
 - DoD: `.env` 누락 시 명확한 에러, 정상 로딩 시 ASGI 기동
-- 결정 필요: 환경별 분리 방식 (`.env.dev`/`.env.prod` vs 단일 + 환경변수 오버라이드)
+- 결정: **단일 `.env` + 환경변수 오버라이드** — 로컬은 `.env` (gitignore), VPS는 서버에 `.env` 수동 1회 작성. CI/CD는 env 파일 관리 없이 SSH로 `docker compose pull && up -d`만 실행.
 
 ### B4. structlog + Sentry BE
 - 선행: B1, A7

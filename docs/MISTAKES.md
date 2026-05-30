@@ -34,6 +34,9 @@
 
 ## 공통
 
+- 백엔드 Python 실행 시 `python` 대신 `uv run python` 사용
+  → `python` 명령은 PATH에 없음. `uv run python`, `uv run uvicorn`, `uv run pytest` 형태로 실행할 것
+
 <!-- 실수 발생 시 여기에 추가 -->
 <!-- 예시:
 - .env 변수 타입 검증 없이 사용 → 런타임 에러
