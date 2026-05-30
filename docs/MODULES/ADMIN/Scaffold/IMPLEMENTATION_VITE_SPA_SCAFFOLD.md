@@ -38,6 +38,7 @@
    - 라우트 파일은 `export const Route` + 로컬 컴포넌트(`function Home`) 구조라 이 룰이 error를 낸다.
    - **직관적 수정인 `allowExportNames: ['Route']`는 안 통한다.** 룰 로직상 `Route`는 비컴포넌트 export 목록에서 빠지지만, 컴포넌트가 *export 안 된 로컬*(`localComponents`)이라 별도 경로로 계속 걸린다.
    - **정답: `eslint.config.js`에서 `src/routes/**`에 한해 룰 off.** HMR은 router 플러그인이 처리하므로 실제 fast-refresh는 정상.
+   - 상세 트러블슈팅(증상/원인/시도): `TROUBLESHOOTING_ESLINT_REACT_REFRESH.md` 참조.
 
 3. **devtools가 devDependency인데 프로덕션 소스에서 import**
    - 일반 빌드(`npm ci`로 devDep 포함)는 정상이고 프로덕션 번들엔 빠진다.
