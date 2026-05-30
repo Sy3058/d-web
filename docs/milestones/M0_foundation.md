@@ -40,35 +40,35 @@
 
 ## 그룹 B. 로컬 개발 환경 (병렬, T+0)
 
-### B1. 백엔드 프로젝트 구조
+### B1. 백엔드 프로젝트 구조 ✅
 - 선행: 없음
 - 산출물: `backend/src/` (routers, services, models, lib), `pyproject.toml`, ruff 설정
 - DoD: `uvicorn main:app` 실행 시 `GET /` 응답 200
 - 결정: **Python 3.12 + uv** (DECISIONS "Python 버전" / "패키지 매니저")
 
-### B2. SQLModel + Alembic + asyncpg
+### B2. SQLModel + Alembic + asyncpg ✅
 - 선행: B1
 - 산출물: `lib/db.py` (AsyncSession + get_session), `alembic/` 비동기 env, 최초 빈 마이그레이션
 - DoD: 로컬 Postgres에 `alembic upgrade head` 성공
-- 결정 필요: 테스트용 DB 방식 (testcontainers vs compose test profile)
+- 결정: **별도 테스트 DB (`TEST_DATABASE_URL`)** - `.env`에 `dweb_test` DB 정의, testcontainers/compose 추가 인프라 없이 가장 단순. CI에서는 GitHub Actions postgres 서비스로 대응.
 
-### B3. Pydantic Settings + .env.example
+### B3. Pydantic Settings + .env.example ✅
 - 선행: B1
 - 산출물: `config.py` (`APP_BASE_URL`/`ADMIN_BASE_URL`에서 OAuth `REDIRECT_URI`, `CORS_ORIGINS` 조립 — DECISIONS "환경 베이스 URL"), `.env.example`
 - DoD: `.env` 누락 시 명확한 에러, 정상 로딩 시 ASGI 기동
 - 결정: **단일 `.env` + 환경변수 오버라이드** — 로컬은 `.env` (gitignore), VPS는 서버에 `.env` 수동 1회 작성. CI/CD는 env 파일 관리 없이 SSH로 `docker compose pull && up -d`만 실행.
 
-### B4. structlog + Sentry BE
+### B4. structlog + Sentry BE ✅
 - 선행: B1, A7
 - 산출물: `lib/logging.py` (JSON 구조화), Sentry SDK init
 - DoD: 의도적 `ZeroDivisionError` → Sentry 수신 확인
 - 결정 필요: 개인정보 마스킹 규칙 (이메일·IP 어디까지 가릴지)
 
-### B5. pytest 골격
+### B5. pytest 골격 ✅
 - 선행: B2
-- 산출물: `tests/`, `conftest.py` (async DB 픽스처), 더미 테스트 1개
+- 산출물: `tests/`, `conftest.py` (async DB 픽스처 + Sentry mock), `test_health.py` (GET / 더미 테스트)
 - DoD: `pytest` 실행 시 통과
-- 결정 필요: B2와 같이 결정 (테스트 DB 방식)
+- 결정: **별도 테스트 DB** (B2와 동일 결정)
 
 ### B6. Astro 독자용 프론트엔드
 - 선행: 없음
