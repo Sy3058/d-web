@@ -75,6 +75,10 @@
 - 산출물: `frontend/` (frontend/CLAUDE.md 구조), Tailwind, React 통합, `BaseLayout.astro`
 - DoD: `astro dev` 실행 시 `/` 응답
 - 결정: **Node 24 LTS** (DECISIONS "Node 버전")
+- 후속 보강(deferred, 골격이라 미룸):
+  - `lib/validation.ts`: `z.string().email(msg)` → zod v4 권장형 `z.email(msg)`로 교체 (M1 인증 폼 작업 시)
+  - `lib/api.ts`: 에러 바디를 raw text가 아닌 FastAPI `{"detail": ...}` JSON 파싱 (에러 UI 붙일 때)
+  - `frontend/.env.example` 추가 — `PUBLIC_API_BASE_URL` 등 PUBLIC_* 변수 문서화
 
 ### B7. Vite React SPA 관리자
 - 선행: 없음
