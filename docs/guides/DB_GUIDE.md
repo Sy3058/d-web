@@ -84,10 +84,20 @@ SQLModel 관계 조회 시 lazy loading이 기본이라 N+1이 발생한다.
 
 ## 6. Alembic 마이그레이션 규칙
 
-모델 변경 후 반드시 마이그레이션 파일 생성:
+이 프로젝트는 **비동기(asyncpg) 환경**이라 `migrations/env.py`가 표준과 다르다.
+`create_async_engine` + `NullPool` + `run_sync()` 패턴으로 세팅되어 있음.
 
-    alembic revision --autogenerate -m "add deleted_at to user"
-    alembic upgrade head
+모델 변경 후 마이그레이션 생성 절차:
+
+1. 새 모델 파일을 `src/models/` 에 추가
+2. `migrations/env.py` 상단 주석 위치에 import 추가:
+
+        from models import user  # noqa: F401  ← autogenerate가 metadata 읽으려면 필수
+
+3. 마이그레이션 생성 + 적용:
+
+        uv run alembic revision --autogenerate -m "add user table"
+        uv run alembic upgrade head
 
 ⚠️ autogenerate가 모든 변경을 감지하지 못할 수 있다.
 생성된 마이그레이션 파일을 반드시 직접 확인 후 적용.
