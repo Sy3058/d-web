@@ -37,6 +37,11 @@
 - 백엔드 Python 실행 시 `python` 대신 `uv run python` 사용
   → `python` 명령은 PATH에 없음. `uv run python`, `uv run uvicorn`, `uv run pytest` 형태로 실행할 것
 
+- 이미 push된 커밋을 rewrite(`reset --soft`/rebase/amend)하면 로컬과 origin이 갈라진다(divergence)
+  → 히스토리 재작성 전 push 여부 확인: `git status -sb`(ahead/behind) 또는 `git rev-parse origin/<branch>`
+  → 이미 pushed면 (1) 새 커밋으로 fix-forward가 기본, (2) 굳이 정리하면 `--force-with-lease` 필요함을 먼저 고지
+  → 이 repo는 squash-merge라 중간 커밋은 어차피 합쳐지므로 정리 목적 rewrite는 대개 불필요
+
 <!-- 실수 발생 시 여기에 추가 -->
 <!-- 예시:
 - .env 변수 타입 검증 없이 사용 → 런타임 에러

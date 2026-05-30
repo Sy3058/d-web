@@ -1,0 +1,15 @@
+#!/bin/sh
+# Reject commits that ADD an em dash (U+2014). Project rule: always use hyphen (-).
+# Only newly added lines in the staged diff are scanned, so pre-existing
+# em dashes in untouched parts of a file do not block the commit.
+
+hits=$(git diff --cached --no-color -U0 --diff-filter=ACM \
+  | grep -P '^\+' | grep -vP '^\+\+\+ ' | grep -P '\x{2014}')
+
+if [ -n "$hits" ]; then
+  printf '%s\n' "커밋 거부: em dash(U+2014) 추가가 감지되었습니다. hyphen(-)으로 교체하세요." >&2
+  printf '%s\n' "위반 라인:" >&2
+  printf '%s\n' "$hits" >&2
+  exit 1
+fi
+exit 0
