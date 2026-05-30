@@ -70,7 +70,7 @@
 - DoD: `pytest` 실행 시 통과
 - 결정: **별도 테스트 DB** (B2와 동일 결정)
 
-### B6. Astro 독자용 프론트엔드
+### B6. Astro 독자용 프론트엔드 ✅
 - 선행: 없음
 - 산출물: `frontend/` (frontend/CLAUDE.md 구조), Tailwind, React 통합, `BaseLayout.astro`
 - DoD: `astro dev` 실행 시 `/` 응답
@@ -80,11 +80,14 @@
   - `lib/api.ts`: 에러 바디를 raw text가 아닌 FastAPI `{"detail": ...}` JSON 파싱 (에러 UI 붙일 때)
   - `frontend/.env.example` 추가 — `PUBLIC_API_BASE_URL` 등 PUBLIC_* 변수 문서화
 
-### B7. Vite React SPA 관리자
+### B7. Vite React SPA 관리자 ✅
 - 선행: 없음
-- 산출물: `admin/`, Tailwind, TanStack Router
-- DoD: `vite dev` 실행 시 `/` 응답
+- 산출물: `admin/`, Tailwind v4 (`@tailwindcss/vite`), TanStack Router (파일 기반 `routes/`)
+- DoD: `vite dev` 실행 시 `/` 응답 (확인: 200)
 - 결정: **TanStack Router** (DECISIONS "관리자 라우터")
+- 메모:
+  - 파일 기반 라우팅(`@tanstack/router-plugin`) 채택 → `routeTree.gen.ts` 자동 생성. `tsc -b`가 빌드 스크립트 선두라 생성 파일이 없으면 CI tsc 실패 → **`routeTree.gen.ts`를 커밋**해 chicken-egg 회피 (`@ts-nocheck` 헤더라 lint/tsc 안전)
+  - TanStack Query / react-hook-form은 M1.5 기능 작업 시 추가 (B7 골격 범위 외)
 
 ### B8. 공통 api / zod 래퍼
 - 선행: B6, B7
