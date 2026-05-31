@@ -13,6 +13,8 @@
 
 ## 선행: 백엔드 스켈레톤 복원
 
+> ⚠️ 업데이트 (2026-06-01): 아래 stash 스켈레톤은 placeholder 수준이라 **폐기**하고, 그룹 A는 정본 `DB_SCHEMA.md §1`에 맞춰 새로 작성했다(UUID PK). stash(`backend src skeleton`)는 drop 완료. 아래 복원 절차는 더 이상 유효하지 않음(이력 보존용).
+
 M0(B1)에서 작성한 `models/routers/services/lib` 골격이 git stash에 보관돼 있다. **그룹 A 시작 전 1회 복원**:
 
 ```bash
@@ -55,7 +57,7 @@ git stash pop stash@{0}
 
 > DB_SCHEMA §1 "계정/인증 도메인" 그대로 구현. SQLModel = DB 모델 + 응답 타입 겸용.
 
-### A1. `users` + `oauth_accounts` + `refresh_tokens` + `email_verifications` 모델
+### A1. `users` + `oauth_accounts` + `refresh_tokens` + `email_verifications` 모델 ✅ 완료 (2026-06-01)
 - 선행: 스켈레톤 복원
 - 산출물: `models/user.py` (`User`, `OAuthAccount`, `RefreshToken`, `EmailVerification`), Alembic 마이그레이션 1개
 - DoD: `uv run alembic upgrade head` 성공 → 4개 테이블 + 인덱스 생성. `oauth_accounts` `UNIQUE(provider, provider_id)`, `idx_users_deleted_at` (partial, `deleted_at IS NULL`) 포함

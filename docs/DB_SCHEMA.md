@@ -374,6 +374,9 @@ CREATE INDEX idx_tags_name              ON tags(name);
 -- soft delete 필터링
 CREATE INDEX idx_users_deleted_at       ON users(deleted_at) WHERE deleted_at IS NULL;
 
+-- 리프레시 토큰 회전/재사용 탐지 시 user_id로 세션 전체 revoke (M1 C4)
+CREATE INDEX idx_refresh_tokens_user_id ON refresh_tokens(user_id);
+
 -- 공개된 에피소드만 조회 (idx_episodes_work_id와 별개의 partial index)
 CREATE INDEX idx_episodes_published     ON episodes(work_id) WHERE is_published = TRUE;
 ```
