@@ -52,8 +52,6 @@
   → 이미 pushed면 (1) 새 커밋으로 fix-forward가 기본, (2) 굳이 정리하면 `--force-with-lease` 필요함을 먼저 고지
   → 이 repo는 squash-merge라 중간 커밋은 어차피 합쳐지므로 정리 목적 rewrite는 대개 불필요
 
-<!-- 실수 발생 시 여기에 추가 -->
-<!-- 예시:
-- .env 변수 타입 검증 없이 사용 → 런타임 에러
-- CORS 설정 빠뜨리고 admin 페이지 연동 → 403
--->
+- 코딩 완료 후 커밋 전 반드시 Opus 검증 단계 거칠 것
+  → 순서: 계획(Opus) → 코딩(Sonnet) → 검증(Opus) → 커밋
+  → Opus 없이 바로 `git commit`으로 넘어가지 말 것

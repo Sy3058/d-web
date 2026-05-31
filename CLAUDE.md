@@ -71,3 +71,4 @@
 - 커밋 메시지 형식: @docs/guides/GUIDE_COMMIT.md
 - 코드 리뷰 원칙: @docs/reviews/GUIDE_REVIEW.md
 - 반복 실수: @docs/MISTAKES.md (필요할 때만 호출)
+- study 작성 규칙: @docs/guides/GUIDE_STUDY.md

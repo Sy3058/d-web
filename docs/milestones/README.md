@@ -84,6 +84,13 @@ M1 (인증) ──┐
 > **선행**: M0
 > **DoD**: 신규 유저가 이메일 또는 구글로 가입 → 인증 메일 수신 → 로그인 상태로 마이페이지 진입까지 완주.
 
+> **M1 시작 전 준비**: backend models/routers/services/lib 스켈레톤이 git stash에 보관되어 있음.
+> 아래 명령으로 확인 후 적용:
+> ```bash
+> git stash list  # "backend src skeleton (models/routers/services) - M1~M4 필요" 찾기
+> git stash pop stash@{N}
+> ```
+
 ### 백엔드
 - [ ] `users` + `oauth_accounts` + `refresh_tokens` + `email_verifications` 모델 + 마이그레이션
 - [ ] bcrypt(cost=12) 비밀번호 해싱

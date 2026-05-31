@@ -45,6 +45,12 @@
 - 산출물: `backend/src/` (routers, services, models, lib), `pyproject.toml`, ruff 설정
 - DoD: `uvicorn main:app` 실행 시 `GET /` 응답 200
 - 결정: **Python 3.12 + uv** (DECISIONS "Python 버전" / "패키지 매니저")
+- 메모: models/routers/services/lib 스켈레톤 골격이 작성되어 있으나 미커밋 상태로 git stash에 보관 중.
+  M1 시작 전 아래 명령으로 복원할 것:
+  ```bash
+  git stash list  # "backend src skeleton (models/routers/services) - M1~M4 필요" 찾기
+  git stash pop stash@{N}  # 해당 번호로 교체
+  ```
 
 ### B2. SQLModel + Alembic + asyncpg ✅
 - 선행: B1
@@ -89,7 +95,7 @@
   - 파일 기반 라우팅(`@tanstack/router-plugin`) 채택 → `routeTree.gen.ts` 자동 생성. `tsc -b`가 빌드 스크립트 선두라 생성 파일이 없으면 CI tsc 실패 → **`routeTree.gen.ts`를 커밋**해 chicken-egg 회피 (`@ts-nocheck` 헤더라 lint/tsc 안전)
   - TanStack Query / react-hook-form은 M1.5 기능 작업 시 추가 (B7 골격 범위 외)
 
-### B8. 공통 api / zod 래퍼
+### B8. 공통 api / zod 래퍼 ✅
 - 선행: B6, B7
 - 산출물: `packages/shared/`에 `lib/api.ts` (`credentials: 'include'` 기본) + `lib/validation.ts` Zod 골격, frontend/admin에서 import
 - DoD: 더미 API 함수 + 타입 검증 통과, 양쪽 빌드 성공
