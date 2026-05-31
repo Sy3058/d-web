@@ -62,3 +62,41 @@
 - 코딩 완료 후 커밋 전 반드시 Opus 검증 단계 거칠 것
   → 순서: 계획(Opus) → 코딩(Sonnet) → 검증(Opus) → 커밋
   → Opus 없이 바로 `git commit`으로 넘어가지 말 것
+
+## Claude 작업 효율 (셸/검증 패턴)
+
+- 셸 출력이 지연되면 빈 결과를 "사실"로 오판하지 말 것 (이번 세션 최악의 실수 원인)
+  → 한 명령의 결과가 비어 있거나 늦게 와도, 그걸 근거로 "파일 없음 / 깨끗함 / 성공"이라 단정 금지
+  → 특히 파괴적 작업(rm, 삭제, downgrade) 전엔 상태를 한 번 더 확정 후 진행
+  → 실제 사고: 이미 존재하던 `DB_SCHEMA.md`를 빈 read 결과 보고 "없음"으로 오판해 삭제 (git에서 복구함)
+
+- 같은 확인 명령을 5~6번 반복하지 말 것
+  → 출력이 늦으면 `flush`용 echo를 난사하는 대신, 결과를 파일로 redirect(`> /tmp/x.txt 2>&1`)하고 Read로 한 번에 읽기
+  → 여러 검증을 한 번에: sentinel(`echo START ... echo END`)로 감싸 한 블록으로 확인
+
+- 파일을 만들기 전에 "없다"고 가정하지 말 것
+  → 새로 만들/지울 파일은 먼저 `git ls-files`나 Read로 존재 여부 확정
+  → autogenerate(alembic 등)가 만든 파일명/리비전 ID를 추측해서 쓰지 말 것. 실제 생성된 파일을 Read로 확인 후 사용
+
+- AskUserQuestion 답을 받기 전에 진행하지 말 것
+  → 도구 호출이 guard/취소로 무산되면 답을 못 받은 것. "받은 척" 후속 작업 금지
+
+- 한 가지 변경을 두 가지 방법으로 동시에 하지 말 것 (방법 하나만 택일)
+  → 실제 사고: 인덱스 추가를 (1) 기존 마이그레이션 파일 직접 수정 + (2) `alembic revision --autogenerate`로 새 파일 생성, 둘 다 해서 인덱스가 중복 생성 → `DuplicateTableError`
+  → 변경 전에 "기존 파일 수정 vs 새 마이그레이션" 중 하나를 먼저 정하고, 그 하나만 실행
+
+- "셸 지연 해결됐다"고 단정하지 말 것
+  → 지연은 해결된 게 아니라 우회(`sleep` + 파일 redirect + Read)하는 것일 뿐. 상태를 낙관적으로 보고하지 말 것
+
+## Alembic 마이그레이션
+
+- 이미 DB에 적용(upgrade)된 마이그레이션 파일을 직접 편집하지 말 것
+  → 파일을 고쳐도 DB는 옛 버전이라 `downgrade`/`check`가 어긋나 깨짐 (파일의 drop_index가 없는 인덱스를 지우려다 실패 등)
+  → 아직 미커밋·로컬 단계면: `alembic downgrade base` → 파일 수정 → `alembic upgrade head`로 깨끗하게 재적용
+  → 이미 커밋·푸시됐으면: 기존 파일 두고 **새 마이그레이션**으로 변경분만 추가 (forward-only)
+
+- psql로 직접 `DROP/CREATE TABLE` 하지 말 것 (guard가 차단함)
+  → 스키마 변경은 항상 alembic 경유. DB 리셋이 필요하면 `alembic downgrade base`
+
+- 마이그레이션 작업 후엔 반드시 `alembic check`로 모델↔DB 동기화 확인
+  → "No new upgrade operations detected"가 나와야 정상. 떠 있는 diff가 있으면 모델/마이그레이션 불일치
