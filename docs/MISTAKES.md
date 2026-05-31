@@ -34,6 +34,16 @@
 
 ## 공통
 
+- pnpm workspace에서 `@tailwindcss/vite` peer dep 충돌
+  → admin이 vite@8을 쓰면 workspace 전체에서 `@tailwindcss/vite`가 vite@8 바인딩으로 resolve됨
+  → Astro 6 (vite@7) 환경에서 `tsconfigPaths` 누락 에러 발생
+  → 해결: 각 패키지에 peer 고정 (`frontend`에 `vite@^7` devDep 명시)
+  → 근본 해결은 Astro 7 (vite@8) 출시 후 일괄 업그레이드 (DECISIONS.md 참조)
+
+- pnpm workspace 추가 후 lockfile이 구버전 peer 해석을 캐싱할 수 있음
+  → `pnpm install --force` 또는 `rm pnpm-lock.yaml && pnpm install`로 강제 재계산
+  → `pnpm why --filter <패키지> <dep>` 으로 실제 resolve 경로 확인
+
 - 백엔드 Python 실행 시 `python` 대신 `uv run python` 사용
   → `python` 명령은 PATH에 없음. `uv run python`, `uv run uvicorn`, `uv run pytest` 형태로 실행할 것
 

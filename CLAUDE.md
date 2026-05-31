@@ -34,14 +34,14 @@
 | 작업 유형 | 모델 | Effort | 전환 알림 문구 |
 |-----------|------|--------|---------------|
 | **계획 & 설계** | | | |
-| 아키텍처/DB 스키마 설계 | Opus 4.7 | xhigh | "⚠️ Opus 4.7 + xhigh로 계획을 세우세요 (`/model opus`)" |
+| 아키텍처/DB 스키마 설계 | Opus 4.8 | xhigh | "⚠️ Opus 4.8 + xhigh로 계획을 세우세요 (`/model opus`)" |
 | 간단한 구조 계획 (폴더, 파일 목록) | Sonnet 4.6 | 기본값 | (전환 불필요) |
 | **코딩** | | | |
 | 일반 코딩, 버그 수정, 리팩토링 | Sonnet 4.6 | 기본값 | (전환 불필요) |
-| 결제 플로우, 보안 로직 구현 | Opus 4.7 | xhigh | "⚠️ Opus 4.7 + xhigh로 전환하세요 (`/model opus`)" |
-| 원인 불명 버그 디버깅 | Opus 4.7 | xhigh | "⚠️ Opus 4.7 + xhigh로 전환하세요 (`/model opus`)" |
+| 결제 플로우, 보안 로직 구현 | Opus 4.8 | xhigh | "⚠️ Opus 4.8 + xhigh로 전환하세요 (`/model opus`)" |
+| 원인 불명 버그 디버깅 | Opus 4.8 | xhigh | "⚠️ Opus 4.8 + xhigh로 전환하세요 (`/model opus`)" |
 | **검증 & 리뷰** | | | |
-| 코드 리뷰, 설계/보안 검증 | Opus 4.7 | high | "⚠️ Opus 4.7로 리뷰하세요 (`/model opus`)" |
+| 코드 리뷰, 설계/보안 검증 | Opus 4.8 | high | "⚠️ Opus 4.8로 리뷰하세요 (`/model opus`)" |
 | 파일 읽기, 포맷팅, 커밋 메시지 | Haiku 4.5 | low | "💡 Haiku로 전환하면 빠르고 저렴합니다 (`/model haiku`)" |
 
 **Effort 레벨 기준 (Opus 사용 시)**

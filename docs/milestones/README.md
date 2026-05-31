@@ -63,7 +63,7 @@ M1 (인증) ──┐
 - [x] Astro 프로젝트 생성 + React 통합 + Tailwind
 - [x] Vite React SPA 프로젝트 생성 (관리자) + Tailwind
 - [ ] Sentry 프론트엔드 연결 (양쪽)
-- [ ] 공통 API 래핑(lib/api.ts) + Zod 검증 스키마 골격
+- [x] 공통 API 래핑(lib/api.ts) + Zod 검증 스키마 골격
 
 ### 외부 서비스 연결
 - [ ] **SMTP 외부 메일 서비스** 가입 + 발신 도메인 SPF/DKIM 인증 (Resend 또는 SendGrid 무료 플랜)
