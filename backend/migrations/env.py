@@ -1,5 +1,4 @@
 import asyncio
-import os
 import sys
 from logging.config import fileConfig
 from pathlib import Path
@@ -24,7 +23,8 @@ target_metadata = SQLModel.metadata
 
 
 def get_url() -> str:
-    return os.environ["DATABASE_URL"]
+    from config import settings
+    return settings.database_url
 
 
 def run_migrations_offline() -> None:
