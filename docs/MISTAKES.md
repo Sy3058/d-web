@@ -32,6 +32,13 @@
 - Signed URL 만료 시간 너무 짧게 설정 → 뷰어 로딩 중 만료
 -->
 
+## Vite / Astro
+
+- Vite dev 서버 시작 후 `.env` 파일을 생성/수정해도 반영 안 됨
+  -> `VITE_*` 환경변수는 서버 시작 시점에 번들에 주입됨
+  -> `.env` 생성 전에 `pnpm dev`를 먼저 띄우면 env가 undefined로 뜸
+  -> 해결: `.env` 작성 후 dev 서버 재시작
+
 ## 공통
 
 - pnpm workspace에서 `@tailwindcss/vite` peer dep 충돌

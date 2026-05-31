@@ -62,7 +62,7 @@ M1 (인증) ──┐
 ### 프론트엔드 기반
 - [x] Astro 프로젝트 생성 + React 통합 + Tailwind
 - [x] Vite React SPA 프로젝트 생성 (관리자) + Tailwind
-- [ ] Sentry 프론트엔드 연결 (양쪽)
+- [x] Sentry 프론트엔드 연결 (양쪽)
 - [x] 공통 API 래핑(lib/api.ts) + Zod 검증 스키마 골격
 
 ### 외부 서비스 연결

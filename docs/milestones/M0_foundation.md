@@ -105,10 +105,16 @@
   - `@tailwindcss/vite@4.3.0`이 Vite 8 바인딩에서 tsconfigPaths 필드를 요구하는 버그 있음 - Vite 7로 고정해 회피
   - **Astro 7 stable 출시 시 Vite 8 일괄 업그레이드 필요**: frontend(astro@7), admin(vite@8 + @vitejs/plugin-react@6), frontend/package.json의 `vite` devDep 고정 제거
 
-### B9. Sentry FE 양쪽
+### B9. Sentry FE 양쪽 ✅
 - 선행: B6, B7, A7
 - 산출물: Sentry SDK init (Astro + Vite)
-- DoD: 의도적 에러 → 양쪽 Sentry 프로젝트 수신
+- DoD: 의도적 에러 -> 양쪽 Sentry 프로젝트 수신
+- 결정: Sentry 프로젝트 1개(BE/FE 공용 DSN). 프로젝트 분리는 트래픽 증가 후 검토.
+- 메모:
+  - frontend: `@sentry/astro` + `sentry.client.config.ts` / `sentry.server.config.ts`
+  - admin: `@sentry/react`, `Sentry.init()`을 `main.tsx` render 전에 호출
+  - DSN 미설정 시 init skip (guard 처리) - 빈 env로도 앱 정상 기동
+  - Vite 빌드 시 `[sentry-vite-plugin] No auth token` 경고는 정상 (소스맵 업로드 미설정). CI/CD(F2) 때 `SENTRY_AUTH_TOKEN` 추가로 해결
 
 ---
 
