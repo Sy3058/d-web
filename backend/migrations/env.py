@@ -14,6 +14,9 @@ from sqlmodel import SQLModel
 #   from models import user, episode, payment, community  # noqa: F401
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+# 모델 메타데이터 등록 (SQLModel.metadata 채우기 - 마이그레이션/autogenerate용)
+import models  # noqa: E402,F401
+
 config = context.config
 
 if config.config_file_name is not None:
