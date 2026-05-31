@@ -61,7 +61,14 @@ PR은 사용자가 직접 올린다. Claude는 본문만 파일로 작성한다.
    - 치명적 → 루트 `CLAUDE.md` "절대 하면 안 되는 것들"에 추가
    - 영역별 반복 → `backend/` 또는 `frontend/CLAUDE.md`에 추가
    - 가끔 참고 → `docs/MISTAKES.md`에 추가
-3. 변경사항 없으면 생략
+3. `study/` 폴더 업데이트 여부 확인:
+   - 이번 세션에서 새로 배운 개념/기술(라이브러리, 도구, 언어 기능 등) → `study/concepts/`에 개별 파일로 추가
+   - 의미 있는 작업 세션이었다면 → `study/sessions/YYYY-MM-DD-주제.md`에 기록
+4. `docs/` 폴더 업데이트 여부 확인:
+   - 기술 스택/기능 결정이 바뀌었거나 추가됐으면 → `docs/DECISIONS.md` 업데이트
+   - DB 스키마 변경이 있었으면 → `docs/DB_SCHEMA.md` 업데이트
+   - 마일스톤 작업을 완료했으면 → `docs/milestones/` 해당 문서 업데이트
+5. 위 항목 모두 변경사항 없으면 생략
 
 ---
 

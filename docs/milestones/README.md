@@ -62,7 +62,7 @@ M1 (인증) ──┐
 ### 프론트엔드 기반
 - [x] Astro 프로젝트 생성 + React 통합 + Tailwind
 - [x] Vite React SPA 프로젝트 생성 (관리자) + Tailwind
-- [ ] Sentry 프론트엔드 연결 (양쪽)
+- [x] Sentry 프론트엔드 연결 (양쪽)
 - [x] 공통 API 래핑(lib/api.ts) + Zod 검증 스키마 골격
 
 ### 외부 서비스 연결
@@ -83,6 +83,13 @@ M1 (인증) ──┐
 > **목적**: 가입/로그인/세션 + 이메일 인증. **카카오 OAuth는 M1.5에서 별도 진행** (Q20 결정: 비즈앱 사업자 서류 필요).
 > **선행**: M0
 > **DoD**: 신규 유저가 이메일 또는 구글로 가입 → 인증 메일 수신 → 로그인 상태로 마이페이지 진입까지 완주.
+
+> **M1 시작 전 준비**: backend models/routers/services/lib 스켈레톤이 git stash에 보관되어 있음.
+> 아래 명령으로 확인 후 적용:
+> ```bash
+> git stash list  # "backend src skeleton (models/routers/services) - M1~M4 필요" 찾기
+> git stash pop stash@{N}
+> ```
 
 ### 백엔드
 - [ ] `users` + `oauth_accounts` + `refresh_tokens` + `email_verifications` 모델 + 마이그레이션
