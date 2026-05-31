@@ -1,4 +1,4 @@
-# M0. 프로젝트 기반 세팅 — 세부
+# M0. 프로젝트 기반 세팅 - 세부
 
 | 항목 | 내용 |
 |------|------|
@@ -6,7 +6,7 @@
 | 상위 마일스톤 | [M0](./README.md#m0-프로젝트-기반-세팅) |
 | 예상 기간 | 1.5~2주 (DNS 전파 대기 포함) |
 | 완료 기준 | 로컬 + 스테이징 + CI/CD + 백업 + 모니터링 모두 작동 (그룹 G 체크리스트) |
-| 다음 마일스톤 | [M1](./README.md#m1-인증-이메일--구글) — 인증 |
+| 다음 마일스톤 | [M1](./README.md#m1-인증-이메일--구글) - 인증 |
 
 ---
 
@@ -28,13 +28,13 @@
 
 > 웹 콘솔 클릭 작업. 키는 안전한 곳(1Password 등)에 보관 후 `.env`에 적용.
 
-- [ ] **A1. 도메인 등록** — Cloudflare 또는 가비아. 첫날 시작 (DNS 전파 24h).
-- [ ] **A2. Hetzner VPS** — CX22 싱가포르, SSH 키 등록, 결제 카드 확인.
-- [ ] **A3. Cloudflare R2** — 운영 버킷 + **백업 버킷** 2개, S3 호환 access key.
-- [ ] **A4. Resend (SMTP)** — 발신 도메인 SPF/DKIM DNS 등록. **A1 직후, 첫날 시작** (DKIM 전파 24h).
-- [ ] **A5. 토스페이먼츠 샌드박스** — 클라이언트/시크릿 키. 실 키 교체는 M7.
-- [ ] **A6. 구글 OAuth Client ID** — 로컬 + 스테이징 리다이렉트 URI 양쪽 등록.
-- [ ] **A7. Sentry / UptimeRobot 가입** — Sentry BE/FE 프로젝트 2개 DSN, UptimeRobot 가입까지 (모니터 등록은 E2).
+- [ ] **A1. 도메인 등록** - Cloudflare 또는 가비아. 첫날 시작 (DNS 전파 24h). *(보류 - 그룹 D 전체를 나중으로 미룸)*
+- [ ] **A2. Hetzner VPS** - CX22 싱가포르, SSH 키 등록, 결제 카드 확인. *(보류 - 그룹 D 전체를 나중으로 미룸)*
+- [ ] **A3. Cloudflare R2** - 운영 버킷 + **백업 버킷** 2개, S3 호환 access key. *(보류 - E1이 D4에 의존하므로 그룹 D와 함께 보류)*
+- [ ] **A4. Resend (SMTP)** - 발신 도메인 SPF/DKIM DNS 등록. **A1 직후, 첫날 시작** (DKIM 전파 24h).
+- [ ] **A5. 토스페이먼츠 샌드박스** - 클라이언트/시크릿 키. 실 키 교체는 M7.
+- [ ] **A6. 구글 OAuth Client ID** - 로컬 + 스테이징 리다이렉트 URI 양쪽 등록.
+- [x] **A7. Sentry / UptimeRobot 가입** - Sentry BE/FE 프로젝트 2개 DSN, UptimeRobot 가입까지 (모니터 등록은 E2). *(B4/B9 연동 완료)*
 
 ---
 
@@ -60,9 +60,9 @@
 
 ### B3. Pydantic Settings + .env.example ✅
 - 선행: B1
-- 산출물: `config.py` (`APP_BASE_URL`/`ADMIN_BASE_URL`에서 OAuth `REDIRECT_URI`, `CORS_ORIGINS` 조립 — DECISIONS "환경 베이스 URL"), `.env.example`
+- 산출물: `config.py` (`APP_BASE_URL`/`ADMIN_BASE_URL`에서 OAuth `REDIRECT_URI`, `CORS_ORIGINS` 조립 - DECISIONS "환경 베이스 URL"), `.env.example`
 - DoD: `.env` 누락 시 명확한 에러, 정상 로딩 시 ASGI 기동
-- 결정: **단일 `.env` + 환경변수 오버라이드** — 로컬은 `.env` (gitignore), VPS는 서버에 `.env` 수동 1회 작성. CI/CD는 env 파일 관리 없이 SSH로 `docker compose pull && up -d`만 실행.
+- 결정: **단일 `.env` + 환경변수 오버라이드** - 로컬은 `.env` (gitignore), VPS는 서버에 `.env` 수동 1회 작성. CI/CD는 env 파일 관리 없이 SSH로 `docker compose pull && up -d`만 실행.
 
 ### B4. structlog + Sentry BE ✅
 - 선행: B1, A7
@@ -84,7 +84,7 @@
 - 후속 보강(deferred, 골격이라 미룸):
   - `lib/validation.ts`: `z.string().email(msg)` → zod v4 권장형 `z.email(msg)`로 교체 (M1 인증 폼 작업 시)
   - `lib/api.ts`: 에러 바디를 raw text가 아닌 FastAPI `{"detail": ...}` JSON 파싱 (에러 UI 붙일 때)
-  - `frontend/.env.example` 추가 — `PUBLIC_API_BASE_URL` 등 PUBLIC_* 변수 문서화
+  - `frontend/.env.example` 추가 - `PUBLIC_API_BASE_URL` 등 PUBLIC_* 변수 문서화
 
 ### B7. Vite React SPA 관리자 ✅
 - 선행: 없음
@@ -120,21 +120,48 @@
 
 ## 그룹 C. 로컬 통합 (Docker Compose)
 
-### C1. compose.yml
+### C1. compose.yml ✅
 - 선행: B1, B6, B7
 - 산출물: `api`, `frontend`, `admin`, `postgres`, `caddy` 5개 서비스 + volumes + healthcheck
 - DoD: `docker compose up` → 모든 컨테이너 healthy
-- 결정 필요: 개발 hot reload 방식 (volume mount vs 컨테이너 외부 dev 서버)
+- 결정: **컨테이너 외부 dev 서버** - 일상 개발 시 `docker compose up postgres`만 띄우고 api/frontend/admin은 로컬에서 각각 실행. `docker compose up`은 전체 스택 통합 확인 용도.
+- 메모:
+  - backend Dockerfile: `python:3.12-slim` + uv, `src.main:app` 모듈 경로
+  - frontend Dockerfile: 멀티스테이지 빌드 (Node 24 pnpm build → nginx:alpine 정적 서빙)
+  - admin Dockerfile: 동일 패턴 (Vite SPA → nginx:alpine, try_files /index.html)
+  - compose 내 DATABASE_URL은 `postgres` 컨테이너 호스트명으로 오버라이드 (backend/.env의 localhost 값을 덮어씀)
+  - Astro SSR 페이지(M1 이후) 추가 시 `@astrojs/node` 어댑터 + Dockerfile Node 서버 방식으로 전환 필요
 
-### C2. Caddy 로컬 라우팅
+### C2. Caddy 로컬 라우팅 ✅
 - 선행: C1
-- 산출물: `Caddyfile` (api → 8000, frontend → 4321, admin → 5173)
+- 산출물: `Caddyfile` (api → api:8000, frontend → frontend:80, admin.localhost → admin:80)
 - DoD: localhost로 3개 서비스 라우팅 정상
-- 결정 필요: 관리자 분리 방식 (서브도메인 `admin.localhost` vs 경로 `/admin`)
+- 결정: **서브도메인 `admin.localhost`** - 스테이징/프로덕션 구조(admin.도메인)와 동일 패턴 유지
+- 메모:
+  - `admin.localhost`는 Linux/WSL2에서 `/etc/hosts`에 `127.0.0.1 admin.localhost` 추가 필요
+  - 로컬 HTTP만 사용 (HTTPS는 D4 - VPS Caddy + Let's Encrypt 에서 처리)
+  - api는 localhost:8000 직접 접근 가능 (ports 노출), `api.localhost`는 Caddy 통한 편의 접근
 
 ---
 
-## 그룹 D. VPS 배포 기반
+## 그룹 D. VPS 배포 기반 *(전체 보류 - 나중으로 미룸)*
+
+> 그룹 C까지 완료 후 CI/CD(F), 인증(M1) 등 개발을 먼저 진행. VPS 배포는 개발이 충분히 진행된 후 시작.
+> A1(도메인), A2(VPS), A3(R2)도 이 그룹과 함께 보류.
+
+> **⚠️ VPS 배포 전 필수 보안 처리 (C1/C2 compose 재사용 시)**
+> 현재 `compose.yml`은 로컬 전용으로 안전하게 설정돼 있으나(포트 127.0.0.1 바인딩),
+> 이 파일을 VPS에 그대로 올리면 안 됨. C1/C2 코드리뷰(Opus, 2026-05-31)에서 나온 Major 3건:
+>
+> 1. **DB/API 포트 노출 차단**: `postgres:5432`, `api:8000`을 VPS 공인 인터페이스에 노출 금지.
+>    프로덕션 compose에서는 `ports` 매핑 제거(컨테이너 네트워크 내부 통신만) 또는 Caddy 경유만 허용.
+>    외부 접근은 Caddy(80/443)로만. 로컬은 `127.0.0.1` 바인딩으로 이미 처리됨.
+> 2. **POSTGRES_PASSWORD 강한 값 필수**: 현재 `${POSTGRES_PASSWORD:-postgres}` 기본값 의존.
+>    프로덕션은 `.env`에 강한 랜덤 비밀번호 명시, 기본값 fallback에 의존 금지.
+> 3. **컨테이너 비root 실행**: `backend/Dockerfile`에 `USER` 지시어 없어 root로 uvicorn 실행 중.
+>    결제/JWT 다루는 API에 RCE 발생 시 컨테이너 root 탈취. 비root 사용자 추가 후 `USER appuser`.
+>
+> 추가 권장(Nit, 여유 시): admin nginx 보안 헤더(X-Frame-Options 등)는 D4 프로덕션 Caddy에서 일괄 주입 검토.
 
 ### D1. VPS 보안 기본
 - 선행: A2
@@ -146,7 +173,7 @@
 - 선행: A1, A2
 - 산출물: 서비스 도메인 + 관리자 도메인 → VPS IP
 - DoD: `dig` 결과 정상, 전파 확인
-- 결정 필요: Cloudflare 프록시 사용 여부 (Caddy 자체 HTTPS와 충돌 주의 — Full(Strict) 모드면 OK)
+- 결정 필요: Cloudflare 프록시 사용 여부 (Caddy 자체 HTTPS와 충돌 주의 - Full(Strict) 모드면 OK)
 
 ### D3. VPS Docker 환경
 - 선행: D1
@@ -186,7 +213,7 @@
 
 ### F1. lint + test 워크플로우
 - 선행: B1, B5, B6, B7
-- 산출물: `.github/workflows/ci.yml` — PR 시 ruff + pytest + biome/eslint + tsc
+- 산출물: `.github/workflows/ci.yml` - PR 시 ruff + pytest + biome/eslint + tsc
 - DoD: PR 생성 시 5분 내 체크 통과
 - 결정 필요: 변경된 영역만 실행 vs 전체 실행 (`paths` 필터 사용 여부)
 
@@ -203,7 +230,7 @@
 
 ### F4. PR / 이슈 템플릿 동작 확인
 - 선행: 없음
-- 산출물: 기존 영역별 PR 템플릿 + 이슈 템플릿 (이미 존재 — 실 PR 1건 생성으로 확인)
+- 산출물: 기존 영역별 PR 템플릿 + 이슈 템플릿 (이미 존재 - 실 PR 1건 생성으로 확인)
 - DoD: PR 작성 시 영역 템플릿 자동 로드
 
 ---

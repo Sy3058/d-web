@@ -14,16 +14,16 @@ routers/, services/, models/, lib/, config.py, main.py 변경사항
 
 ---
 
-## 🚨 Critical — 머지 금지
+## 🚨 Critical - 머지 금지
 
 다음 위반 발견 시 즉시 STOP:
 
-- [ ] 클라이언트 결제 금액 신뢰 — 금액은 **DB에서만 계산**
-- [ ] JWT를 응답 본문 평문으로 반환 — **HttpOnly 쿠키만**
-- [ ] 권한 검증 없이 리소스 반환 — `Depends(get_current_user)`, `Depends(require_admin)` 필수
+- [ ] 클라이언트 결제 금액 신뢰 - 금액은 **DB에서만 계산**
+- [ ] JWT를 응답 본문 평문으로 반환 - **HttpOnly 쿠키만**
+- [ ] 권한 검증 없이 리소스 반환 - `Depends(get_current_user)`, `Depends(require_admin)` 필수
 - [ ] 미결제 유저에게 Signed URL, r2_key, 이미지 URL 노출
-- [ ] 클라이언트에서 Signed URL 생성 — 백엔드만 생성
-- [ ] 원시 SQL 조합 (`text("SELECT ...")`) — SQLModel ORM 사용
+- [ ] 클라이언트에서 Signed URL 생성 - 백엔드만 생성
+- [ ] 원시 SQL 조합 (`text("SELECT ...")`) - SQLModel ORM 사용
 - [ ] 비동기 함수에서 `requests`, `time.sleep`, 동기 DB 호출 등 블로킹
 - [ ] 트랜잭션 없이 다중 INSERT (결제 관련)
 - [ ] 환경변수 하드코딩
@@ -33,7 +33,7 @@ routers/, services/, models/, lib/, config.py, main.py 변경사항
 
 ---
 
-## ⚠️ Major — 수정 필요
+## ⚠️ Major - 수정 필요
 
 - [ ] **결제 흐름**: 포트원 API 검증 → 금액 확인 → DB insert 순서. 검증 실패 시 DB 변경 없음
 - [ ] **Webhook**: `PORTONE_WEBHOOK_SECRET` 검증, 타임스탬프 확인
@@ -46,7 +46,7 @@ routers/, services/, models/, lib/, config.py, main.py 변경사항
 
 ---
 
-## 💡 Minor — 권장
+## 💡 Minor - 권장
 
 - 타입 힌트: 모든 함수 반환 타입 명시
 - 의존성 주입: DB 세션, 현재 유저는 `Depends()`로
@@ -59,13 +59,13 @@ routers/, services/, models/, lib/, config.py, main.py 변경사항
 
 ```
 ## 🚨 Critical
-- 파일:line — 문제 설명 — 수정 방향
+- 파일:line - 문제 설명 - 수정 방향
 
 ## ⚠️ Major
-- 파일:line — 문제 설명
+- 파일:line - 문제 설명
 
 ## 💡 Minor
-- 파일:line — 개선 제안
+- 파일:line - 개선 제안
 
 ## ✅ 통과
 - 확인 항목 요약 (1-2줄)

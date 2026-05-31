@@ -14,18 +14,18 @@ routes/, components/, hooks/, lib/ 변경사항 (Vite React SPA 관리자)
 
 ---
 
-## 🚨 Critical — 머지 금지
+## 🚨 Critical - 머지 금지
 
-- [ ] JWT를 `localStorage`/`sessionStorage` 저장 — **HttpOnly 쿠키만**
-- [ ] 클라이언트에서만 권한 확인 (UI 표시/숨김) — **백엔드 API에서 검증**
-- [ ] 이미지 업로드 후 클라이언트 URL을 그대로 DB 저장 — 백엔드 검증 필수
-- [ ] TOTP 코드/시크릿을 메모리 외 저장 — `localStorage`, IndexedDB, 쿠키 금지
+- [ ] JWT를 `localStorage`/`sessionStorage` 저장 - **HttpOnly 쿠키만**
+- [ ] 클라이언트에서만 권한 확인 (UI 표시/숨김) - **백엔드 API에서 검증**
+- [ ] 이미지 업로드 후 클라이언트 URL을 그대로 DB 저장 - 백엔드 검증 필수
+- [ ] TOTP 코드/시크릿을 메모리 외 저장 - `localStorage`, IndexedDB, 쿠키 금지
 - [ ] API 에러를 무시하거나 사용자 알림 없이 진행
-- [ ] 환불/삭제/공개 버튼이 즉시 확정 동작 — 백엔드 응답 대기 필수
+- [ ] 환불/삭제/공개 버튼이 즉시 확정 동작 - 백엔드 응답 대기 필수
 
 ---
 
-## ⚠️ Major — 수정 필요
+## ⚠️ Major - 수정 필요
 
 - [ ] **라우트 가드**: `beforeLoad`에서 토큰 검증, 없으면 `/login` 리다이렉트
 - [ ] **2FA**: 이메일/비번 입력 → TOTP 화면 → 코드 검증 → 토큰 발급 순서
@@ -40,7 +40,7 @@ routes/, components/, hooks/, lib/ 변경사항 (Vite React SPA 관리자)
 
 ---
 
-## 💡 Minor — 권장
+## 💡 Minor - 권장
 
 - 에러 알림: `ErrorAlert` 컴포넌트 일관 사용
 - Destructive 액션: 확인 모달 필수 (환불, 삭제)
@@ -52,13 +52,13 @@ routes/, components/, hooks/, lib/ 변경사항 (Vite React SPA 관리자)
 
 ```
 ## 🚨 Critical
-- 파일:line — 문제 설명 — 수정 방향
+- 파일:line - 문제 설명 - 수정 방향
 
 ## ⚠️ Major
-- 파일:line — 문제 설명
+- 파일:line - 문제 설명
 
 ## 💡 Minor
-- 파일:line — 개선 제안
+- 파일:line - 개선 제안
 
 ## ✅ 통과
 - 확인 항목 요약 (1-2줄)

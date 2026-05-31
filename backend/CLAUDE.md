@@ -1,4 +1,4 @@
-# Backend — FastAPI REST API 서버
+# Backend - FastAPI REST API 서버
 
 ## 스택 결정 (왜?)
 

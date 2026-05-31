@@ -1,0 +1,9 @@
+# backend 빌드 컨텍스트(./backend)는 루트 .dockerignore가 적용되지 않으므로 별도 정의
+.env
+.venv
+__pycache__
+**/__pycache__
+*.pyc
+.pytest_cache
+.ruff_cache
+tests
