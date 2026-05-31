@@ -48,6 +48,19 @@
 - Vite+React SPA 단독: SEO 약해서 검색 유입 불가
 - SvelteKit/React Router v7: 한국 자료/결제 가이드 부족
 
+### Vite 버전: 7 (workspace 통일) - Astro 7 출시 시 8로 업그레이드
+
+**현재 상태 (2026-05-31)**
+- Astro 6는 Vite 7 사용 (`vite@^7.3.2`)
+- admin도 Vite 7로 맞춰 workspace 전체를 vite@7으로 통일 (`@vitejs/plugin-react@^5`)
+- `@tailwindcss/vite@4.3.0`이 Vite 8 네이티브 바인딩에서 `tsconfigPaths` 누락 버그 있어 Vite 8 혼용 불가
+- frontend/package.json에 `vite@^7`을 devDep으로 명시해 pnpm peer 해석 고정
+
+**Astro 7 stable 출시 시 일괄 업그레이드 항목**
+- `frontend`: `astro@7`, devDep `vite` 고정 제거
+- `admin`: `vite@^8`, `@vitejs/plugin-react@^6`
+- `build.rollupOptions` -> `build.rolldownOptions` 이름 변경 여부 확인
+
 ### Node 버전: 24 LTS
 
 **이유**

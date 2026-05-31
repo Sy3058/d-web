@@ -1,0 +1,7 @@
+{
+  "private": true,
+  "scripts": {
+    "dev:fe": "pnpm --filter frontend dev",
+    "dev:admin": "pnpm --filter admin dev"
+  }
+}

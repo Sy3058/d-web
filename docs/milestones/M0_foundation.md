@@ -94,6 +94,10 @@
 - 산출물: `packages/shared/`에 `lib/api.ts` (`credentials: 'include'` 기본) + `lib/validation.ts` Zod 골격, frontend/admin에서 import
 - DoD: 더미 API 함수 + 타입 검증 통과, 양쪽 빌드 성공
 - 결정: **pnpm workspace + `packages/shared`** (DECISIONS "FE/Admin 공유 코드")
+- 메모:
+  - Astro 6는 Vite 7을 사용하므로 workspace 전체를 Vite 7로 통일 (admin도 vite@^7, @vitejs/plugin-react@^5)
+  - `@tailwindcss/vite@4.3.0`이 Vite 8 바인딩에서 tsconfigPaths 필드를 요구하는 버그 있음 - Vite 7로 고정해 회피
+  - **Astro 7 stable 출시 시 Vite 8 일괄 업그레이드 필요**: frontend(astro@7), admin(vite@8 + @vitejs/plugin-react@6), frontend/package.json의 `vite` devDep 고정 제거
 
 ### B9. Sentry FE 양쪽
 - 선행: B6, B7, A7
