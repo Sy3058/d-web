@@ -45,7 +45,7 @@
 | 파일 읽기, 포맷팅, 커밋 메시지 | Haiku 4.5 | low | "💡 Haiku로 전환하면 빠르고 저렴합니다 (`/model haiku`)" |
 
 **Effort 레벨 기준 (Opus 사용 시)**
-- `xhigh`: 코딩, 아키텍처, 보안 — Claude Code 기본값, 대부분 이걸로
+- `xhigh`: 코딩, 아키텍처, 보안 - Claude Code 기본값, 대부분 이걸로
 - `high`: 비용 절약이 필요한 긴 세션
 - `low/medium`: 단순 분류, 추출, 포맷팅
 

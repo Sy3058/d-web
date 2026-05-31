@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     google_client_id: str = ""
     google_client_secret: str = ""
 
-    # 결제 — 포트원 V2
+    # 결제 - 포트원 V2
     portone_v2_api_secret: str = ""
     portone_store_id: str = ""
     portone_webhook_secret: str = ""
@@ -42,7 +42,7 @@ class Settings(BaseSettings):
     portone_channel_key_kakaopay: str = ""
     portone_channel_key_tosspay: str = ""
 
-    # 스토리지 — Cloudflare R2
+    # 스토리지 - Cloudflare R2
     r2_account_id: str = ""
     r2_access_key_id: str = ""
     r2_secret_access_key: str = ""

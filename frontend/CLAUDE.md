@@ -1,4 +1,4 @@
-# Frontend — Astro 독자용 사이트
+# Frontend - Astro 독자용 사이트
 
 ## 스택 결정 (왜?)
 
@@ -58,9 +58,9 @@ frontend/src/
 - `.tsx` = 클라이언트 인터랙션만 (React 섬)
 
 **지시어**
-- `client:load` — 로그인, 결제, OAuth (페이지 로드 직후 필수)
-- `client:idle` — 댓글, 하트, 후원 (유휴 시간에 수화)
-- `client:visible` — 하단 위젯 (뷰포트 진입 시)
+- `client:load` - 로그인, 결제, OAuth (페이지 로드 직후 필수)
+- `client:idle` - 댓글, 하트, 후원 (유휴 시간에 수화)
+- `client:visible` - 하단 위젯 (뷰포트 진입 시)
 
 ### 2. 쿠키 처리 (HttpOnly 기반)
 
@@ -112,17 +112,17 @@ frontend/src/
 
 ## 절대 금지
 
-❌ **localStorage에 JWT** — HttpOnly 쿠키만
+❌ **localStorage에 JWT** - HttpOnly 쿠키만
 
-❌ **클라이언트에서 결제 금액 조정** — imp_uid만 전달, 검증은 백엔드
+❌ **클라이언트에서 결제 금액 조정** - imp_uid만 전달, 검증은 백엔드
 
-❌ **미결제 유저에게 이미지 URL 노출** — Signed URL 필수
+❌ **미결제 유저에게 이미지 URL 노출** - Signed URL 필수
 
-❌ **Astro에서 SECRET_* 접근** — 빌드 타임에 HTML에 노출됨
+❌ **Astro에서 SECRET_* 접근** - 빌드 타임에 HTML에 노출됨
 
-❌ **React 섬 남용** — 정말 필요한 부분만 인터랙티브하게
+❌ **React 섬 남용** - 정말 필요한 부분만 인터랙티브하게
 
-❌ **fetch 대신 xmlHttpRequest** — 표준 API 사용
+❌ **fetch 대신 xmlHttpRequest** - 표준 API 사용
 
 ---
 
