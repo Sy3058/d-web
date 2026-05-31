@@ -46,8 +46,8 @@ M1 (인증) ──┐
 ### 인프라
 - [ ] 서비스 도메인 등록 + DNS A/AAAA 레코드 (Cloudflare)
 - [ ] Hetzner VPS 초기화 + SSH 키 + 방화벽 (22/80/443만 개방)
-- [ ] Docker Compose 구성 (FastAPI + PostgreSQL + Caddy)
-- [ ] Caddy 리버스 프록시 + 자동 HTTPS 동작 확인
+- [x] Docker Compose 구성 (FastAPI + PostgreSQL + Caddy) (C1, 로컬 검증 완료)
+- [ ] Caddy 리버스 프록시 + 자동 HTTPS 동작 확인 (로컬 라우팅은 C2 완료, 자동 HTTPS는 D4에서 / 그룹 D 보류)
 - [ ] Cloudflare R2 버킷 생성 + 액세스 키 + 커스텀 도메인 연결
 - [ ] PostgreSQL **일 1회 풀 덤프 → R2 30일 보관** 스크립트 + cron 등록 (Q18)
 
