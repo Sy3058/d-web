@@ -178,4 +178,4 @@ staleTime 설정 → 일정 시간 후 자동 refetch
 
 ## 코드 리뷰
 
-커밋 전 Opus 4.7 검증: `@docs/CODE_REVIEW_ADMIN.md` 참조
+커밋 전 Opus 4.8 검증: `@docs/CODE_REVIEW_ADMIN.md` 참조

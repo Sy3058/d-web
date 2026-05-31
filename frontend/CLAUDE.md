@@ -128,4 +128,4 @@ frontend/src/
 
 ## 코드 리뷰
 
-커밋 전 Opus 4.7 검증: `@docs/reviews/CODE_REVIEW_FE.md` (+ 원칙은 `@docs/reviews/GUIDE_REVIEW.md`)
+커밋 전 Opus 4.8 검증: `@docs/reviews/CODE_REVIEW_FE.md` (+ 원칙은 `@docs/reviews/GUIDE_REVIEW.md`)
