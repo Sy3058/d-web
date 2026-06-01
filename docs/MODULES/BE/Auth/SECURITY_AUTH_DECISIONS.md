@@ -51,8 +51,9 @@ M1 인증 설계 리뷰에서 확정한 보안 결정을 한곳에 모은 문서
   - bcrypt는 CPU 바운드·~4KB로 풋프린트 작고 예측 가능. OWASP도 bcrypt(work factor ≥10) 허용.
   - **pepper + HIBP + lockout**가 더해져 bcrypt로도 충분히 강함.
   - cost=12가 **프로덕션 하드웨어에서 ~250~350ms** 되도록 배포 후 1회 측정·보정.
+- **해싱 구조 (B1 구현 완료, 2026-06-02)**: OWASP pre-hash `bcrypt(base64(hmac_sha384(pw, PASSWORD_PEPPER)), gensalt(12))`. 라이브러리는 `bcrypt` 직접(5.x, passlib 아님). bcrypt 블로킹은 `anyio.to_thread`로 오프로드. `PASSWORD_PEPPER`는 `TOKEN_PEPPER`·`jwt_secret`과 별개 키, `SecretStr` 필수 설정. pre-hash라 pepper 로테이션 불가(교체 시 전 유저 재설정). 상세: [IMPLEMENTATION_PASSWORD_HASHING.md](./IMPLEMENTATION_PASSWORD_HASHING.md).
 - 비번 정책: **8자 이상 + 영문·숫자·특수문자 각 1개 이상** (AUTH-01). 서버 검증 필수.
-- **비번 최대 길이 상한**(예: 128자) - bcrypt 72바이트 truncate 회피 + 초장문 비번 CPU DoS 방지.
+- **비번 최대 길이 상한**(예: 128자) - pre-hash로 bcrypt 72바이트 문제는 해소됨. 상한은 초장문 비번의 HMAC/CPU DoS 방지용.
 - **유출 비번 차단 (HIBP)**: 가입/비번 변경(P1) 시 HaveIBeenPwned k-anonymity API(SHA-1 앞 5자리만 전송)로 유출 비번 거부. 외부 API 장애 시 **fail-open + 경고 로깅**.
 
 ## 5. 로그인 보호 (brute-force)
