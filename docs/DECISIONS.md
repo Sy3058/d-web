@@ -281,6 +281,26 @@
 - `config.py`에서 `KAKAO_REDIRECT_URI`, `GOOGLE_REDIRECT_URI`, `CORS_ORIGINS` 등을 베이스 URL로 조립
 - env에 콜백 URI/CORS 직접 박지 않음
 
+### 비밀번호 해싱: bcrypt pre-hash + pepper (M1 B1, 2026-06-02 확정)
+
+**라이브러리: `bcrypt` 직접 (5.x)**
+- passlib 탈락: 마지막 릴리스 2020, 사실상 미유지보수 + bcrypt 5.0.0에서 passlib bcrypt 백엔드가 깨짐. 단일 알고리즘 확정이라 다중 해시 추상화 불필요.
+- argon2id 아닌 bcrypt cost=12: 소형 VPS(Hetzner CX22) 메모리 제약 - argon2id는 메모리 하드라 동시 로그인 시 압박 + 파라미터 낮추면 오히려 약해질 위험. OWASP도 work factor ≥10 허용.
+
+**해싱 구조: OWASP pre-hash**
+```
+bcrypt( base64( hmac_sha384(password, key=PASSWORD_PEPPER) ), gensalt(cost=12) )
+```
+- 한 구조로 (a) bcrypt 72바이트 한도 제거(긴 비번 허용, base64 출력 64자<72), (b) pepper 적용, (c) password shucking·null 바이트 방어를 동시 해결.
+- HMAC은 raw `digest()`(48B)→base64. `hexdigest`(96자)는 72바이트 초과로 truncate되니 금지.
+- bcrypt는 ~250~350ms CPU 블로킹이라 `anyio.to_thread.run_sync`로 오프로드(이벤트 루프 비블로킹).
+
+**pepper 키 관리**
+- `PASSWORD_PEPPER`(비번 pre-hash) / `TOKEN_PEPPER`(refresh·이메일 토큰 post-hash, B2)를 **분리**. JWT 서명용 `JWT_SECRET`과도 별개. (키 분리 원칙 + pre/post-hash 성질 차이)
+- pepper는 DB 밖(env/`SecretStr`)에 보관, 로그 마스킹. default 없는 필수 설정(미설정 시 기동 실패).
+- **제약: pre-hash pepper는 로테이션 불가** - 교체하려면 원문 비번이 필요해 전 유저 비번 재설정 강제. (토큰 pepper는 post-hash라 재-HMAC으로 로테이션 가능)
+- 상세 원리: study `secret-hashing`, 계획: `docs/milestones/M1_foundation.md` B1.
+
 ---
 
 ## 결제 구조 결정

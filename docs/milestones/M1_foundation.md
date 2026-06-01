@@ -74,7 +74,7 @@ git stash pop stash@{0}
 
 > router/service/lib 레이어 경계 준수: 토큰·쿠키 발급 유틸은 `lib/auth.py`, 비즈니스 로직은 `services/auth_service.py`.
 
-### B1. bcrypt 비밀번호 해싱
+### B1. bcrypt 비밀번호 해싱 ✅ 완료 (2026-06-02)
 - 선행: A1
 - 산출물: `services/auth_service.py` 해시/검증 함수, `config.py` `password_pepper` 필드, `.env.example` `PASSWORD_PEPPER`
 - DoD: 해시 round-trip 단위 테스트 통과, 동일 평문이 매번 다른 해시(salt) 생성 확인, **72바이트 이후만 다른 긴 비번 2개가 서로 다른 해시로 구분됨**(pre-hash 검증)
