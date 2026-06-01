@@ -1,4 +1,4 @@
-from pydantic import computed_field
+from pydantic import SecretStr, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -23,6 +23,10 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_access_token_expire_minutes: int = 15
     jwt_refresh_token_expire_days: int = 7
+
+    # 비밀번호 해싱 (B1 - 비번 pre-hash pepper. jwt_secret/token_pepper와 별개 키)
+    # 시크릿이라 default 없음(미설정 시 기동 실패). SecretStr로 로그 마스킹.
+    password_pepper: SecretStr
 
     # 앱 URL (이 두 값으로 아래 항목들을 조립)
     app_base_url: str
