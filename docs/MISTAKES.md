@@ -88,6 +88,15 @@
 - "셸 지연 해결됐다"고 단정하지 말 것
   → 지연은 해결된 게 아니라 우회(`sleep` + 파일 redirect + Read)하는 것일 뿐. 상태를 낙관적으로 보고하지 말 것
 
+- 브랜치 머지 여부를 `git branch --merged`로만 판단하지 말 것 (이 repo는 squash-merge)
+  → squash-merge는 원본 커밋이 main에 그대로 안 남아 `--merged`에 안 잡힘 → "안 머지됨"으로 오판
+  → 실제 사고: 이미 PR로 squash-merge된 브랜치를 "작업 안 끝남"이라 잘못 보고함
+  → 확인법: `git fetch` 후 `git log origin/main --oneline`에 squash 커밋(`... (#PR번호)`) 있는지, 또는 PR 상태 직접 확인
+
+- 이 환경엔 `gh` CLI가 설치돼 있지 않음 (`gh: command not found`)
+  → `gh pr status` 등이 빈/에러 출력을 내도 "PR 없음"으로 단정 금지 (빈 셸 출력 오판 패턴의 변종)
+  → PR 상태는 사용자가 알려주는 GitHub 화면 정보나 `git log origin/main`으로 교차 확인
+
 ## Alembic 마이그레이션
 
 - 이미 DB에 적용(upgrade)된 마이그레이션 파일을 직접 편집하지 말 것
