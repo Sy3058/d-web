@@ -74,12 +74,22 @@ git stash pop stash@{0}
 
 > router/service/lib 레이어 경계 준수: 토큰·쿠키 발급 유틸은 `lib/auth.py`, 비즈니스 로직은 `services/auth_service.py`.
 
-### B1. bcrypt 비밀번호 해싱
+### B1. bcrypt 비밀번호 해싱 ✅ 완료 (2026-06-02)
 - 선행: A1
-- 산출물: `services/auth_service.py` 해시/검증 함수
-- DoD: 해시 round-trip 단위 테스트 통과, 동일 평문이 매번 다른 해시(salt) 생성 확인
-- **결정 (확정): bcrypt cost=12** (argon2id 아님). 이유: argon2id는 **메모리 하드**(해시당 수십 MiB)라 Hetzner CX22(2 vCPU·4GB, DB+API+FE+Admin+Caddy 동거) 같은 **소형 VPS에서 동시 로그인 시 메모리 압박** + 튜닝을 너무 낮추면 오히려 bcrypt보다 약해질 위험. bcrypt는 CPU 바운드·~4KB로 풋프린트가 작고 예측 가능. OWASP도 bcrypt(work factor ≥10)를 여전히 허용. **pepper(B2)·HIBP·lockout**가 더해져 bcrypt로도 충분히 강함.
-- 메모: cost=12가 **실제 프로덕션 하드웨어에서 ~250~350ms**가 되도록 배포 후 1회 측정·보정 (너무 빠르면 상향). 라이브러리는 설치 시 WebSearch로 최신 안정 버전 확인 후 선정 (`passlib[bcrypt]` vs `bcrypt` 직접).
+- 산출물: `services/auth_service.py` 해시/검증 함수, `config.py` `password_pepper` 필드, `.env.example` `PASSWORD_PEPPER`
+- DoD: 해시 round-trip 단위 테스트 통과, 동일 평문이 매번 다른 해시(salt) 생성 확인, **72바이트 이후만 다른 긴 비번 2개가 서로 다른 해시로 구분됨**(pre-hash 검증)
+- **결정 (확정): bcrypt cost=12** (argon2id 아님). 이유: argon2id는 **메모리 하드**(해시당 수십 MiB)라 Hetzner CX22(2 vCPU·4GB, DB+API+FE+Admin+Caddy 동거) 같은 **소형 VPS에서 동시 로그인 시 메모리 압박** + 튜닝을 너무 낮추면 오히려 bcrypt보다 약해질 위험. bcrypt는 CPU 바운드·~4KB로 풋프린트가 작고 예측 가능. OWASP도 bcrypt(work factor ≥10)를 여전히 허용. **pepper·HIBP·lockout**가 더해져 bcrypt로도 충분히 강함.
+
+#### 구현 확정 (2026-06-02, Opus 검증 반영)
+
+- **라이브러리: `bcrypt` 직접 (5.x).** passlib 탈락 - 마지막 릴리스 2020, 사실상 미유지보수 + bcrypt 5.0.0에서 passlib bcrypt 백엔드가 깨짐. 단일 알고리즘 확정이라 다중 해시 추상화 불필요. (`pwdlib`는 다중 알고리즘 필요 시에만 후보)
+- **해싱 = OWASP pre-hash 구조**: `bcrypt( base64( hmac_sha384(pw, key=password_pepper) ), gensalt(12) )`. 한 방에 (a) **72바이트 한도 제거**(긴 비번 허용 → C1의 128자 상한과 정합), (b) **pepper 적용**, (c) **password shucking + null 바이트 truncation 방어**.
+  - ⚠️ HMAC은 **raw `.digest()`(48B) → `base64`(64자)**. `hexdigest`(96자)는 다시 72바이트 초과로 truncate되니 **금지**.
+- **블로킹 회피 (Critical)**: bcrypt cost=12는 ~250~350ms CPU 블로킹 → async 라우터에서 직접 호출 시 이벤트 루프 정지(`backend/CLAUDE.md` 금지). 따라서 **`async def hash_password/verify_password` + `anyio.to_thread.run_sync`로 bcrypt 오프로드**. `anyio`는 fastapi가 이미 포함(새 의존성 아님).
+- **키 이름: `password_pepper` (env `PASSWORD_PEPPER`).** 문서상 "SECRET_KEY와 별개"는 곧 기존 `jwt_secret`과 별개. 토큰용 `token_pepper`(B2)와도 **분리**(키 분리 원칙: pre-hash vs post-hash, 알고리즘·로테이션 성질 다름).
+  - `SecretStr` 권장(로그 마스킹). 시크릿이라 **default 금지** → `.env.example` + **CI env**에 `PASSWORD_PEPPER` 주입 필수(없으면 `Settings()` import 크래시. `jwt_secret`과 동일 패턴).
+- **제약: pre-hash pepper는 로테이션 불가**(교체하려면 원문 비번 필요 → 전 유저 비번 재설정 강제). 유니코드 NFC 정규화는 v1 생략(문서화만).
+- 메모: cost=12가 **실제 프로덕션 하드웨어에서 ~250~350ms**가 되도록 배포 후 1회 측정·보정. 설치 직전 `bcrypt` 5.x 최신 패치 WebSearch 재확인. 관련 study: [[secret-hashing]].
 
 ### B2. 토큰 발급/검증 (access JWT + refresh opaque)
 - 선행: A1
@@ -293,7 +303,7 @@ git stash pop stash@{0}
   - HMAC + 서버측 pepper (refresh·이메일 인증 토큰 해시 공통)
   - id_token 완전 검증 + OAuth state/nonce + open redirect 차단
   - 단일 도메인(same-site) 쿠키 전제
-  - 비번: bcrypt cost=12(argon2id 아님 - 소형 VPS 메모리 제약), 길이 상한, HIBP 유출 비번 차단
+  - 비번: `bcrypt` 직접(5.x, passlib 아님) + cost=12(argon2id 아님 - 소형 VPS 메모리 제약), **OWASP pre-hash 구조** `bcrypt(base64(hmac_sha384(pw, password_pepper)))`(72byte·shucking 해결), async+`anyio.to_thread` 오프로드, 길이 상한, HIBP 유출 비번 차단
   - 로그인: IP rate limit + 계정 lockout/백오프
   - 이메일 인증 토큰 at-rest 해시
   - **인증 표면 전체 비열거** (가입/로그인/비번재설정/재발송 응답·타이밍 통일, 회원 여부는 수신함 주인만 인지)

@@ -93,7 +93,7 @@ M1 (인증) ──┐
 
 ### 백엔드
 - [x] `users` + `oauth_accounts` + `refresh_tokens` + `email_verifications` 모델 + 마이그레이션 (그룹 A, UUID PK, 로컬 DB 검증 완료)
-- [ ] bcrypt(cost=12) 비밀번호 해싱
+- [x] bcrypt(cost=12) 비밀번호 해싱 (B1, OWASP pre-hash + pepper, 단위 테스트 통과)
 - [ ] JWT 발급/검증 (Access 15분 / Refresh 7일)
 - [ ] HttpOnly + Secure + SameSite=Lax 쿠키 발급 (refresh는 SameSite=Strict)
 - [ ] 회원가입 / 로그인 / 로그아웃 / 토큰 갱신 엔드포인트
