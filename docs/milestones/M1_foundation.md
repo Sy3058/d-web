@@ -64,7 +64,7 @@ git stash pop stash@{0}
 - 결정 (DB_SCHEMA §1 확정):
   - `users.hashed_password` **nullable** (소셜 전용 가입은 NULL)
   - `users.nickname` NOT NULL - 소셜 가입 시 provider 닉네임으로 채움, 충돌 시 suffix 처리
-  - `refresh_tokens.token_hash`에 **원문 토큰 저장 금지** (bcrypt 해시만). 조회는 `id`(row id)로 하고 `bcrypt.verify`로 대조 - 상세는 B2
+  - `refresh_tokens.token_hash`에 **원문 토큰 저장 금지** (HMAC-SHA256+`TOKEN_PEPPER` 해시만). 결정적 해시라 `token_hash` 직접 조회로 대조 - 상세는 B2
   - `email_verifications.expires_at` = 발급 + 1시간
 - 메모: 응답 모델에 `hashed_password`가 새어나가지 않도록 `UserRead` 등 응답 전용 스키마 분리 (SQLModel `table=True` 모델을 그대로 응답에 쓰지 말 것).
 
@@ -98,12 +98,12 @@ git stash pop stash@{0}
 - 결정:
   - **access = JWT, HS256 + `SECRET_KEY`** (단일 서버라 비대칭키 불필요). 키는 `.env`, config 경유. 하드코딩 금지.
   - access payload에 `sub`(user_id), `typ=access`, `exp` 포함. PII(이메일 등) payload에 넣지 않음.
-- **결정 (확정): 리프레시 토큰 저장 = bcrypt 해시** (DB_SCHEMA §1 `refresh_tokens.token_hash`). 단 아래 3개 제약 필수:
-  1. **refresh는 JWT가 아닌 opaque 랜덤** (`secrets.token_urlsafe(32)`, 256bit). bcrypt는 보강일 뿐 약한 토큰을 구제 못 함 → 원문 자체가 고엔트로피여야 함
-  2. **bcrypt 72바이트 한도 준수** - 원문을 72바이트 이하로 유지(token_urlsafe(32)=43자는 안전). 긴 값을 refresh 원문으로 쓰지 말 것(초과분 조용히 truncate → 보안 저하)
-  3. **bcrypt salt 때문에 `WHERE token_hash=?` 직접 조회 불가** → refresh 쿠키 값을 `<토큰_row_id>.<랜덤시크릿>` 형태로 두고, **id로 행 조회 후 `bcrypt.verify(시크릿, row.token_hash)`**
+- **결정 (확정): 리프레시 토큰 저장 = HMAC-SHA256(token, key=`TOKEN_PEPPER`)** (DB_SCHEMA §1 `refresh_tokens.token_hash`). 단 아래 제약:
+  1. **refresh는 JWT가 아닌 opaque 랜덤** (`secrets.token_urlsafe(32)`, 256bit). 해시는 보강일 뿐 약한 토큰을 구제 못 함 → 원문 자체가 고엔트로피여야 함
+  2. **빠른 해시(HMAC-SHA256)로 충분** - 256bit 랜덤은 brute-force가 물리적으로 불가라 bcrypt 같은 느린 해시 불필요(저엔트로피 추측 방어 도구라 여기선 무의미). study [[secret-hashing]] 참조
+  3. **결정적 해시라 `WHERE token_hash = hmac(입력)` 직접 조회 가능** → refresh 쿠키 값은 토큰 원문 그대로(row_id prefix 불필요)
 - **결정 (권장 채택): 리프레시 토큰 회전 + 재사용 탐지** - 갱신마다 기존 refresh revoke + 신규 발급(회전). 이미 revoke된(=회전 지난) 토큰이 다시 들어오면 **탈취 신호**로 간주해 해당 유저 refresh 전체 revoke(세션 강제 종료). OAuth 2.0 Security BCP 권장. 최종 채택 확정 시 DECISIONS "보안 결정"에 기록.
-- **결정 (확정): HMAC-SHA256 + 서버측 pepper 병행.** token_hash 산식에 `.env` pepper 시크릿 포함 → DB 단독 유출 시에도 오프라인 공격 불가. pepper는 `SECRET_KEY`와 **별도 키**로 관리, 로테이션 시 재해싱 전략 필요. 이메일 인증 토큰(E1/E2) 해시에도 동일 적용.
+- **결정 (확정): HMAC-SHA256 + 서버측 pepper(`TOKEN_PEPPER`).** token_hash 산식에 `.env` pepper 시크릿(`TOKEN_PEPPER`) 포함 → DB 단독 유출 시에도 오프라인 공격 불가. pepper는 `jwt_secret`·`password_pepper`와 **별도 키**. refresh는 ≤cap 내 자연 회전하므로 pepper 교체 시 현재+이전 키 dual-verify로 무중단 로테이션 가능(옛 토큰은 cap 내 소멸). 이메일 인증 토큰(E1/E2) 해시에도 동일 적용.
 
 ### B3. HttpOnly 쿠키 발급 유틸
 - 선행: B2
@@ -148,7 +148,7 @@ git stash pop stash@{0}
 ### C4. 토큰 갱신 (`POST /auth/refresh`)
 - 선행: C2
 - 산출물: 갱신 엔드포인트
-- DoD: 유효 refresh 쿠키 → row id로 행 조회 + `bcrypt.verify` → 신규 access 발급. 무효/revoked/만료 토큰 401
+- DoD: 유효 refresh 쿠키 → `token_hash`(HMAC) 직접 조회·대조 → 신규 access 발급. 무효/revoked/만료 토큰 401
 - 결정: B2의 회전 + 재사용 탐지를 여기서 구현. 회전 시 기존 refresh revoke + 신규 발급을 한 트랜잭션으로, revoke된 토큰 재제출 시 유저 세션 전체 revoke.
 
 ### C5. 현재 유저 조회 (`GET /auth/me`)
@@ -298,7 +298,7 @@ git stash pop stash@{0}
 - 패키지/라이브러리(bcrypt, JWT, rate limit 등)는 설치 직전 WebSearch로 최신 안정 버전 확인 (GUIDE_WORKFLOW "검색 규칙").
 - 결정 필요 항목(OAuth state/nonce 저장 방식, rate limit 라이브러리, `__Host-` 프리픽스 적용 범위, 회전 시 refresh 절대 수명 cap)은 해당 작업 직전 짧게 합의 후 진행.
 - **확정된 보안 결정**(M1 착수 시 DECISIONS.md "보안 결정"에 한 번에 기록):
-  - refresh = opaque 랜덤 + bcrypt 해시, `id` 조회 후 verify
+  - refresh = opaque 랜덤 + HMAC-SHA256(+`TOKEN_PEPPER`) 해시, `token_hash` 직접 조회로 대조
   - 리프레시 회전 + 재사용 탐지
   - HMAC + 서버측 pepper (refresh·이메일 인증 토큰 해시 공통)
   - id_token 완전 검증 + OAuth state/nonce + open redirect 차단
