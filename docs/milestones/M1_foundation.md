@@ -105,15 +105,15 @@ git stash pop stash@{0}
 - **결정 (권장 채택): 리프레시 토큰 회전 + 재사용 탐지** - 갱신마다 기존 refresh revoke + 신규 발급(회전). 이미 revoke된(=회전 지난) 토큰이 다시 들어오면 **탈취 신호**로 간주해 해당 유저 refresh 전체 revoke(세션 강제 종료). OAuth 2.0 Security BCP 권장. 최종 채택 확정 시 DECISIONS "보안 결정"에 기록.
 - **결정 (확정): HMAC-SHA256 + 서버측 pepper(`TOKEN_PEPPER`).** token_hash 산식에 `.env` pepper 시크릿(`TOKEN_PEPPER`) 포함 → DB 단독 유출 시에도 오프라인 공격 불가. pepper는 `jwt_secret`·`password_pepper`와 **별도 키**. refresh는 ≤cap 내 자연 회전하므로 pepper 교체 시 현재+이전 키 dual-verify로 무중단 로테이션 가능(옛 토큰은 cap 내 소멸). 이메일 인증 토큰(E1/E2) 해시에도 동일 적용.
 
-### B3. HttpOnly 쿠키 발급 유틸
+### B3. HttpOnly 쿠키 발급 유틸 ✅ 완료 (2026-06-04)
 - 선행: B2
-- 산출물: `lib/auth.py` 쿠키 set/clear 헬퍼
-- DoD: 응답 `Set-Cookie` 헤더에 플래그 정확히 반영됨을 테스트로 확인
+- 산출물: `lib/auth.py` `set_auth_cookies`/`clear_auth_cookies`/`access_cookie_name` + 상수, `config.py` `cookie_secure` computed 필드, `tests/test_cookies.py`(6개). 구현: [IMPLEMENTATION_COOKIE.md](../MODULES/BE/Auth/IMPLEMENTATION_COOKIE.md)
+- DoD: 응답 `Set-Cookie` 헤더에 플래그 정확히 반영됨을 테스트로 확인 ✅ (pytest 23개 통과)
 - 결정 (PRD §4.2 / README M1):
   - access: `HttpOnly + SameSite=Lax`, refresh: `HttpOnly + SameSite=Strict`
-  - `Secure` 플래그는 **환경 분기** - 로컬 http는 False, 스테이징/프로덕션은 True (config 값으로 결정, 코드 분기 하드코딩 금지)
-  - refresh 쿠키 `Path`를 토큰 갱신 엔드포인트로 제한할지 검토 (불필요한 전송 축소)
-  - 프로덕션 쿠키에 **`__Host-` 프리픽스** 적용 검토 (Secure + Path=/ + Domain 미지정 강제 → 하위도메인 쿠키 주입 방지). 단 Path 제한과 상충하므로 access/refresh 중 적용 대상 선별
+  - `Secure` 플래그는 **환경 분기** - 로컬 http는 False, 스테이징/프로덕션은 True (`config.cookie_secure` = `env != "development"`, 하드코딩 없음)
+  - **결정 (확정): refresh 쿠키 `Path=/auth/refresh` 제한** - 갱신/로그아웃 외 요청엔 미전송. clear도 같은 Path로 매칭(C3 주의)
+  - **결정 (확정): `__Host-` 프리픽스는 access에만** - 프리픽스가 Secure를 요구하므로 운영(https)에서만 `__Host-access_token`, 로컬은 `access_token`(이름 환경 분기). refresh는 Path 제한과 상충해 제외
 - **결정 (제약): 인증 쿠키는 단일 등록가능도메인(same-site) 배포 전제.** SameSite=Lax/Strict 쿠키는 cross-site에서 전송 안 됨 → FE/Admin/API가 Caddy 리버스 프록시로 한 eTLD+1 아래 묶여야 작동(`admin.도메인`·`api.도메인`은 same-site, **포트 차이는 무관**). API를 별도 도메인으로 분리하면 인증이 깨짐 → **M0 Caddy 단일 도메인 구조 유지 필수**. (로컬 `localhost:8000` 직접 호출도 same-site라 OK)
 - 메모: ⚠️ 토큰을 응답 바디로 내려 클라이언트가 localStorage에 담는 경로를 만들지 말 것. 쿠키 전용.
 

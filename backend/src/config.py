@@ -81,5 +81,15 @@ class Settings(BaseSettings):
     def cors_origins(self) -> list[str]:
         return [self.app_base_url, self.admin_base_url]
 
+    @computed_field
+    @property
+    def cookie_secure(self) -> bool:
+        """인증 쿠키 Secure 플래그 (B3). 로컬 http(dev)는 False, 그 외는 True.
+
+        Secure 쿠키는 https에서만 전송되므로 로컬 http 개발에서 True면 쿠키가
+        아예 안 실린다. __Host- 프리픽스도 Secure를 요구하므로 이 값에 연동된다.
+        """
+        return self.env != "development"
+
 
 settings = Settings()

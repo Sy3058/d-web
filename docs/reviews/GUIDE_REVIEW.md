@@ -10,7 +10,7 @@
 ## 0. 이 프로젝트의 맥락
 
 - 저자 = 나
-- 리뷰어 = Opus 4.7 (`/model opus` 호출, `@docs/reviews/...` 첨부)
+- 리뷰어 = Opus 4.8 (`/model opus` 호출, `@docs/reviews/...` 첨부)
 - 따라서 Google 원칙 중 *팀 협업 절차*(응답 SLA, 멘토링, 에스컬레이션)는 *self-discipline 강화*로 재해석한다.
 
 ---
