@@ -91,10 +91,10 @@ git stash pop stash@{0}
 - **제약: pre-hash pepper는 로테이션 불가**(교체하려면 원문 비번 필요 → 전 유저 비번 재설정 강제). 유니코드 NFC 정규화는 v1 생략(문서화만).
 - 메모: cost=12가 **실제 프로덕션 하드웨어에서 ~250~350ms**가 되도록 배포 후 1회 측정·보정. 설치 직전 `bcrypt` 5.x 최신 패치 WebSearch 재확인. 관련 study: [[secret-hashing]].
 
-### B2. 토큰 발급/검증 (access JWT + refresh opaque)
+### B2. 토큰 발급/검증 (access JWT + refresh opaque) ✅ 완료 (2026-06-03)
 - 선행: A1
-- 산출물: `lib/auth.py` - `create_access_token`(15분, JWT) / `decode_token`(만료·서명 검증), `services/auth_service.py` refresh 토큰 발급·대조
-- DoD: 만료 토큰·위조 서명·잘못된 `typ` 거부 단위 테스트 통과
+- 산출물: `lib/auth.py` - `create_access_token`(15분, JWT) / `decode_token`(만료·서명·typ 검증), `services/auth_service.py` refresh 프리미티브(발급·조회·revoke·revoke_all), `config.py`/`.env.example` `TOKEN_PEPPER`, PyJWT 2.13.0. 구현: [IMPLEMENTATION_TOKEN.md](../MODULES/BE/Auth/IMPLEMENTATION_TOKEN.md)
+- DoD: 만료 토큰·위조 서명·잘못된 `typ` 거부 단위 테스트 통과 ✅ (pytest 17개 통과)
 - 결정:
   - **access = JWT, HS256 + `SECRET_KEY`** (단일 서버라 비대칭키 불필요). 키는 `.env`, config 경유. 하드코딩 금지.
   - access payload에 `sub`(user_id), `typ=access`, `exp` 포함. PII(이메일 등) payload에 넣지 않음.

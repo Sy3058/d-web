@@ -109,3 +109,23 @@
 
 - 마이그레이션 작업 후엔 반드시 `alembic check`로 모델↔DB 동기화 확인
   → "No new upgrade operations detected"가 나와야 정상. 떠 있는 diff가 있으면 모델/마이그레이션 불일치
+
+## pytest / 비동기 DB 테스트
+
+- session-scope async 엔진 픽스처를 쓰면 루프 스코프를 **둘 다** 맞춰야 한다
+  → `pyproject.toml [tool.pytest.ini_options]`에 `asyncio_default_fixture_loop_scope = "session"` **그리고** `asyncio_default_test_loop_scope = "session"` 둘 다 필요
+  → 하나만 하면 테스트 함수는 function 루프, 엔진은 session 루프라 asyncpg 커넥션이 `RuntimeError: got Future ... attached to a different loop`
+  → 실제 사고: fixture 스코프만 session으로 바꾸고 "됐겠지" 했다가 그대로 깨짐. test 스코프까지 맞춰야 통과
+
+- 테스트 DB(`dweb_test`)는 첫 실행 전에 직접 생성해야 함
+  → 없으면 `asyncpg.exceptions.InvalidCatalogNameError: database "dweb_test" does not exist`
+  → 이 환경엔 `psql`이 없으니 컨테이너 경유: `docker exec d-web-postgres-1 psql -U postgres -c "CREATE DATABASE dweb_test;"`
+  → 컨테이너 이름은 `docker ps --format "{{.Names}}"`로 확인 (compose 기본값 `d-web-postgres-1`)
+
+- FK 있는 모델을 INSERT하는 테스트는 부모 행을 먼저 만들 것
+  → 랜덤 `uuid.uuid4()`를 FK 컬럼에 넣으면 `ForeignKeyViolationError` (`refresh_tokens.user_id` → `users.id`)
+  → 부모(User) 픽스처를 만들고 그 `.id`를 쓴다
+
+- 서비스가 `session.commit()`을 직접 호출하면 rollback-격리 픽스처와 충돌
+  → conftest의 "트랜잭션 begin → 끝에 rollback" 격리 방식은 service가 commit하면 `InterfaceError: another operation is in progress`
+  → 해결: `async_sessionmaker`로 세션 주고, 테스트 후 `metadata.sorted_tables`를 reversed 순으로 DELETE해 정리
