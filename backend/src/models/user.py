@@ -121,7 +121,7 @@ class RefreshToken(SQLModel, table=True):
 
     id: uuid.UUID | None = Field(default=None, sa_column=_pk_column())
     user_id: uuid.UUID = Field(sa_column=_fk_user_column())
-    # 원문 토큰 저장 금지 - bcrypt 해시만 (DB_SCHEMA §1, M1 B2)
+    # 원문 토큰 저장 금지 - HMAC-SHA256(+TOKEN_PEPPER) 해시만 (DB_SCHEMA §1, M1 B2)
     token_hash: str = Field(sa_column=Column(String(255), nullable=False))
     expires_at: datetime = Field(
         sa_column=Column(DateTime(timezone=True), nullable=False)

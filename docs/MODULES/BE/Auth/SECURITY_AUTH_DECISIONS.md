@@ -22,12 +22,12 @@ M1 인증 설계 리뷰에서 확정한 보안 결정을 한곳에 모은 문서
 
 - **access = JWT** (HS256 + `SECRET_KEY`, 15분). stateless. payload는 `sub`(user_id)·`typ=access`·`exp`만, **PII(이메일 등) 미포함**. 단일 서버라 비대칭키 불필요.
 - **refresh = opaque 랜덤** (`secrets.token_urlsafe(32)`, 256bit). **JWT 아님** - DB 대조가 어차피 필요하므로 JWT로 만들 이유 없음.
-- **refresh 저장 = bcrypt 해시 + HMAC pepper**. DB(`refresh_tokens.token_hash`)엔 해시만.
-  - bcrypt salt가 랜덤이라 `WHERE token_hash=?` 직접 조회 불가 → 쿠키 값을 `<토큰_row_id>.<랜덤시크릿>`으로 두고 **id로 행 조회 후 `bcrypt.verify`**.
-  - **bcrypt 72바이트 한도 준수**: 원문을 72바이트 이하로(43자 token_urlsafe(32)는 안전). 초과분은 조용히 truncate되어 보안 저하.
-  - 토큰 원문은 **항상 고엔트로피 랜덤** - bcrypt는 보강일 뿐 약한 토큰을 구제하지 못함.
+- **refresh 저장 = HMAC-SHA256(token, key=`TOKEN_PEPPER`)**. DB(`refresh_tokens.token_hash`)엔 해시만.
+  - 결정적 해시라 `WHERE token_hash = hmac(입력)` **직접 조회 가능** → 쿠키 값은 토큰 원문 그대로(row_id prefix 불필요).
+  - 토큰 원문은 **항상 고엔트로피 랜덤**(256bit) - 빠른 해시여도 brute-force가 물리적으로 불가. bcrypt 같은 느린 해시는 불필요(저엔트로피 추측을 막는 도구라 여기선 막을 게 없음).
+  - `TOKEN_PEPPER`는 DB 밖 시크릿 → DB 단독 유출 시에도 오프라인 대조 불가. 이메일 인증 토큰(E1)도 동일 방식.
 
-> SHA-256이 아닌 bcrypt를 쓰는 이유: 고엔트로피 토큰이면 SHA-256(결정적 해시)도 안전하나, bcrypt를 defense-in-depth로 채택. 대신 위 3개 제약(opaque/72byte/id 조회)이 필수.
+> bcrypt가 아닌 HMAC-SHA256을 쓰는 이유: 해시 속도는 입력 엔트로피에 맞춘다(study `secret-hashing`). 256bit 랜덤 토큰은 빠른 해시로도 안전하고, 결정적이라 직접 조회까지 된다. bcrypt는 비용(verify마다 CPU 블로킹)·복잡도(72byte 한도·salt 때문의 id 조회)만 늘고 추가 보안은 0.
 
 ## 2. 리프레시 토큰 회전 + 재사용 탐지
 

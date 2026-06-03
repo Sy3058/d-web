@@ -56,7 +56,7 @@ oauth_accounts
 refresh_tokens
 ├── id         UUID PRIMARY KEY DEFAULT gen_random_uuid()
 ├── user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE
-├── token_hash VARCHAR(255) NOT NULL  -- bcrypt 해시
+├── token_hash VARCHAR(255) NOT NULL  -- HMAC-SHA256(+TOKEN_PEPPER) 해시
 ├── expires_at TIMESTAMPTZ NOT NULL
 ├── created_at TIMESTAMPTZ DEFAULT now()
 └── revoked_at TIMESTAMPTZ            -- NULL = 유효
