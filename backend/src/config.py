@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     # 시크릿이라 default 없음(미설정 시 기동 실패). SecretStr로 로그 마스킹.
     password_pepper: SecretStr
 
+    # 토큰 해싱 (B2 - refresh/이메일 인증 토큰 post-hash pepper. password_pepper와 별개 키)
+    # post-hash라 pepper 교체 시 재-HMAC으로 무중단 로테이션 가능(password_pepper와 다름).
+    token_pepper: SecretStr
+
     # 앱 URL (이 두 값으로 아래 항목들을 조립)
     app_base_url: str
     admin_base_url: str
