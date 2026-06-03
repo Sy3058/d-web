@@ -318,7 +318,7 @@ M1 (인증) ──┐
 > **DoD**: 보안/부하/법무 모두 통과, 베타 사용자 10~30명 1주일 운영 후 치명 버그 0.
 
 ### 보안
-- [ ] **보안 리뷰**: 결제·인증·Signed URL 권한·CORS·rate limit 종합 점검 (Opus 4.7로 `/security-review`)
+- [ ] **보안 리뷰**: 결제·인증·Signed URL 권한·CORS·rate limit 종합 점검 (Opus 4.8로 `/security-review`)
 - [ ] OWASP Top 10 자체 체크리스트 (XSS, CSRF, SQLi, IDOR)
 - [ ] 비밀번호 reset 토큰, 이메일 인증 토큰, JWT TTL 재검토
 - [ ] 환경변수 누출 점검 (Astro `PUBLIC_*` 외 빌드 산출물 grep)

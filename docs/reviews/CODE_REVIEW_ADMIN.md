@@ -1,6 +1,6 @@
 # Admin 코드 리뷰 체크리스트
 
-Opus 4.7로 검증할 때 사용.
+Opus 4.8로 검증할 때 사용.
 
 **리뷰 원칙·코멘트 규약·응답 방법은 [`GUIDE_REVIEW.md`](./GUIDE_REVIEW.md) 참조** (함께 첨부할 것).
 
