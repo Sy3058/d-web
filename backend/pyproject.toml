@@ -14,11 +14,12 @@ dependencies = [
     "sentry-sdk[fastapi]>=2.61.0",
     "bcrypt>=5.0.0",
     "PyJWT>=2.13.0",
+    "httpx>=0.28.1",
+    "email-validator>=2.3.0",
 ]
 
 [dependency-groups]
 dev = [
-    "httpx>=0.28.1",
     "pytest>=9.0.3",
     "pytest-asyncio>=1.4.0",
     "ruff>=0.15",
