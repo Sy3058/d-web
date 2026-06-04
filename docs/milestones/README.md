@@ -94,9 +94,9 @@ M1 (인증) ──┐
 ### 백엔드
 - [x] `users` + `oauth_accounts` + `refresh_tokens` + `email_verifications` 모델 + 마이그레이션 (그룹 A, UUID PK, 로컬 DB 검증 완료)
 - [x] bcrypt(cost=12) 비밀번호 해싱 (B1, OWASP pre-hash + pepper, 단위 테스트 통과)
-- [ ] JWT 발급/검증 (Access 15분 / Refresh 7일)
-- [ ] HttpOnly + Secure + SameSite=Lax 쿠키 발급 (refresh는 SameSite=Strict)
-- [ ] 회원가입 / 로그인 / 로그아웃 / 토큰 갱신 엔드포인트
+- [x] JWT 발급/검증 (Access 15분 / Refresh 7일) (B2, PyJWT, 단위 테스트 통과)
+- [x] HttpOnly + Secure + SameSite=Lax 쿠키 발급 (refresh는 SameSite=Strict) (B3, `__Host-` 프리픽스/Path 제한, 단위 테스트 통과)
+- [x] 회원가입 / 로그인 / 로그아웃 / 토큰 갱신 엔드포인트 (그룹 C + `/auth/me`, 비열거·HIBP·회전, 구현+Opus 리뷰 완료, DB 테스트 Postgres 대기)
 - [ ] 구글 OAuth2 콜백 처리 (신규 시 user + oauth_accounts 동시 생성)
 - [ ] 이메일 인증 메일 발송 (1시간 토큰) + 검증 엔드포인트
 - [ ] **미인증 차단 의존성**: 결제·댓글 API에 `require_verified_email` 데코레이터 (실제 차단은 M3/M4에서 적용)

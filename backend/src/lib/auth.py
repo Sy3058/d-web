@@ -9,13 +9,17 @@ payload 구조:
   iat  - 발급 시각
 """
 
+import uuid
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Annotated, Any
 
 import jwt
-from fastapi import Response
+from fastapi import Depends, HTTPException, Request, Response, status
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.config import settings
+from src.lib.db import get_session
+from src.models.user import User
 
 
 class TokenError(Exception):
@@ -132,3 +136,36 @@ def clear_auth_cookies(response: Response) -> None:
         secure=secure,
         samesite="strict",
     )
+
+
+# ---------------------------------------------------------------------------
+# 현재 유저 의존성 (M1 C5 /auth/me, 후속 보호 라우트 공용)
+# ---------------------------------------------------------------------------
+
+_UNAUTHORIZED = HTTPException(
+    status_code=status.HTTP_401_UNAUTHORIZED, detail="인증이 필요합니다"
+)
+
+
+async def get_current_user(
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> User:
+    """access 쿠키 → JWT 검증 → User 반환. 무효/만료/미존재·탈퇴 유저는 401.
+
+    로그인 상태 판정의 단일 소스(G5 마이페이지·Navbar). 쿠키 이름은 환경 분기되므로
+    access_cookie_name()으로 맞춘다.
+    """
+    token = request.cookies.get(access_cookie_name())
+    if not token:
+        raise _UNAUTHORIZED
+    try:
+        payload = decode_token(token)
+        user_id = uuid.UUID(payload["sub"])
+    except (TokenError, KeyError, ValueError) as exc:
+        raise _UNAUTHORIZED from exc
+
+    user = await session.get(User, user_id)
+    if user is None or user.deleted_at is not None:
+        raise _UNAUTHORIZED
+    return user
