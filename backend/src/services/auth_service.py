@@ -27,11 +27,20 @@ from datetime import UTC, datetime, timedelta
 
 import bcrypt
 from anyio import to_thread
+from fastapi import BackgroundTasks
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.config import settings
-from src.models.user import RefreshToken
+from src.lib.auth import create_access_token
+from src.lib.exceptions import (
+    InvalidCredentialsError,
+    InvalidTokenError,
+    PwnedPasswordError,
+    TokenReuseError,
+)
+from src.models.user import EmailVerification, RefreshToken, User
+from src.services import email_service, hibp
 
 # OWASP work factor >= 10. 소형 VPS 기준 cost=12 (배포 후 ~250~350ms 되도록 보정).
 _BCRYPT_ROUNDS = 12
@@ -137,3 +146,166 @@ async def revoke_all_refresh_tokens(user_id: uuid.UUID, session: AsyncSession) -
     for record in result.all():
         record.revoked_at = now
         session.add(record)
+
+
+# ---------------------------------------------------------------------------
+# 이메일 인증 토큰 (M1 C1 발급, E1에서 발송/E2에서 검증)
+# ---------------------------------------------------------------------------
+
+
+async def create_email_verification(user_id: uuid.UUID, session: AsyncSession) -> str:
+    """이메일 인증 토큰을 발급하고 at-rest 해시를 DB에 저장(flush). 원문 반환(메일 링크용).
+
+    refresh와 동일하게 원문은 고엔트로피 랜덤, DB엔 HMAC 해시만(B2 키 정책). 유효 1시간.
+    commit은 호출자(signup)가 user 생성과 한 트랜잭션으로 묶는다.
+    """
+    raw = secrets.token_urlsafe(32)
+    record = EmailVerification(
+        user_id=user_id,
+        token=_hash_token(raw),
+        expires_at=datetime.now(UTC) + timedelta(hours=1),
+    )
+    session.add(record)
+    await session.flush()
+    return raw
+
+
+# ---------------------------------------------------------------------------
+# 유저 CRUD + 인증 플로우 (M1 C 그룹)
+# ---------------------------------------------------------------------------
+
+
+def _normalize_email(email: str) -> str:
+    """대소문자 차이로 중복 계정/우회가 생기지 않도록 정규화."""
+    return email.strip().lower()
+
+
+# 타이밍 평탄화용 고정 더미 해시. 비번과 무관하게 항상 같은 값이라 import 시 1회 생성한다.
+# lazy로 미루면 첫 호출(최초 로그인 실패/중복 가입) 때 bcrypt(~300ms)가 이벤트 루프를
+# 블로킹한다. 부팅 시점(루프 없음)에 미리 내면 무해. _prehash/_hash_sync 정의 이후라 OK.
+_DUMMY_HASH = _hash_sync(_prehash("timing-flatten-dummy"))
+
+
+async def _dummy_verify() -> None:
+    """미존재/소셜전용/중복 경로에서 더미 해시를 검증해 응답 시간을 평탄화한다.
+
+    실제 verify_password와 같은 bcrypt 비용을 소비해 타이밍 enumeration을 막는다.
+    더미 해시는 import 시 미리 만들어 둔 고정값(_DUMMY_HASH), verify만 워커 스레드로 오프로드.
+    """
+    await verify_password("timing-flatten-dummy", _DUMMY_HASH)
+
+
+async def get_user_by_email(email: str, session: AsyncSession) -> User | None:
+    """유효한(soft delete 안 된) 유저를 이메일로 조회."""
+    result = await session.exec(
+        select(User).where(
+            User.email == _normalize_email(email),
+            User.deleted_at.is_(None),  # type: ignore[union-attr]
+        )
+    )
+    return result.first()
+
+
+async def create_user(
+    email: str, password: str, nickname: str, session: AsyncSession
+) -> User:
+    """이메일/비번 유저를 미인증 상태로 생성(flush). commit은 호출자 책임."""
+    user = User(
+        email=_normalize_email(email),
+        hashed_password=await hash_password(password),
+        nickname=nickname,
+        is_email_verified=False,
+    )
+    session.add(user)
+    await session.flush()
+    return user
+
+
+async def signup(
+    email: str,
+    password: str,
+    nickname: str,
+    session: AsyncSession,
+    background_tasks: BackgroundTasks,
+) -> None:
+    """회원가입. 비열거: 신규/중복 모두 호출자는 동일 응답을 반환한다.
+
+    - 유출 비번(HIBP) → PwnedPasswordError (이메일 존재와 무관 → 422 노출 안전)
+    - 신규: 미인증 user 생성 + 인증 토큰 발급 → commit 후 인증 메일(백그라운드)
+    - 중복: user 생성 안 함 + 더미 해시로 타이밍 평탄화 + '이미 가입됨' 안내 메일
+    메일 발송은 BackgroundTasks라 DB commit 이후 실행(메일 실패가 가입을 롤백 안 함).
+    """
+    email = _normalize_email(email)
+    if await hibp.is_password_pwned(password):
+        raise PwnedPasswordError
+
+    existing = await get_user_by_email(email, session)
+    if existing is not None:
+        await _dummy_verify()  # 신규 경로의 bcrypt 비용과 시간 정합
+        background_tasks.add_task(email_service.send_already_registered_email, email)
+        return
+
+    user = await create_user(email, password, nickname, session)
+    raw_token = await create_email_verification(user.id, session)
+    await session.commit()
+    background_tasks.add_task(email_service.send_verification_email, email, raw_token)
+
+
+async def login(
+    email: str, password: str, session: AsyncSession
+) -> tuple[User, str, str]:
+    """이메일/비번 검증 후 (user, access_token, refresh_token) 반환. 실패 시 401 매핑.
+
+    미존재/소셜전용 계정도 더미 해시를 돌려 응답 시간을 맞춘다(비열거).
+    """
+    email = _normalize_email(email)
+    user = await get_user_by_email(email, session)
+    if user is None or user.hashed_password is None:
+        await _dummy_verify()
+        raise InvalidCredentialsError
+    if not await verify_password(password, user.hashed_password):
+        raise InvalidCredentialsError
+
+    access = create_access_token(str(user.id))
+    refresh = await create_refresh_token(user.id, session)
+    await session.commit()
+    return user, access, refresh
+
+
+async def logout(user_id: uuid.UUID, session: AsyncSession) -> None:
+    """유저의 refresh 토큰을 전부 revoke(전체 로그아웃) + commit.
+
+    refresh 쿠키는 Path=/auth/refresh라 /auth/logout엔 안 실린다. 특정 토큰을 받을 수
+    없으므로 access 토큰으로 식별한 유저의 세션 전체를 무효화한다.
+    """
+    await revoke_all_refresh_tokens(user_id, session)
+    await session.commit()
+
+
+async def rotate_refresh(raw: str, session: AsyncSession) -> tuple[User, str, str]:
+    """refresh 회전. (user, new_access, new_refresh) 반환.
+
+    - 미존재/만료 → InvalidTokenError
+    - 이미 revoke된 토큰 재제출 → 재사용 탐지: 세션 전체 revoke + commit → TokenReuseError
+    - 유효 → 기존 revoke + 신규 refresh/access 발급을 한 트랜잭션으로 commit
+    """
+    record = await get_refresh_token(raw, session)
+    if record is None:
+        raise InvalidTokenError
+
+    if record.revoked_at is not None:
+        await revoke_all_refresh_tokens(record.user_id, session)
+        await session.commit()
+        raise TokenReuseError
+
+    if record.expires_at <= datetime.now(UTC):
+        raise InvalidTokenError
+
+    record.revoked_at = datetime.now(UTC)
+    session.add(record)
+    new_refresh = await create_refresh_token(record.user_id, session)
+    user = await session.get(User, record.user_id)
+    assert user is not None  # FK 무결성상 항상 존재
+    access = create_access_token(str(record.user_id))
+    await session.commit()
+    return user, access, new_refresh
