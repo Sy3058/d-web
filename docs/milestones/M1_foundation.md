@@ -2,7 +2,7 @@
 
 | 항목 | 내용 |
 |------|------|
-| 문서 버전 | v0.1 (2026-05-31) |
+| 문서 버전 | v0.2 (2026-06-05, 그룹 C 구현 반영) |
 | 상위 마일스톤 | [M1](./README.md#m1-인증-이메일--구글) |
 | 예상 기간 | 약 3주 (이메일 발송/구글 OAuth 콘솔 왕복 포함) |
 | 완료 기준 | 신규 유저가 이메일/구글로 가입 → 인증 메일 수신 → 로그인 상태로 마이페이지 진입 (그룹 H 체크리스트) |
@@ -125,7 +125,7 @@ git stash pop stash@{0}
 
 > **결정 (확정): 인증 표면 전체 비열거(non-enumeration) 정책.** 가입·로그인·비번 재설정(P1)·재발송 등 **인증 전 모든 엔드포인트가 "회원/비회원"을 응답으로 구분하지 않는다.** 한 곳만 막으면 다른 곳에서 새므로 표면 전체를 통일한다. 회원 여부를 아는 사람은 **수신함 주인뿐**(공격자는 HTTP 응답에서 아무것도 못 얻음). 응답 분기에 따른 **타이밍 차이도 제거**(없는 유저/중복 유저 경로에 더미 작업으로 시간 평탄화).
 
-### C1. 회원가입 (`POST /auth/signup`) - AUTH-01
+### C1. 회원가입 (`POST /auth/signup`) - AUTH-01 ✅ 구현 완료 (2026-06-05)
 - 선행: B1, A1
 - 산출물: 가입 엔드포인트 + Pydantic 요청 스키마
 - DoD: 신규 이메일 → 미인증 user 생성 + 인증 메일(E1). **중복 이메일 → user 생성 없이 "이미 가입된 계정" 안내 메일**(로그인/비번재설정 링크)을 그 주소로 발송. **두 경우 HTTP 응답은 동일**("입력하신 주소로 메일을 보냈어요"). 비번 정책/HIBP 위반은 이메일 존재 여부와 무관하므로 422 가능
@@ -134,28 +134,33 @@ git stash pop stash@{0}
 - **결정 (확정): 유출 비번 차단 (HIBP)** - 가입(및 P1 비번 변경) 시 HaveIBeenPwned k-anonymity API(비번 SHA-1 앞 5자리만 전송)로 유출 비번 거부. 외부 API 장애 시 가입을 막지 않도록 fail-open + 경고 로깅.
 - 메모: 가입 직후 미인증 상태(`is_email_verified=False`)로 생성. 가입과 메일 발송을 한 트랜잭션에 묶지 말 것 - 메일은 DB 커밋 후 발송(외부 호출 실패가 가입을 롤백시키지 않도록).
 
-### C2. 로그인 (`POST /auth/login`) - AUTH-02
+### C2. 로그인 (`POST /auth/login`) - AUTH-02 ✅ 구현 완료 (2026-06-05)
 - 선행: B1, B2, B3
 - 산출물: 로그인 엔드포인트
 - DoD: 비번 검증 성공 → access/refresh 쿠키 발급 + `refresh_tokens` insert(token_hash). 실패 시 401, 이메일/비번 어느 쪽이 틀렸는지 구분 노출 금지(동일 메시지)
 - 메모: 타이밍 공격 완화를 위해 미존재 유저도 더미 해시 검증 후 동일 응답 시간 유지 고려.
 
-### C3. 로그아웃 (`POST /auth/logout`) - AUTH-06
+### C3. 로그아웃 (`POST /auth/logout`) - AUTH-06 ✅ 구현 완료 (2026-06-05)
 - 선행: C2
 - 산출물: 로그아웃 엔드포인트
 - DoD: access/refresh 쿠키 만료 + 해당 `refresh_tokens.revoked_at` 기록. 재사용 시 갱신(C4) 거부됨을 테스트로 확인
 
-### C4. 토큰 갱신 (`POST /auth/refresh`)
+### C4. 토큰 갱신 (`POST /auth/refresh`) ✅ 구현 완료 (2026-06-05)
 - 선행: C2
 - 산출물: 갱신 엔드포인트
 - DoD: 유효 refresh 쿠키 → `token_hash`(HMAC) 직접 조회·대조 → 신규 access 발급. 무효/revoked/만료 토큰 401
 - 결정: B2의 회전 + 재사용 탐지를 여기서 구현. 회전 시 기존 refresh revoke + 신규 발급을 한 트랜잭션으로, revoke된 토큰 재제출 시 유저 세션 전체 revoke.
 
-### C5. 현재 유저 조회 (`GET /auth/me`)
+### C5. 현재 유저 조회 (`GET /auth/me`) ✅ 구현 완료 (2026-06-05)
 - 선행: B2, C2
 - 산출물: access 쿠키 → 현재 유저 반환 엔드포인트
 - DoD: 유효 access 시 200 + `nickname`/`email`/`is_email_verified`/`is_admin`, 무효·만료 시 401
 - 메모: G5 마이페이지·Navbar 로그인 상태 판정의 **단일 소스**. 응답은 민감 필드(`hashed_password` 등) 제외한 `UserRead` 스키마. SSR 페이지가 쿠키를 그대로 전달(`credentials: 'include'`)해 호출.
+
+> **구현 요약 (2026-06-05)**: C1~C5 구현 + Opus 리뷰 완료. 상세 [IMPLEMENTATION_AUTH_ENDPOINTS.md](../MODULES/BE/Auth/IMPLEMENTATION_AUTH_ENDPOINTS.md).
+> - 산출물: `routers/auth.py`(5개), `schemas/auth.py`, `services/hibp.py`(HIBP k-anonymity), `services/email_service.py`(E1 계약 스텁), `services/auth_service.py`(유저 CRUD+플로우), `lib/auth.py` `get_current_user`, `lib/exceptions.py`, `tests/test_auth_endpoints.py`(15개). 의존성 `httpx`·`email-validator` 추가.
+> - 결정: **로그아웃 = 세션 전체 revoke**(refresh 쿠키 `Path=/auth/refresh`라 `/auth/logout`엔 미전송 → access로 유저 식별 후 전체 revoke). 타이밍 평탄화 더미 해시는 **import 시 eager 생성**(lazy면 첫 호출 때 bcrypt가 이벤트 루프 블로킹 - Opus 리뷰 Major 수정).
+> - 검증: 단위 17개 통과. DB 통합 테스트는 현재 환경 docker/Postgres 부재로 미실행 → 기동 후 그린 확인 + 커밋 예정. 그룹 H의 pytest DoD는 그때 체크.
 
 ---
 
