@@ -16,12 +16,14 @@
 
 ## FastAPI
 
-<!-- 실수 발생 시 여기에 추가 -->
+- 고정 비싼 값(타이밍 평탄화 더미 해시 등 비번과 무관한 상수)은 **import 시 eager 생성**할 것
+  → lazy 캐시(`global X; if X is None: X = bcrypt(...)`)로 미루면 첫 호출 때 bcrypt(~300ms)가 **이벤트 루프를 동기 블로킹**
+  → 비용은 프로세스당 1회라 어차피 한 번 냄. lazy는 그 1회를 부팅(요청 안 받음, 무해)에서 요청 처리 중(유해)으로 옮길 뿐 → 손해
+  → 모듈 로드 시 1회 생성(루프 없어 무해)이 정답. 실제 사고: M1 C `_dummy_hash` lazy → Opus 리뷰 Major
+
 <!-- 예시:
-- SQLModel 관계에서 lazy loading으로 N+1 발생
-  → selectinload 명시적으로 써야 함
-- 포트원 webhook 금액 검증 누락
-  → 결제 API는 항상 서버에서 금액 재검증
+- SQLModel 관계 lazy loading N+1 → selectinload 명시
+- 포트원 webhook 금액 검증 누락 → 서버에서 금액 재검증
 -->
 
 ## Astro / React
@@ -97,6 +99,10 @@
   → `gh pr status` 등이 빈/에러 출력을 내도 "PR 없음"으로 단정 금지 (빈 셸 출력 오판 패턴의 변종)
   → PR 상태는 사용자가 알려주는 GitHub 화면 정보나 `git log origin/main`으로 교차 확인
 
+- Bash 호출 간 작업 디렉터리(cwd)가 리셋될 수 있음 - 지속을 보장하지 말 것
+  → backend 명령은 항상 `cd /home/ash99/project/d-web/backend && uv run ...` 형태로 경로를 명시
+  → cwd 가정 시 `Failed to spawn: ruff`(루트엔 venv 없음)·`ModuleNotFoundError: No module named 'src'`로 깨짐. 실제 사고: 같은 `uv run`이 한 번은 되고 다음 호출엔 cwd가 루트로 돌아가 실패
+
 ## Alembic 마이그레이션
 
 - 이미 DB에 적용(upgrade)된 마이그레이션 파일을 직접 편집하지 말 것
@@ -129,3 +135,8 @@
 - 서비스가 `session.commit()`을 직접 호출하면 rollback-격리 픽스처와 충돌
   → conftest의 "트랜잭션 begin → 끝에 rollback" 격리 방식은 service가 commit하면 `InterfaceError: another operation is in progress`
   → 해결: `async_sessionmaker`로 세션 주고, 테스트 후 `metadata.sorted_tables`를 reversed 순으로 DELETE해 정리
+
+- 엔드포인트+DB 통합 테스트는 `TestClient` 대신 httpx `ASGITransport`를 쓸 것
+  → `TestClient`(동기, 자체 루프)는 session-scope async `db_session`(asyncpg)과 루프가 어긋나 `got Future ... different loop`
+  → 해결: `AsyncClient(transport=ASGITransport(app=app), base_url=...)` + `app.dependency_overrides[get_session]`로 같은 루프에서 앱 실행, 비동기 `await client.post(...)`
+  → 쿠키를 **수동으로 jar에 set**할 때(요청별 `cookies=`는 deprecated)는 base_url 호스트를 점 있는 이름(`http://test.example`) + `cookies.set(..., domain="test.example")`. 점 없는 호스트(`test`)는 cookiejar가 `.local`을 붙여 도메인 매칭이 깨져 쿠키 미전송
