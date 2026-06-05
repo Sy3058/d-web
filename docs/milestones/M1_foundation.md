@@ -201,7 +201,7 @@ git stash pop stash@{0}
 - 메모: ⚠️ 개인정보(이메일 전체) plaintext 로깅 금지 - 마스킹 적용. **원문 토큰/인증 URL도 비로깅**(이벤트명 + 마스킹 이메일만).
 - 메모: ⚠️ 메일 HTML 템플릿에 user input(닉네임 등) 직접 삽입 금지(HTML 인젝션) - v1은 미삽입 또는 `html.escape`.
 
-### E2. 이메일 인증 검증 (`POST /auth/verify-email`)
+### E2. 이메일 인증 검증 (`POST /auth/verify-email`) ✅ 구현 완료 (2026-06-06)
 - 선행: E1
 - 산출물: 토큰 검증 엔드포인트
 - DoD: 유효 토큰 → `users.is_email_verified=True` + `email_verified_at` 기록 + `email_verifications.used_at` 세팅. 만료/사용됨 토큰 거부
@@ -209,6 +209,8 @@ git stash pop stash@{0}
 - **결정 (확정): 실패 응답 단일 generic 메시지** - 무효/만료/사용됨을 구분 노출하지 않음(400). 재발송 안내는 E3/G4로 복구.
 - **결정 (확정): `email_verifications.token` UNIQUE INDEX 추가** (새 alembic 마이그레이션, forward-only). 결정적 해시 `WHERE token=?` 직접 조회라 인덱스 필요 + 중복 방지. `refresh_tokens.token_hash`도 동일 인덱스 누락이나 B2(커밋됨) 영역이라 이 PR 밖 - DB_SCHEMA에 후속 메모만.
 - 메모: 토큰 1회용. 검증 후 `used_at` 세팅으로 재사용 차단. 멱등 - 이미 `is_email_verified=True`면 `email_verified_at`은 덮어쓰지 않음(인증 시각 보존). 동시 더블클릭은 결과가 멱등이라 무해(별도 락 불필요). 토큰 원문/해시 비로깅(E1 일관, 이벤트는 user_id만).
+
+> **구현 요약 (2026-06-06)**: `POST /auth/verify-email`(body 토큰) + `auth_service.verify_email`(HMAC 해시 조회 → 만료/사용 검사 → 멱등 인증 마킹). 산출물: `routers/auth.py`, `services/auth_service.py`, `schemas/auth.py` `VerifyEmailRequest`, `lib/exceptions.py` `EmailVerificationError`, `models/user.py` `uq_email_verifications_token` UNIQUE 인덱스 + 마이그레이션 `6d33b06659a8`, `tests/test_auth_endpoints.py` 5개. 검증: pytest 52개 통과(Postgres 통합 포함), `alembic check` 클린, Opus 리뷰 통과(Critical/Major 없음). 구현: [IMPLEMENTATION_EMAIL_VERIFY.md](../MODULES/BE/Auth/IMPLEMENTATION_EMAIL_VERIFY.md).
 
 ### E3. 재발송 + `require_verified_email` 의존성 골격
 - 선행: E1, E2

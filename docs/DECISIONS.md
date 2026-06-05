@@ -269,6 +269,7 @@
 - 일반 가입: 가입 후 인증 메일 발송, 유효 기간 1시간 토큰
 - 미인증 상태에서도 무료분 열람은 가능하되, 결제는 인증 후에만 허용
 - `users.is_email_verified` + `email_verifications` 테이블로 관리
+- 토큰은 DB에 HMAC at-rest 해시로만 저장(원문은 메일 링크에만), 검증은 `POST /auth/verify-email`(상태 변경 + 메일 스캐너 GET prefetch의 일회용 토큰 소비 차단), 실패는 무효/만료/사용됨 비구분 단일 메시지
 
 ### 환경 베이스 URL: config.py에서 조립
 
