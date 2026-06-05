@@ -218,7 +218,7 @@ git stash pop stash@{0}
 - DoD: 재발송 시 기존 미사용 토큰 무효화 + 신규 발급. `require_verified_email` 의존성이 미인증 유저에 403 반환(단위 테스트). **실제 적용은 M3/M4** - M1에서는 가드 함수만 제공하고 라우터 부착은 안 함
 - 결정: 재발송 rate limit(남용 방지)은 F1과 함께 검토.
 
-> **구현 요약 (2026-06-06)**: `POST /auth/resend-verification`(비인증·body email·비열거 동일 200) + `require_verified_email` 가드(get_current_user 합성, 미인증 403, **라우터 미부착**). 산출물: `routers/auth.py`, `services/auth_service.py`(`invalidate_email_verifications` + `resend_verification`), `schemas/auth.py` `ResendVerificationRequest`, `lib/auth.py` `require_verified_email`, `tests/test_auth_endpoints.py` 5개(재발송 3 + 가드 단위 2). 스키마 무변경(마이그레이션 불필요). 검증: pytest 57개 통과·ruff check clean·alembic check 클린. /council 5렌즈 플랜 리뷰 + Opus 코드리뷰 통과(Critical/Major 없음).
+> **구현 요약 (2026-06-06)**: `POST /auth/resend-verification`(비인증·body email·비열거 동일 200) + `require_verified_email` 가드(get_current_user 합성, 미인증 403, **라우터 미부착**). 산출물: `routers/auth.py`, `services/auth_service.py`(`invalidate_email_verifications` + `resend_verification`), `schemas/auth.py` `ResendVerificationRequest`, `lib/auth.py` `require_verified_email`, `tests/test_auth_endpoints.py` 5개(재발송 3 + 가드 단위 2). 스키마 무변경(마이그레이션 불필요). 검증: pytest 57개 통과·ruff check clean·alembic check 클린. /council 5렌즈 플랜 리뷰 + Opus 코드리뷰 통과(Critical/Major 없음). 구현: [IMPLEMENTATION_EMAIL_RESEND.md](../MODULES/BE/Auth/IMPLEMENTATION_EMAIL_RESEND.md).
 > - **결정 (확정)**: 재발송 = 직전 미사용 토큰 무효화(`used_at`) + 신규 발급을 **단일 트랜잭션 commit**, 메일은 commit 후 BackgroundTasks. 무효화는 이 토큰 자체 보안보다 **P1 비번재설정 resend와의 의미론 통일**('재발송=직전 토큰 무효화')이 목적(이 토큰만 보면 verify가 다건 유효 토큰을 허용하므로 무효화는 UX·위생 수준). 조회는 `get_user_by_email`(정규화) 경유로 대소문자/공백 가용성 버그 차단. resend엔 bcrypt가 없어 타이밍 평탄화 미적용 - 잔여 차(미인증 경로 DB write 몇 건)는 응답 바디 동일 + 재발송 rate limit(F1)으로 커버(완전 평탄화 아님, 의도된 한계).
 
 ---
