@@ -5,6 +5,7 @@ TestClient는 자체 이벤트 루프라 session-scope async db_session(asyncpg)
 HIBP/이메일 발송은 외부 의존이라 mock으로 대체한다.
 """
 
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -260,3 +261,80 @@ async def test_refresh_reuse_revokes_session(async_client, db_session, existing_
 async def test_refresh_without_cookie_401(async_client):
     resp = await async_client.post("/auth/refresh")
     assert resp.status_code == 401
+
+
+# --- E2 이메일 인증 검증 ----------------------------------------------------
+
+_INVALID_VERIFICATION = "유효하지 않거나 만료된 인증 링크입니다"
+
+
+async def _issue_verification(session: AsyncSession, user_id) -> str:
+    raw = await auth_service.create_email_verification(user_id, session)
+    await session.commit()
+    return raw
+
+
+async def test_verify_email_success(async_client, db_session, existing_user):
+    user_id = existing_user.id
+    raw = await _issue_verification(db_session, user_id)
+
+    resp = await async_client.post("/auth/verify-email", json={"token": raw})
+    assert resp.status_code == 200
+    assert resp.json()["message"] == "이메일 인증이 완료되었습니다"
+
+    user = (await db_session.exec(select(User).where(User.id == user_id))).first()
+    assert user.is_email_verified is True
+    assert user.email_verified_at is not None
+    record = (await db_session.exec(select(EmailVerification))).first()
+    assert record.used_at is not None
+
+
+async def test_verify_email_expired_rejected(async_client, db_session, existing_user):
+    user_id = existing_user.id
+    raw = await _issue_verification(db_session, user_id)
+    record = (await db_session.exec(select(EmailVerification))).first()
+    record.expires_at = datetime.now(UTC) - timedelta(seconds=1)
+    db_session.add(record)
+    await db_session.commit()
+
+    resp = await async_client.post("/auth/verify-email", json={"token": raw})
+    assert resp.status_code == 400
+    assert resp.json()["detail"] == _INVALID_VERIFICATION
+    user = (await db_session.exec(select(User).where(User.id == user_id))).first()
+    assert user.is_email_verified is False
+
+
+async def test_verify_email_reuse_rejected(async_client, db_session, existing_user):
+    raw = await _issue_verification(db_session, existing_user.id)
+    first = await async_client.post("/auth/verify-email", json={"token": raw})
+    assert first.status_code == 200
+    # 일회용: used_at이 세팅된 토큰 재제출은 거부
+    second = await async_client.post("/auth/verify-email", json={"token": raw})
+    assert second.status_code == 400
+    assert second.json()["detail"] == _INVALID_VERIFICATION
+
+
+async def test_verify_email_unknown_token_rejected(async_client, existing_user):
+    resp = await async_client.post(
+        "/auth/verify-email", json={"token": "nonexistent-token"}
+    )
+    assert resp.status_code == 400
+    assert resp.json()["detail"] == _INVALID_VERIFICATION
+
+
+async def test_verify_email_idempotent_preserves_verified_at(
+    async_client, db_session, existing_user
+):
+    # 이미 인증된 유저가 또 다른 미사용 토큰으로 검증해도 email_verified_at은 보존
+    user_id = existing_user.id
+    raw1 = await _issue_verification(db_session, user_id)
+    await async_client.post("/auth/verify-email", json={"token": raw1})
+    user = (await db_session.exec(select(User).where(User.id == user_id))).first()
+    first_verified_at = user.email_verified_at
+    assert first_verified_at is not None
+
+    raw2 = await _issue_verification(db_session, user_id)
+    resp = await async_client.post("/auth/verify-email", json={"token": raw2})
+    assert resp.status_code == 200
+    user = (await db_session.exec(select(User).where(User.id == user_id))).first()
+    assert user.email_verified_at == first_verified_at
