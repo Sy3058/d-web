@@ -191,7 +191,7 @@ git stash pop stash@{0}
 
 ### E1. 이메일 발송 서비스 (Resend) ✅ 완료 (2026-06-05)
 - 선행: A1, A4
-- 산출물: `services/email_service.py` (httpx 비동기 호출), 인증 메일 템플릿
+- 산출물: `services/email_service.py` (httpx 비동기 호출), 인증 메일 템플릿. 구현: [IMPLEMENTATION_EMAIL.md](../MODULES/BE/Auth/IMPLEMENTATION_EMAIL.md)
 - DoD: 가입 시 `email_verifications`에 1시간 토큰 insert + 메일 발송 → 수신함 도착 확인
 - **검증 완료 (2026-06-05)**: 본인 메일로 실제 가입 → Resend API 200 → 인증 링크 메일 수신함 도착 확인. DoD 충족. (dev 발신 `onboarding@resend.dev`, 커스텀 도메인 DKIM은 도메인 확보 후 적용)
 - **결정 (확정): 인증 토큰 at-rest 해시 저장.** 메일 링크엔 원문 토큰을 싣되 DB(`email_verifications.token`)에는 **HMAC-SHA256(+pepper, B2 동일 키 정책) 해시만** 저장 → 토큰 1회용 고엔트로피 랜덤. 검증(E2)은 입력 토큰을 동일 해시해 대조. (스키마 컬럼명은 `token`이나 저장값은 해시)
