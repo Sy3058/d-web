@@ -103,6 +103,15 @@
   → backend 명령은 항상 `cd /home/ash99/project/d-web/backend && uv run ...` 형태로 경로를 명시
   → cwd 가정 시 `Failed to spawn: ruff`(루트엔 venv 없음)·`ModuleNotFoundError: No module named 'src'`로 깨짐. 실제 사고: 같은 `uv run`이 한 번은 되고 다음 호출엔 cwd가 루트로 돌아가 실패
 
+- `ruff check --fix`를 파일 인자 없이 돌리면 **프로젝트 전체**가 대상이라 범위 밖 파일까지 고친다
+  → 실제 사고: E1 작업 중 `uv run ruff check --fix`가 이미 커밋·DB 적용된 마이그레이션 파일의 import까지 정렬 → 커밋 스코프 오염(무관 파일 11건 중 9건이 그 마이그레이션)
+  → 변경한 파일만 지정(`ruff check --fix <path...>`)하거나, 전체로 돌렸으면 직후 `git status`로 범위 밖 변경을 확인하고 `git checkout -- <파일>`로 되돌릴 것
+  → 이미 DB 적용된 마이그레이션은 import 정렬뿐이라도 건드리지 말 것(위 "Alembic" 규칙과 연결)
+
+- 계획 단계에서 사용자 승인 전에 파일 편집(코딩)으로 건너뛰지 말 것
+  → 실제 사고: E1에서 "계획 세우자" 단계인데 `config.py`를 바로 Edit하기 시작 → 사용자가 두 번 제지("지금은 계획 세우는 단계야")
+  → 계획(Opus)은 "무엇을·어떻게"와 변경 파일 목록까지만. 파일 쓰기는 사용자가 계획에 OK한 뒤 코딩 단계에서. 순서: 계획 → (승인) → 코딩 → 검증 → 커밋
+
 ## Alembic 마이그레이션
 
 - 이미 DB에 적용(upgrade)된 마이그레이션 파일을 직접 편집하지 말 것
