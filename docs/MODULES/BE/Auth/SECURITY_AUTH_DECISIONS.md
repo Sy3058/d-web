@@ -4,7 +4,7 @@
 |------|------|
 | 영역 | BE (+ FE 쿠키 처리) |
 | 대상 마일스톤 | M1 (인증: 이메일 + 구글) |
-| 상태 | A1·B1~B3·C 구현 완료(2026-06-05), D(OAuth)·E(이메일 인증)·F(rate limit)는 설계 확정·구현 전. M1 착수 시 DECISIONS.md "보안 결정"에 이관 |
+| 상태 | A1·B1~B3·C·E1·E2 구현 완료(~2026-06-06), D(OAuth)·E3·F(rate limit)는 설계 확정·구현 전. M1 착수 시 DECISIONS.md "보안 결정"에 이관 |
 | 작성 | 2026-05-31 (Opus 설계 리뷰 세션) |
 | 근거 | OWASP ASVS, OAuth 2.0 Security BCP, DB_SCHEMA §1, PRD §4.2 |
 
@@ -85,6 +85,8 @@ M1 인증 설계 리뷰에서 확정한 보안 결정을 한곳에 모은 문서
 
 - 인증 토큰은 **고엔트로피 1회용**, **at-rest 해시 저장**(HMAC-SHA256 + pepper, refresh와 동일 키 정책). 메일 링크엔 원문, DB엔 해시만. 검증은 입력 토큰을 동일 해시해 대조.
 - 만료 **1시간**, 사용 시 `used_at` 세팅, 재사용 차단.
+- **검증 = `POST /auth/verify-email`** (E2, GET 아님): 상태 변경 + 메일 스캐너/링크 프리뷰의 GET prefetch가 일회용 토큰을 클릭 전에 소비하는 것 차단(OWASP). 토큰은 **body**로 받아 URL/쿼리 로깅 회피. study `email-verification-link-safety`.
+- 실패(무효/만료/사용됨)는 **비구분 단일 메시지**(400), **멱등**(이미 인증된 유저 재검증 시 `email_verified_at` 보존). `email_verifications.token` **UNIQUE 인덱스**(결정적 해시 직접 조회 + 중복 방지).
 - **`require_verified_email` 의존성**은 M1에서 가드 함수만 제공, **실제 차단 적용은 M3(결제)·M4(댓글)**. 열람은 미인증도 허용(Q5).
 
 ## 9. 시크릿 / 로깅

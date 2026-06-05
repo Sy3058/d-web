@@ -96,6 +96,6 @@ async def _send(to, subject, html):
 
 ## 6. 제약 / 후속
 
-- **메일 링크는 E2/G4 전까지 404** - `GET /auth/verify-email`(E2) + 프론트 `/auth/verify-email`(G4)가 생겨야 클릭이 동작. 의도된 상태.
+- **메일 링크는 G4 전까지 404** - E2(`POST /auth/verify-email`)는 구현 완료, 프론트 `/auth/verify-email`(G4)가 생겨야 클릭 -> 토큰 추출 -> E2 POST 호출이 이어진다.
 - **커스텀 도메인 DKIM**: dev는 onboarding 도메인. 프로덕션 발신·스팸 분류 회피는 도메인 SPF/DKIM 인증 후 `EMAIL_FROM`만 교체(코드 변경 없음).
-- **후속**: E2(토큰 검증 -> `is_email_verified=True`), E3(재발송 + `require_verified_email` 의존성 골격). `M1_foundation.md` 그룹 E 참조.
+- **후속**: E2(토큰 검증 -> `is_email_verified=True`) ✅ 완료([IMPLEMENTATION_EMAIL_VERIFY.md](./IMPLEMENTATION_EMAIL_VERIFY.md)), E3(재발송 + `require_verified_email` 의존성 골격). `M1_foundation.md` 그룹 E 참조.
