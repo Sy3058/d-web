@@ -201,11 +201,14 @@ git stash pop stash@{0}
 - 메모: ⚠️ 개인정보(이메일 전체) plaintext 로깅 금지 - 마스킹 적용. **원문 토큰/인증 URL도 비로깅**(이벤트명 + 마스킹 이메일만).
 - 메모: ⚠️ 메일 HTML 템플릿에 user input(닉네임 등) 직접 삽입 금지(HTML 인젝션) - v1은 미삽입 또는 `html.escape`.
 
-### E2. 이메일 인증 검증 (`GET /auth/verify-email`)
+### E2. 이메일 인증 검증 (`POST /auth/verify-email`)
 - 선행: E1
 - 산출물: 토큰 검증 엔드포인트
 - DoD: 유효 토큰 → `users.is_email_verified=True` + `email_verified_at` 기록 + `email_verifications.used_at` 세팅. 만료/사용됨 토큰 거부
-- 메모: 토큰 1회용. 검증 후 재사용 차단.
+- **결정 (확정): `POST` 엔드포인트** (GET 아님). 상태 변경 + 메일 스캐너/링크 프리뷰의 GET prefetch가 일회용 토큰을 미리 소비하는 것 차단(OWASP 권장). 토큰은 **body**로 받아 URL/쿼리 로깅 회피. 메일 링크는 프론트(G4) 페이지를 가리키고 G4가 버튼 클릭 시 백엔드 POST 호출 - E1 메일 링크 형식은 변경 없음.
+- **결정 (확정): 실패 응답 단일 generic 메시지** - 무효/만료/사용됨을 구분 노출하지 않음(400). 재발송 안내는 E3/G4로 복구.
+- **결정 (확정): `email_verifications.token` UNIQUE INDEX 추가** (새 alembic 마이그레이션, forward-only). 결정적 해시 `WHERE token=?` 직접 조회라 인덱스 필요 + 중복 방지. `refresh_tokens.token_hash`도 동일 인덱스 누락이나 B2(커밋됨) 영역이라 이 PR 밖 - DB_SCHEMA에 후속 메모만.
+- 메모: 토큰 1회용. 검증 후 `used_at` 세팅으로 재사용 차단. 멱등 - 이미 `is_email_verified=True`면 `email_verified_at`은 덮어쓰지 않음(인증 시각 보존). 동시 더블클릭은 결과가 멱등이라 무해(별도 락 불필요). 토큰 원문/해시 비로깅(E1 일관, 이벤트는 user_id만).
 
 ### E3. 재발송 + `require_verified_email` 의존성 골격
 - 선행: E1, E2
@@ -316,4 +319,5 @@ git stash pop stash@{0}
   - 로그인: IP rate limit + 계정 lockout/백오프
   - 이메일 인증 토큰 at-rest 해시
   - **인증 표면 전체 비열거** (가입/로그인/비번재설정/재발송 응답·타이밍 통일, 회원 여부는 수신함 주인만 인지)
+  - 이메일 인증 검증(E2) = **POST**(GET prefetch 토큰 소비 차단) + 토큰 body + 실패 단일 generic, `email_verifications.token` UNIQUE INDEX
 - 커밋은 영역 prefix `[BE]`/`[FE]`, 한 커밋 하나의 논리 변경 (모델 → service → router → test → 프론트 순 분리, GUIDE_COMMIT).
