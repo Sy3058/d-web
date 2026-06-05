@@ -189,10 +189,11 @@ git stash pop stash@{0}
 > 선행 외부키: M0 A4 (Resend SPF/DKIM). DKIM 미인증 시 스팸 분류되어 DoD 검증 불가.
 > ⚠️ AUTH-08은 PRD 우선순위상 P1이나, 다운스트림(M3 결제·M4 댓글)의 `require_verified_email` 의존성을 위해 **발송·검증 인프라는 M1에 선구현**한다 (실제 차단 적용은 M3/M4).
 
-### E1. 이메일 발송 서비스 (Resend)
+### E1. 이메일 발송 서비스 (Resend) ✅ 완료 (2026-06-05)
 - 선행: A1, A4
 - 산출물: `services/email_service.py` (httpx 비동기 호출), 인증 메일 템플릿
 - DoD: 가입 시 `email_verifications`에 1시간 토큰 insert + 메일 발송 → 수신함 도착 확인
+- **검증 완료 (2026-06-05)**: 본인 메일로 실제 가입 → Resend API 200 → 인증 링크 메일 수신함 도착 확인. DoD 충족. (dev 발신 `onboarding@resend.dev`, 커스텀 도메인 DKIM은 도메인 확보 후 적용)
 - **결정 (확정): 인증 토큰 at-rest 해시 저장.** 메일 링크엔 원문 토큰을 싣되 DB(`email_verifications.token`)에는 **HMAC-SHA256(+pepper, B2 동일 키 정책) 해시만** 저장 → 토큰 1회용 고엔트로피 랜덤. 검증(E2)은 입력 토큰을 동일 해시해 대조. (스키마 컬럼명은 `token`이나 저장값은 해시)
 - 결정: 비동기 함수에서 동기 블로킹 호출 금지 - `httpx.AsyncClient` 사용. **발송 = `BackgroundTasks` 확정**(응답 후 실행 → 메일 실패가 가입을 롤백 안 함 + 비열거 타이밍에 영향 없음). C 그룹에서 `signup`이 이미 `email_service.send_*`를 BackgroundTasks로 호출 중 → E1은 스텁을 실제 Resend 연동으로 채우는 범위.
 - **결정 (확정): 발송 fail-open.** `RESEND_API_KEY` 미설정 또는 발송 실패(httpx 오류) 시 가입을 막지 않고 경고 로그만(가용성 우선, HIBP와 동일 철학). 미수신은 E3 재발송으로 복구. **단 `env==production` & 키 미설정이면 기동 시 1회 경고 로그**로 프로덕션 silent-failure(전 유저 메일 조용히 미발송)를 방지.
