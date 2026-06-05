@@ -21,13 +21,19 @@ from src.lib.auth import (
 )
 from src.lib.db import get_session
 from src.lib.exceptions import (
+    EmailVerificationError,
     InvalidCredentialsError,
     InvalidTokenError,
     PwnedPasswordError,
     TokenReuseError,
 )
 from src.models.user import User, UserRead
-from src.schemas.auth import LoginRequest, MessageResponse, SignupRequest
+from src.schemas.auth import (
+    LoginRequest,
+    MessageResponse,
+    SignupRequest,
+    VerifyEmailRequest,
+)
 from src.services import auth_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -40,6 +46,8 @@ _SIGNUP_MESSAGE = "입력하신 주소로 메일을 보냈어요"
 # 비열거: 이메일/비번 중 무엇이 틀렸는지 구분 노출 금지.
 _INVALID_CREDENTIALS = "이메일 또는 비밀번호가 올바르지 않습니다"
 _UNAUTHORIZED = "인증이 필요합니다"
+# 비구분: 무효/만료/사용됨 토큰을 단일 메시지로 통일(M1 E2).
+_INVALID_VERIFICATION = "유효하지 않거나 만료된 인증 링크입니다"
 
 
 @router.post("/signup", response_model=MessageResponse, status_code=status.HTTP_200_OK)
@@ -123,3 +131,19 @@ async def refresh(
 @router.get("/me", response_model=UserRead)
 async def me(current_user: CurrentUser) -> User:
     return current_user
+
+
+@router.post("/verify-email", response_model=MessageResponse)
+async def verify_email(
+    body: VerifyEmailRequest,
+    session: SessionDep,
+) -> MessageResponse:
+    # 토큰은 body로 받음(URL/쿼리 로깅 회피). 상태 변경이라 POST -
+    # 메일 스캐너의 GET prefetch가 일회용 토큰을 미리 소비하는 것을 차단(M1 E2).
+    try:
+        await auth_service.verify_email(body.token, session)
+    except EmailVerificationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=_INVALID_VERIFICATION
+        ) from exc
+    return MessageResponse(message="이메일 인증이 완료되었습니다")

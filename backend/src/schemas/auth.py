@@ -41,5 +41,11 @@ class LoginRequest(BaseModel):
     password: str = Field(min_length=1, max_length=PASSWORD_MAX_LENGTH)
 
 
+class VerifyEmailRequest(BaseModel):
+    # 토큰은 secrets.token_urlsafe(32)=43자. 상한으로 초장문 입력 DoS 방지.
+    # 원문 토큰은 비로깅(E1 일관) - body로 받아 URL/쿼리 로깅도 회피한다.
+    token: str = Field(min_length=1, max_length=512)
+
+
 class MessageResponse(BaseModel):
     message: str

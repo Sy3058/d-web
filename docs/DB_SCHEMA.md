@@ -67,7 +67,7 @@ refresh_tokens
 email_verifications
 ├── id         UUID PRIMARY KEY DEFAULT gen_random_uuid()
 ├── user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE
-├── token      VARCHAR(255) NOT NULL
+├── token      VARCHAR(255) NOT NULL   -- HMAC-SHA256(+TOKEN_PEPPER) 해시, UNIQUE (원문은 메일 링크에만)
 ├── expires_at TIMESTAMPTZ NOT NULL   -- 발급 후 1시간
 └── used_at    TIMESTAMPTZ            -- NULL = 미사용
 ```
@@ -376,6 +376,11 @@ CREATE INDEX idx_users_deleted_at       ON users(deleted_at) WHERE deleted_at IS
 
 -- 리프레시 토큰 회전/재사용 탐지 시 user_id로 세션 전체 revoke (M1 C4)
 CREATE INDEX idx_refresh_tokens_user_id ON refresh_tokens(user_id);
+
+-- 이메일 인증 토큰 해시 직접 조회(M1 E2) + 중복 방지(결정적 해시 + 고엔트로피 랜덤)
+CREATE UNIQUE INDEX uq_email_verifications_token ON email_verifications(token);
+-- 후속: refresh_tokens.token_hash도 동일하게 조회 인덱스 누락(B2 영역, M1 E2에서 식별).
+--       이미 커밋된 영역이라 별도 마이그레이션으로 추가 예정(forward-only)
 
 -- 공개된 에피소드만 조회 (idx_episodes_work_id와 별개의 partial index)
 CREATE INDEX idx_episodes_published     ON episodes(work_id) WHERE is_published = TRUE;

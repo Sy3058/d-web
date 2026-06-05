@@ -134,6 +134,11 @@ class RefreshToken(SQLModel, table=True):
 
 class EmailVerification(SQLModel, table=True):
     __tablename__ = "email_verifications"
+    __table_args__ = (
+        # 검증(M1 E2)은 WHERE token=HMAC해시 직접 조회 - 인덱스 필수.
+        # 결정적 해시 + 고엔트로피 랜덤이라 충돌이 없어 UNIQUE 가능(중복 방지 겸용)
+        Index("uq_email_verifications_token", "token", unique=True),
+    )
 
     id: uuid.UUID | None = Field(default=None, sa_column=_pk_column())
     user_id: uuid.UUID = Field(sa_column=_fk_user_column())

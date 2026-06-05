@@ -23,3 +23,7 @@ class InvalidTokenError(AuthError):
 
 class TokenReuseError(InvalidTokenError):
     """revoke된 refresh 재제출 = 탈취 신호. 세션 전체 무효화 후 401."""
+
+
+class EmailVerificationError(AuthError):
+    """이메일 인증 토큰 무효/만료/사용됨 (router → 400, 단일 generic 메시지)."""
