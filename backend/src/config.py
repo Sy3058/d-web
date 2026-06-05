@@ -58,6 +58,13 @@ class Settings(BaseSettings):
     r2_endpoint: str = ""
     r2_signed_url_ttl_seconds: int = 300
 
+    # 이메일 발송 (Resend - M1 E1)
+    # 미설정 시 fail-open(no-op + 경고). production & 미설정이면 기동 시 추가 경고.
+    # email_from 기본값은 Resend 테스트 모드 - 본인 Resend 계정 이메일로만 발송 가능.
+    # DKIM 인증된 커스텀 도메인 확보 후 EMAIL_FROM만 교체(코드 변경 없음).
+    resend_api_key: SecretStr = SecretStr("")
+    email_from: str = "dweb <onboarding@resend.dev>"
+
     # 모니터링
     sentry_dsn: str = ""
 

@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 
 import sentry_sdk
+import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sentry_sdk.integrations.fastapi import FastApiIntegration
@@ -15,6 +16,9 @@ from src.routers import auth
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     configure_logging(debug=settings.debug)
+    log = structlog.get_logger(__name__)
+    if settings.env == "production" and not settings.resend_api_key.get_secret_value():
+        log.warning("resend_api_key_missing_in_production")
     if settings.sentry_dsn:
         sentry_sdk.init(
             dsn=settings.sentry_dsn,
