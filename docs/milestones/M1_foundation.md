@@ -2,7 +2,7 @@
 
 | 항목 | 내용 |
 |------|------|
-| 문서 버전 | v0.2 (2026-06-05, 그룹 C 구현 반영) |
+| 문서 버전 | v0.3 (2026-06-06, E2·E3 구현 반영) |
 | 상위 마일스톤 | [M1](./README.md#m1-인증-이메일--구글) |
 | 예상 기간 | 약 3주 (이메일 발송/구글 OAuth 콘솔 왕복 포함) |
 | 완료 기준 | 신규 유저가 이메일/구글로 가입 → 인증 메일 수신 → 로그인 상태로 마이페이지 진입 (그룹 H 체크리스트) |
@@ -212,11 +212,14 @@ git stash pop stash@{0}
 
 > **구현 요약 (2026-06-06)**: `POST /auth/verify-email`(body 토큰) + `auth_service.verify_email`(HMAC 해시 조회 → 만료/사용 검사 → 멱등 인증 마킹). 산출물: `routers/auth.py`, `services/auth_service.py`, `schemas/auth.py` `VerifyEmailRequest`, `lib/exceptions.py` `EmailVerificationError`, `models/user.py` `uq_email_verifications_token` UNIQUE 인덱스 + 마이그레이션 `6d33b06659a8`, `tests/test_auth_endpoints.py` 5개. 검증: pytest 52개 통과(Postgres 통합 포함), `alembic check` 클린, Opus 리뷰 통과(Critical/Major 없음). 구현: [IMPLEMENTATION_EMAIL_VERIFY.md](../MODULES/BE/Auth/IMPLEMENTATION_EMAIL_VERIFY.md).
 
-### E3. 재발송 + `require_verified_email` 의존성 골격
+### E3. 재발송 + `require_verified_email` 의존성 골격 ✅ 구현 완료 (2026-06-06)
 - 선행: E1, E2
 - 산출물: 인증 메일 재발송 엔드포인트 + `lib/auth.py` `require_verified_email` FastAPI Depends
 - DoD: 재발송 시 기존 미사용 토큰 무효화 + 신규 발급. `require_verified_email` 의존성이 미인증 유저에 403 반환(단위 테스트). **실제 적용은 M3/M4** - M1에서는 가드 함수만 제공하고 라우터 부착은 안 함
 - 결정: 재발송 rate limit(남용 방지)은 F1과 함께 검토.
+
+> **구현 요약 (2026-06-06)**: `POST /auth/resend-verification`(비인증·body email·비열거 동일 200) + `require_verified_email` 가드(get_current_user 합성, 미인증 403, **라우터 미부착**). 산출물: `routers/auth.py`, `services/auth_service.py`(`invalidate_email_verifications` + `resend_verification`), `schemas/auth.py` `ResendVerificationRequest`, `lib/auth.py` `require_verified_email`, `tests/test_auth_endpoints.py` 5개(재발송 3 + 가드 단위 2). 스키마 무변경(마이그레이션 불필요). 검증: pytest 57개 통과·ruff check clean·alembic check 클린. /council 5렌즈 플랜 리뷰 + Opus 코드리뷰 통과(Critical/Major 없음).
+> - **결정 (확정)**: 재발송 = 직전 미사용 토큰 무효화(`used_at`) + 신규 발급을 **단일 트랜잭션 commit**, 메일은 commit 후 BackgroundTasks. 무효화는 이 토큰 자체 보안보다 **P1 비번재설정 resend와의 의미론 통일**('재발송=직전 토큰 무효화')이 목적(이 토큰만 보면 verify가 다건 유효 토큰을 허용하므로 무효화는 UX·위생 수준). 조회는 `get_user_by_email`(정규화) 경유로 대소문자/공백 가용성 버그 차단. resend엔 bcrypt가 없어 타이밍 평탄화 미적용 - 잔여 차(미인증 경로 DB write 몇 건)는 응답 바디 동일 + 재발송 rate limit(F1)으로 커버(완전 평탄화 아님, 의도된 한계).
 
 ---
 
@@ -273,7 +276,7 @@ git stash pop stash@{0}
 - [ ] 구글 가입/로그인 → id_token 검증 통과 → 신규 `users`+`oauth_accounts` 생성, 기존 유저 로그인 동작
 - [ ] 토큰 갱신(`/auth/refresh`) 동작(회전), 로그아웃 후 갱신 거부됨, revoke된 refresh 재제출 시 세션 전체 무효화
 - [ ] 로그인 5회/분 초과 시 429
-- [ ] `require_verified_email` 의존성이 미인증 403 반환(단위 테스트, 부착은 아직 안 함)
+- [x] `require_verified_email` 의존성이 미인증 403 반환(단위 테스트, 부착은 아직 안 함) - E3 완료
 - [ ] 동일 이메일 소셜 시도 시 자동 병합 없이 안내 노출 (Q6)
 - [ ] 비열거 검증: 신규/중복 이메일 가입의 HTTP 응답·응답시간이 동일, 중복 시 안내 메일은 수신함 주인에게만 발송
 - [ ] `uv run pytest` 통과 (auth_service + 엔드포인트 테스트), CI(F1, M0) 그린
