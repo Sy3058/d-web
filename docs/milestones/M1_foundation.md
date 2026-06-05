@@ -194,8 +194,11 @@ git stash pop stash@{0}
 - 산출물: `services/email_service.py` (httpx 비동기 호출), 인증 메일 템플릿
 - DoD: 가입 시 `email_verifications`에 1시간 토큰 insert + 메일 발송 → 수신함 도착 확인
 - **결정 (확정): 인증 토큰 at-rest 해시 저장.** 메일 링크엔 원문 토큰을 싣되 DB(`email_verifications.token`)에는 **HMAC-SHA256(+pepper, B2 동일 키 정책) 해시만** 저장 → 토큰 1회용 고엔트로피 랜덤. 검증(E2)은 입력 토큰을 동일 해시해 대조. (스키마 컬럼명은 `token`이나 저장값은 해시)
-- 결정: 비동기 함수에서 동기 블로킹 호출 금지 - `httpx.AsyncClient` 사용. 발송은 FastAPI `BackgroundTasks` 또는 await(응답 지연 허용 범위 내) 중 택1.
-- 메모: ⚠️ 개인정보(이메일 전체) plaintext 로깅 금지 - 로그에는 마스킹(M0 B4 결정 규칙) 적용.
+- 결정: 비동기 함수에서 동기 블로킹 호출 금지 - `httpx.AsyncClient` 사용. **발송 = `BackgroundTasks` 확정**(응답 후 실행 → 메일 실패가 가입을 롤백 안 함 + 비열거 타이밍에 영향 없음). C 그룹에서 `signup`이 이미 `email_service.send_*`를 BackgroundTasks로 호출 중 → E1은 스텁을 실제 Resend 연동으로 채우는 범위.
+- **결정 (확정): 발송 fail-open.** `RESEND_API_KEY` 미설정 또는 발송 실패(httpx 오류) 시 가입을 막지 않고 경고 로그만(가용성 우선, HIBP와 동일 철학). 미수신은 E3 재발송으로 복구. **단 `env==production` & 키 미설정이면 기동 시 1회 경고 로그**로 프로덕션 silent-failure(전 유저 메일 조용히 미발송)를 방지.
+- **결정 (확정): dev 발신은 `onboarding@resend.dev`.** Resend 테스트 모드라 **본인 Resend 계정 이메일로만 발송** → dev DoD(수신함 도착)는 본인 메일로 가입해 검증(임의 주소는 Resend가 거부, fail-open이 삼켜 "에러 없이 미수신"). 커스텀 도메인 DKIM 인증(M0 A4) 완료 후 `EMAIL_FROM`만 교체(코드 변경 없음).
+- 메모: ⚠️ 개인정보(이메일 전체) plaintext 로깅 금지 - 마스킹 적용. **원문 토큰/인증 URL도 비로깅**(이벤트명 + 마스킹 이메일만).
+- 메모: ⚠️ 메일 HTML 템플릿에 user input(닉네임 등) 직접 삽입 금지(HTML 인젝션) - v1은 미삽입 또는 `html.escape`.
 
 ### E2. 이메일 인증 검증 (`GET /auth/verify-email`)
 - 선행: E1
