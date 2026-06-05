@@ -11,11 +11,17 @@ from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
+from fastapi import HTTPException
 from httpx import ASGITransport, AsyncClient
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from src.lib.auth import REFRESH_COOKIE_NAME, access_cookie_name, create_access_token
+from src.lib.auth import (
+    REFRESH_COOKIE_NAME,
+    access_cookie_name,
+    create_access_token,
+    require_verified_email,
+)
 from src.lib.db import get_session
 from src.main import app
 from src.models.user import EmailVerification, RefreshToken, User
@@ -338,3 +344,75 @@ async def test_verify_email_idempotent_preserves_verified_at(
     assert resp.status_code == 200
     user = (await db_session.exec(select(User).where(User.id == user_id))).first()
     assert user.email_verified_at == first_verified_at
+
+
+# --- E3 재발송 --------------------------------------------------------------
+
+_RESEND_MESSAGE = "인증 메일을 보냈어요"
+
+
+async def test_resend_invalidates_old_and_issues_new(
+    async_client, db_session, existing_user, externals
+):
+    user_id = existing_user.id
+    old_raw = await _issue_verification(db_session, user_id)
+
+    resp = await async_client.post(
+        "/auth/resend-verification", json={"email": _CREDS["email"]}
+    )
+    assert resp.status_code == 200
+    assert resp.json()["message"] == _RESEND_MESSAGE
+
+    records = (
+        await db_session.exec(
+            select(EmailVerification).where(EmailVerification.user_id == user_id)
+        )
+    ).all()
+    # 기존 1개 무효화(used_at) + 신규 1개 발급(미사용)
+    assert len(records) == 2
+    assert sum(1 for r in records if r.used_at is not None) == 1
+    assert sum(1 for r in records if r.used_at is None) == 1
+    externals.verification.assert_awaited_once()
+
+    # 무효화된 옛 토큰은 이제 검증 거부됨
+    reject = await async_client.post("/auth/verify-email", json={"token": old_raw})
+    assert reject.status_code == 400
+
+
+async def test_resend_unknown_email_is_silent(async_client, db_session, externals):
+    resp = await async_client.post(
+        "/auth/resend-verification", json={"email": "nobody@example.com"}
+    )
+    # 비열거: 미존재도 신규와 동일 200
+    assert resp.status_code == 200
+    assert resp.json()["message"] == _RESEND_MESSAGE
+    assert len((await db_session.exec(select(EmailVerification))).all()) == 0
+    externals.verification.assert_not_awaited()
+
+
+async def test_resend_already_verified_no_send(
+    async_client, db_session, social_user, externals
+):
+    resp = await async_client.post(
+        "/auth/resend-verification", json={"email": "social@example.com"}
+    )
+    # 비열거: 이미 인증된 유저도 동일 200, 단 실제 발송/토큰 발급은 없음
+    assert resp.status_code == 200
+    assert resp.json()["message"] == _RESEND_MESSAGE
+    assert len((await db_session.exec(select(EmailVerification))).all()) == 0
+    externals.verification.assert_not_awaited()
+
+
+# --- E3 require_verified_email 가드 (단위) ----------------------------------
+
+
+async def test_require_verified_email_allows_verified():
+    user = User(email="verified@example.com", nickname="v", is_email_verified=True)
+    assert await require_verified_email(user) is user
+
+
+async def test_require_verified_email_blocks_unverified():
+    user = User(email="unverified@example.com", nickname="u", is_email_verified=False)
+    with pytest.raises(HTTPException) as exc:
+        await require_verified_email(user)
+    assert exc.value.status_code == 403

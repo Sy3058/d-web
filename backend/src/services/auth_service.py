@@ -205,6 +205,27 @@ async def verify_email(raw_token: str, session: AsyncSession) -> None:
     await session.commit()
 
 
+async def invalidate_email_verifications(
+    user_id: uuid.UUID, session: AsyncSession
+) -> None:
+    """유저의 미사용 이메일 인증 토큰을 전부 무효화(used_at 세팅). commit은 호출자 책임.
+
+    재발송(E3) 시 직전 토큰들을 죽여 '최신 메일 링크만 동작'을 보장한다.
+    refresh의 revoke_all_refresh_tokens와 동형 - '재발송 = 직전 토큰 무효화' 규칙을
+    인증 토큰과 (향후 P1) 비번재설정 토큰 전반에 통일하기 위함.
+    """
+    now = datetime.now(UTC)
+    result = await session.exec(
+        select(EmailVerification).where(
+            EmailVerification.user_id == user_id,
+            EmailVerification.used_at.is_(None),  # type: ignore[union-attr]
+        )
+    )
+    for record in result.all():
+        record.used_at = now
+        session.add(record)
+
+
 # ---------------------------------------------------------------------------
 # 유저 CRUD + 인증 플로우 (M1 C 그룹)
 # ---------------------------------------------------------------------------
@@ -284,6 +305,33 @@ async def signup(
     raw_token = await create_email_verification(user.id, session)
     await session.commit()
     background_tasks.add_task(email_service.send_verification_email, email, raw_token)
+
+
+async def resend_verification(
+    email: str,
+    session: AsyncSession,
+    background_tasks: BackgroundTasks,
+) -> None:
+    """인증 메일 재발송(E3). 비열거: 회원/인증 여부와 무관하게 호출자는 동일 응답.
+
+    - 미존재 / 이미 인증된 유저 → no-op (DB 변경·발송 없음)
+    - 미인증 유저 → 기존 미사용 토큰 무효화 + 신규 토큰 발급을 한 트랜잭션으로 commit,
+      이후 인증 메일을 BackgroundTasks로(응답 후 실행 → 메일 실패가 발급을 롤백 안 함).
+
+    조회는 get_user_by_email(내부 _normalize_email) 경유 - 대소문자/공백 차이로 정상
+    유저가 no-op에 빠지는 가용성 버그를 막는다. resend엔 bcrypt가 없어 signup/login식
+    더미 해시 평탄화는 불필요하다. 잔여 타이밍 차(미인증 경로의 DB write 몇 건)는
+    응답 바디 동일 + 재발송 rate limit(F1)으로 커버한다(완전 평탄화 아님 - 의도된 한계).
+    """
+    user = await get_user_by_email(email, session)
+    if user is None or user.is_email_verified:
+        return
+    await invalidate_email_verifications(user.id, session)
+    raw_token = await create_email_verification(user.id, session)
+    await session.commit()
+    background_tasks.add_task(
+        email_service.send_verification_email, user.email, raw_token
+    )
 
 
 async def login(

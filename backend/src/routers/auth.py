@@ -31,6 +31,7 @@ from src.models.user import User, UserRead
 from src.schemas.auth import (
     LoginRequest,
     MessageResponse,
+    ResendVerificationRequest,
     SignupRequest,
     VerifyEmailRequest,
 )
@@ -48,6 +49,8 @@ _INVALID_CREDENTIALS = "이메일 또는 비밀번호가 올바르지 않습니�
 _UNAUTHORIZED = "인증이 필요합니다"
 # 비구분: 무효/만료/사용됨 토큰을 단일 메시지로 통일(M1 E2).
 _INVALID_VERIFICATION = "유효하지 않거나 만료된 인증 링크입니다"
+# 비열거: 재발송도 회원/인증 여부와 무관하게 동일 응답(M1 E3).
+_RESEND_MESSAGE = "인증 메일을 보냈어요"
 
 
 @router.post("/signup", response_model=MessageResponse, status_code=status.HTTP_200_OK)
@@ -147,3 +150,18 @@ async def verify_email(
             status_code=status.HTTP_400_BAD_REQUEST, detail=_INVALID_VERIFICATION
         ) from exc
     return MessageResponse(message="이메일 인증이 완료되었습니다")
+
+
+@router.post(
+    "/resend-verification",
+    response_model=MessageResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def resend_verification(
+    body: ResendVerificationRequest,
+    background_tasks: BackgroundTasks,
+    session: SessionDep,
+) -> MessageResponse:
+    # 비열거: 미존재/이미인증/미인증 모두 동일 200. 실제 발송 차이는 수신함 주인만 인지(M1 E3).
+    await auth_service.resend_verification(body.email, session, background_tasks)
+    return MessageResponse(message=_RESEND_MESSAGE)
