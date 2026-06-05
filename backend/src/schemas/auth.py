@@ -47,5 +47,11 @@ class VerifyEmailRequest(BaseModel):
     token: str = Field(min_length=1, max_length=512)
 
 
+class ResendVerificationRequest(BaseModel):
+    # 비인증 엔드포인트라 이메일을 body로 받는다(방금 가입한 비로그인 유저도 사용).
+    # 비열거: 회원 여부와 무관하게 라우터는 항상 동일 응답을 반환한다(M1 E3).
+    email: EmailStr
+
+
 class MessageResponse(BaseModel):
     message: str

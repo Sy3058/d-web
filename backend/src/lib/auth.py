@@ -169,3 +169,23 @@ async def get_current_user(
     if user is None or user.deleted_at is not None:
         raise _UNAUTHORIZED
     return user
+
+
+_FORBIDDEN_UNVERIFIED = HTTPException(
+    status_code=status.HTTP_403_FORBIDDEN, detail="이메일 인증이 필요합니다"
+)
+
+
+async def require_verified_email(
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> User:
+    """이메일 인증을 마친 유저만 통과시키는 의존성. 미인증은 403(권한 없음).
+
+    get_current_user 위에 합성된다 - 비로그인은 거기서 401, 로그인했지만 미인증이면
+    여기서 403. 진실 소스는 is_email_verified(bool)이며 email_verified_at(시각)이 아니다.
+
+    M1에서는 어떤 라우터에도 부착하지 않고 함수만 제공한다(실제 차단은 M3 결제·M4 댓글).
+    """
+    if not current_user.is_email_verified:
+        raise _FORBIDDEN_UNVERIFIED
+    return current_user

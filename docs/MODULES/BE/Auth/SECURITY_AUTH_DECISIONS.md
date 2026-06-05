@@ -4,7 +4,7 @@
 |------|------|
 | 영역 | BE (+ FE 쿠키 처리) |
 | 대상 마일스톤 | M1 (인증: 이메일 + 구글) |
-| 상태 | A1·B1~B3·C·E1·E2 구현 완료(~2026-06-06), D(OAuth)·E3·F(rate limit)는 설계 확정·구현 전. M1 착수 시 DECISIONS.md "보안 결정"에 이관 |
+| 상태 | A1·B1~B3·C·E1~E3 구현 완료(~2026-06-06), D(OAuth)·F(rate limit)는 설계 확정·구현 전. M1 착수 시 DECISIONS.md "보안 결정"에 이관 |
 | 작성 | 2026-05-31 (Opus 설계 리뷰 세션) |
 | 근거 | OWASP ASVS, OAuth 2.0 Security BCP, DB_SCHEMA §1, PRD §4.2 |
 
@@ -70,6 +70,7 @@ M1 인증 설계 리뷰에서 확정한 보안 결정을 한곳에 모은 문서
 - **회원 여부를 아는 사람은 수신함 주인뿐** - 공격자는 HTTP 응답에서 아무것도 못 얻음.
 - 가입: 신규는 미인증 user 생성 + 인증 메일, **중복은 user 생성 없이 "이미 가입된 계정" 안내 메일**(로그인/비번재설정 링크). **두 경우 HTTP 응답 동일**("입력하신 주소로 메일을 보냈어요").
 - **응답 타이밍도 통일**(중복 경로에 bcrypt 더미 해시 등). 비번 정책/HIBP 위반은 이메일 존재와 무관하므로 422 가능.
+- **재발송 (E3 구현 완료)**: `POST /auth/resend-verification`도 미존재/이미인증/미인증 모두 동일 200(`인증 메일을 보냈어요`). resend엔 bcrypt가 없어 타이밍 평탄화는 미적용 - 잔여 차는 응답 바디 동일 + F1 rate limit으로 커버(의도된 한계). 상세 [IMPLEMENTATION_EMAIL_RESEND.md](./IMPLEMENTATION_EMAIL_RESEND.md).
 
 ## 7. 구글 OAuth (AUTH-04)
 
@@ -87,7 +88,8 @@ M1 인증 설계 리뷰에서 확정한 보안 결정을 한곳에 모은 문서
 - 만료 **1시간**, 사용 시 `used_at` 세팅, 재사용 차단.
 - **검증 = `POST /auth/verify-email`** (E2, GET 아님): 상태 변경 + 메일 스캐너/링크 프리뷰의 GET prefetch가 일회용 토큰을 클릭 전에 소비하는 것 차단(OWASP). 토큰은 **body**로 받아 URL/쿼리 로깅 회피. study `email-verification-link-safety`.
 - 실패(무효/만료/사용됨)는 **비구분 단일 메시지**(400), **멱등**(이미 인증된 유저 재검증 시 `email_verified_at` 보존). `email_verifications.token` **UNIQUE 인덱스**(결정적 해시 직접 조회 + 중복 방지).
-- **`require_verified_email` 의존성**은 M1에서 가드 함수만 제공, **실제 차단 적용은 M3(결제)·M4(댓글)**. 열람은 미인증도 허용(Q5).
+- **`require_verified_email` 의존성 (E3 구현 완료)**: M1에서 가드 함수 + 단위테스트만 제공, **실제 차단 적용은 M3(결제)·M4(댓글)**. 열람은 미인증도 허용(Q5).
+- **재발송 (E3)**: 직전 미사용 토큰 무효화(`used_at`) + 신규 발급을 단일 트랜잭션 commit, 메일은 commit 후 BackgroundTasks. '재발송 = 직전 토큰 무효화' 의미론을 P1 비번재설정과 통일. 상세 [IMPLEMENTATION_EMAIL_RESEND.md](./IMPLEMENTATION_EMAIL_RESEND.md).
 
 ## 9. 시크릿 / 로깅
 

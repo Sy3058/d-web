@@ -99,7 +99,7 @@ M1 (인증) ──┐
 - [x] 회원가입 / 로그인 / 로그아웃 / 토큰 갱신 엔드포인트 (그룹 C + `/auth/me`, 비열거·HIBP·회전, 구현+Opus 리뷰 완료, DB 테스트 Postgres 대기)
 - [ ] 구글 OAuth2 콜백 처리 (신규 시 user + oauth_accounts 동시 생성)
 - [x] 이메일 인증 메일 발송 (1시간 토큰) + 검증 엔드포인트 (E1 Resend 발송 / E2 POST 검증·`uq_email_verifications_token`, 통합 테스트 통과)
-- [ ] **미인증 차단 의존성**: 결제·댓글 API에 `require_verified_email` 데코레이터 (실제 차단은 M3/M4에서 적용)
+- [x] **미인증 차단 의존성 + 인증 메일 재발송** (E3): `require_verified_email` 가드(함수+단위테스트) + `POST /auth/resend-verification`(비열거 재발송, 직전 토큰 무효화) - 가드 실제 부착은 M3/M4
 - [ ] Rate limiting (로그인 5회/분)
 - [ ] 동일 이메일 소셜 별도 계정 안내 메시지 (Q6 결정)
 
