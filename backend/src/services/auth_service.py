@@ -34,6 +34,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from src.config import settings
 from src.lib.auth import create_access_token
 from src.lib.exceptions import (
+    EmailVerificationError,
     InvalidCredentialsError,
     InvalidTokenError,
     PwnedPasswordError,
@@ -168,6 +169,40 @@ async def create_email_verification(user_id: uuid.UUID, session: AsyncSession) -
     session.add(record)
     await session.flush()
     return raw
+
+
+async def verify_email(raw_token: str, session: AsyncSession) -> None:
+    """이메일 인증 토큰 검증. 유효 시 유저를 인증 완료로 표시(멱등). 실패 시 EmailVerificationError.
+
+    입력 토큰을 동일 HMAC 해시해 결정적 조회(E1 at-rest 해시와 대조).
+    거부(무효/만료/사용됨)는 호출자가 단일 generic 400으로 통일(구분 노출 안 함).
+    멱등: 이미 인증된 유저면 email_verified_at은 보존하고 토큰(used_at)만 소비한다.
+    동시 더블클릭은 둘 다 인증 완료라는 같은 결과(멱등)라 별도 락이 필요 없다.
+    """
+    token_hash = _hash_token(raw_token)
+    result = await session.exec(
+        select(EmailVerification).where(EmailVerification.token == token_hash)
+    )
+    record = result.first()
+    if (
+        record is None
+        or record.used_at is not None
+        or record.expires_at <= datetime.now(UTC)
+    ):
+        raise EmailVerificationError
+
+    user = await session.get(User, record.user_id)
+    if user is None:  # FK 무결성상 사실상 도달 불가
+        raise EmailVerificationError
+
+    now = datetime.now(UTC)
+    record.used_at = now
+    if not user.is_email_verified:
+        user.is_email_verified = True
+        user.email_verified_at = now
+    session.add(record)
+    session.add(user)
+    await session.commit()
 
 
 # ---------------------------------------------------------------------------
