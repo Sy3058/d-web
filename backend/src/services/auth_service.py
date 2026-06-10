@@ -28,6 +28,7 @@ from datetime import UTC, datetime, timedelta
 import bcrypt
 from anyio import to_thread
 from fastapi import BackgroundTasks
+from sqlalchemy import update
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -147,6 +148,31 @@ async def revoke_all_refresh_tokens(user_id: uuid.UUID, session: AsyncSession) -
     for record in result.all():
         record.revoked_at = now
         session.add(record)
+
+
+async def _claim_refresh_token(record: RefreshToken, session: AsyncSession) -> bool:
+    """회전 시 revoke를 원자적으로 '선점'한다. revoked_at IS NULL인 행만 now()로 갱신하고,
+    실제로 갱신된 행 수(rowcount)가 1이면 이 요청이 회전 승자, 0이면 그 사이 다른
+    요청/로그아웃이 이미 revoke한 패자다.
+
+    멀티워커에선 앱 락이 프로세스별 메모리라 무효 → 모든 워커가 공유하는 단일 지점인 DB의
+    조건부 UPDATE로 단일 승자를 보장한다(Postgres 행 락 + READ COMMITTED 재평가:
+    동시 UPDATE는 직렬화되고, 패자는 잠금 해제 후 revoked_at IS NOT NULL을 보고 0행 매칭).
+    commit은 호출자(rotate_refresh)가 신규 발급과 한 트랜잭션으로 묶는다.
+
+    synchronize_session=False: 직후 in-memory record를 다시 안 읽고 새 토큰만 INSERT하므로
+    ORM identity-map 동기화가 불필요(불필요한 추가 SELECT 회피).
+    """
+    result = await session.exec(
+        update(RefreshToken)
+        .where(
+            RefreshToken.id == record.id,
+            RefreshToken.revoked_at.is_(None),  # type: ignore[union-attr]
+        )
+        .values(revoked_at=datetime.now(UTC))
+        .execution_options(synchronize_session=False)
+    )
+    return result.rowcount == 1  # type: ignore[union-attr]
 
 
 # ---------------------------------------------------------------------------
@@ -369,13 +395,18 @@ async def rotate_refresh(raw: str, session: AsyncSession) -> tuple[User, str, st
     """refresh 회전. (user, new_access, new_refresh) 반환.
 
     - 미존재/만료 → InvalidTokenError
-    - 이미 revoke된 토큰 재제출 → 재사용 탐지: 세션 전체 revoke + commit → TokenReuseError
-    - 유효 → 기존 revoke + 신규 refresh/access 발급을 한 트랜잭션으로 commit
+    - 이미 revoke된 토큰 재제출(SELECT 시점에 이미 revoked) → 재사용 탐지: 세션 전체
+      revoke + commit → TokenReuseError
+    - 유효 → revoke를 원자적으로 선점(_claim)한 단 하나의 요청만 신규 refresh/access를
+      한 트랜잭션으로 발급. 선점 실패(패자)는 SELECT 직후 동시 회전/로그아웃이 끼어든
+      정상 케이스라 탈취가 아님 → 세션 유지하고 단순 거부(InvalidTokenError → 401).
     """
     record = await get_refresh_token(raw, session)
     if record is None:
         raise InvalidTokenError
 
+    # 제출된 토큰 자체가 이미 죽음(stale): 회전이 지난 토큰의 재제출 = 탈취 신호.
+    # (아래 _claim 패자와 구분 - 패자는 SELECT 땐 살아있던 토큰을 찰나에 남이 회전시킨 정상 경우)
     if record.revoked_at is not None:
         await revoke_all_refresh_tokens(record.user_id, session)
         await session.commit()
@@ -384,8 +415,12 @@ async def rotate_refresh(raw: str, session: AsyncSession) -> tuple[User, str, st
     if record.expires_at <= datetime.now(UTC):
         raise InvalidTokenError
 
-    record.revoked_at = datetime.now(UTC)
-    session.add(record)
+    # _claim 패자(rowcount=0): SELECT 땐 유효였는데 그 사이 동시 회전/로그아웃이 끼어든
+    # 정상 케이스(탈취 아님) → 세션 유지하고 단순 401. 진짜 stale 재사용은 위 분기가 잡는다.
+    if not await _claim_refresh_token(record, session):
+        await session.rollback()
+        raise InvalidTokenError
+
     new_refresh = await create_refresh_token(record.user_id, session)
     user = await session.get(User, record.user_id)
     assert user is not None  # FK 무결성상 항상 존재

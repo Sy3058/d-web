@@ -10,11 +10,13 @@ from unittest.mock import patch
 import jwt
 import pytest
 import pytest_asyncio
+from sqlalchemy.exc import IntegrityError
 
 from src.config import settings
 from src.lib.auth import TokenError, create_access_token, decode_token
-from src.models.user import User
+from src.models.user import RefreshToken, User
 from src.services.auth_service import (
+    _claim_refresh_token,
     create_refresh_token,
     get_refresh_token,
     revoke_all_refresh_tokens,
@@ -145,3 +147,37 @@ async def test_revoke_all(db_session, test_user):
     r2 = await get_refresh_token(raw2, db_session)
     assert r1 is not None and r1.revoked_at is not None
     assert r2 is not None and r2.revoked_at is not None
+
+
+# ---------------------------------------------------------------------------
+# 회전 원자화 (M1 I1)
+# ---------------------------------------------------------------------------
+
+
+async def test_claim_refresh_token_single_winner(db_session, test_user):
+    """동시 회전의 결정적 프록시: 같은 토큰을 두 번 선점하면 1회차만 성공(True),
+    2회차는 이미 revoked라 0행 매칭(False) → 한 토큰에서 새 토큰 2개 발급 차단.
+
+    같은 트랜잭션 내 첫 UPDATE가 revoked_at을 세팅하면 둘째 UPDATE는
+    revoked_at IS NULL 조건에 0행 매칭(자기 트랜잭션의 미커밋 변경을 본다).
+    """
+    raw = await create_refresh_token(test_user.id, db_session)
+    record = await get_refresh_token(raw, db_session)
+
+    assert await _claim_refresh_token(record, db_session) is True
+    assert await _claim_refresh_token(record, db_session) is False
+
+
+async def test_refresh_token_hash_unique(db_session, test_user):
+    """token_hash UNIQUE 인덱스가 같은 해시 중복 INSERT를 차단(회전 불변식 방어선)."""
+    expires = datetime.now(UTC) + timedelta(days=7)
+    db_session.add(
+        RefreshToken(user_id=test_user.id, token_hash="dup-hash", expires_at=expires)
+    )
+    await db_session.flush()
+    db_session.add(
+        RefreshToken(user_id=test_user.id, token_hash="dup-hash", expires_at=expires)
+    )
+    with pytest.raises(IntegrityError):
+        await db_session.flush()
+    await db_session.rollback()
