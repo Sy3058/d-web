@@ -117,6 +117,9 @@ class RefreshToken(SQLModel, table=True):
         # 회전/재사용 탐지 시 user_id로 세션 전체 revoke (M1 C4). Postgres는
         # FK에 인덱스를 자동 생성하지 않으므로 명시 (DB_SCHEMA §6)
         Index("idx_refresh_tokens_user_id", "user_id"),
+        # 갱신/로그인의 WHERE token_hash=? 직접 조회 인덱스 + 회전 불변식 방어선
+        # (한 토큰에서 새 토큰 2개 발급 차단). 결정적 해시 + 고엔트로피라 UNIQUE 가능 (M1 I1)
+        Index("uq_refresh_tokens_token_hash", "token_hash", unique=True),
     )
 
     id: uuid.UUID | None = Field(default=None, sa_column=_pk_column())
