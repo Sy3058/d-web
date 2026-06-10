@@ -159,6 +159,9 @@ async def _claim_refresh_token(record: RefreshToken, session: AsyncSession) -> b
     조건부 UPDATE로 단일 승자를 보장한다(Postgres 행 락 + READ COMMITTED 재평가:
     동시 UPDATE는 직렬화되고, 패자는 잠금 해제 후 revoked_at IS NOT NULL을 보고 0행 매칭).
     commit은 호출자(rotate_refresh)가 신규 발급과 한 트랜잭션으로 묶는다.
+
+    synchronize_session=False: 직후 in-memory record를 다시 안 읽고 새 토큰만 INSERT하므로
+    ORM identity-map 동기화가 불필요(불필요한 추가 SELECT 회피).
     """
     result = await session.exec(
         update(RefreshToken)
@@ -402,6 +405,8 @@ async def rotate_refresh(raw: str, session: AsyncSession) -> tuple[User, str, st
     if record is None:
         raise InvalidTokenError
 
+    # 제출된 토큰 자체가 이미 죽음(stale): 회전이 지난 토큰의 재제출 = 탈취 신호.
+    # (아래 _claim 패자와 구분 - 패자는 SELECT 땐 살아있던 토큰을 찰나에 남이 회전시킨 정상 경우)
     if record.revoked_at is not None:
         await revoke_all_refresh_tokens(record.user_id, session)
         await session.commit()
@@ -410,6 +415,8 @@ async def rotate_refresh(raw: str, session: AsyncSession) -> tuple[User, str, st
     if record.expires_at <= datetime.now(UTC):
         raise InvalidTokenError
 
+    # _claim 패자(rowcount=0): SELECT 땐 유효였는데 그 사이 동시 회전/로그아웃이 끼어든
+    # 정상 케이스(탈취 아님) → 세션 유지하고 단순 401. 진짜 stale 재사용은 위 분기가 잡는다.
     if not await _claim_refresh_token(record, session):
         await session.rollback()
         raise InvalidTokenError
