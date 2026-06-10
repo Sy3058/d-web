@@ -376,11 +376,11 @@ CREATE INDEX idx_users_deleted_at       ON users(deleted_at) WHERE deleted_at IS
 
 -- 리프레시 토큰 회전/재사용 탐지 시 user_id로 세션 전체 revoke (M1 C4)
 CREATE INDEX idx_refresh_tokens_user_id ON refresh_tokens(user_id);
+-- 리프레시 토큰 해시 직접 조회(매 갱신·로그인) + 회전 불변식 방어선 (M1 I1, forward-only 마이그레이션)
+CREATE UNIQUE INDEX uq_refresh_tokens_token_hash ON refresh_tokens(token_hash);
 
 -- 이메일 인증 토큰 해시 직접 조회(M1 E2) + 중복 방지(결정적 해시 + 고엔트로피 랜덤)
 CREATE UNIQUE INDEX uq_email_verifications_token ON email_verifications(token);
--- 후속: refresh_tokens.token_hash도 동일하게 조회 인덱스 누락(B2 영역, M1 E2에서 식별).
---       이미 커밋된 영역이라 별도 마이그레이션으로 추가 예정(forward-only)
 
 -- 공개된 에피소드만 조회 (idx_episodes_work_id와 별개의 partial index)
 CREATE INDEX idx_episodes_published     ON episodes(work_id) WHERE is_published = TRUE;
