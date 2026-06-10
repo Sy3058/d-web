@@ -2,7 +2,7 @@
 
 | 항목 | 내용 |
 |------|------|
-| 문서 버전 | v0.3 (2026-06-06, E2·E3 구현 반영) |
+| 문서 버전 | v0.4 (2026-06-10, 그룹 I council fix 계획 추가) |
 | 상위 마일스톤 | [M1](./README.md#m1-인증-이메일--구글) |
 | 예상 기간 | 약 3주 (이메일 발송/구글 OAuth 콘솔 왕복 포함) |
 | 완료 기준 | 신규 유저가 이메일/구글로 가입 → 인증 메일 수신 → 로그인 상태로 마이페이지 진입 (그룹 H 체크리스트) |
@@ -280,6 +280,35 @@ git stash pop stash@{0}
 - [ ] 동일 이메일 소셜 시도 시 자동 병합 없이 안내 노출 (Q6)
 - [ ] 비열거 검증: 신규/중복 이메일 가입의 HTTP 응답·응답시간이 동일, 중복 시 안내 메일은 수신함 주인에게만 발송
 - [ ] `uv run pytest` 통과 (auth_service + 엔드포인트 테스트), CI(F1, M0) 그린
+
+---
+
+## 그룹 I. council 리뷰 fix (선존 이슈, 2026-06-06 발견)
+
+> 2026-06-06 `/council` 5렌즈 + Opus가 M1 인증 코드(main 머지 B~E3)를 전수 리뷰하며 찾은 **선존 이슈**. E3 브랜치 cleanup이 아니라 이미 main에 있는 코드라 **각각 새 fix 브랜치/PR**로 처리(합의). 트래킹: GitHub 이슈 #28, 메모리 `project_m1_council_fix_backlog`.
+
+### I1. refresh 회전 race 원자화 🔴 (1순위·보안) - 계획 확정 (2026-06-10)
+- 브랜치: `be/fix/refresh-rotation-race`
+- 선행: B2(refresh 프리미티브), C4(회전 엔드포인트) - 둘 다 main 머지됨
+- 문제: `services/auth_service.py` `rotate_refresh`가 락 없이 SELECT(revoke 확인) → ORM dirty-set revoke → 새 토큰 INSERT. 동시 2요청이 SELECT에서 둘 다 `revoked_at IS NULL`을 보면 둘 다 통과 → **한 옛 토큰에서 새 토큰 2개 발급**(회전 불변식 붕괴 → 재사용 탐지 무력화 / 정상유저 오탐). 추가로 `refresh_tokens.token_hash`에 **인덱스 자체가 없어**(`idx_refresh_tokens_user_id`만) 매 갱신·로그인의 `WHERE token_hash=?`가 seq scan.
+- 산출물:
+  1. `models/user.py` `RefreshToken.__table_args__`에 `Index("uq_refresh_tokens_token_hash", "token_hash", unique=True)` (email_verifications와 동일 패턴). 누락 인덱스 + 유일성 불변 + 방어선.
+  2. 새 Alembic 마이그레이션(forward-only, `down_revision=6d33b06659a8`), `op.create_index(..., unique=True)`. autogenerate 1회 생성 후 실제 파일 Read 확인(손편집 X). 단일 소형 VPS라 plain CREATE UNIQUE INDEX(대용량용 `CONCURRENTLY`는 주석만).
+  3. `rotate_refresh` 원자화: revoke를 조건부 `UPDATE refresh_tokens SET revoked_at=now() WHERE id=:id AND revoked_at IS NULL`의 **rowcount**로 교체(헬퍼 `_claim_refresh_token`로 분리). 앱 락은 멀티워커에서 프로세스별 메모리라 무효 → 모든 워커가 공유하는 단일 지점인 DB에서 원자화.
+- DoD: 동시 회전 중 단 하나만 새 토큰 발급(나머지 거부). `_claim` 1회차 True·2회차 False 결정적 테스트, `token_hash` UNIQUE 위반 IntegrityError 테스트, 기존 happy-path/stale reuse 전체 revoke 유지. `alembic check` 클린, pytest 그린, Opus 리뷰 통과.
+- **결정 (확정, 2026-06-10): race 패자(`_claim` rowcount=0)는 401 단순 거부(세션 유지).** 그 분기는 SELECT 땐 유효였는데 그 사이 동시 회전/로그아웃이 일어난 경우라 탈취 신호가 아님 - 전체 revoke하면 정상 유저 더블클릭에 세션이 통째로 끊기는 오탐. 진짜 stale-토큰 재사용은 SELECT가 `revoked_at`을 보는 기존 분기에서 전체 revoke로 잡힌다.
+- 커밋: (1) 모델+마이그레이션 `[BE] feat:`, (2) 서비스 `[BE] fix:`, (3) 테스트 `[BE] test:`.
+
+### I2. 인증 표면 rate limit (M1 F1) - `be/feat/auth-rate-limit`
+- `/auth/resend-verification`·`signup`·`login` 무제한 → 이메일 폭탄/브루트포스. IP 5회/분 + 계정 lockout, `email_verifications.user_id` 인덱스 동반. 상세는 그룹 F.
+
+### I3. CORS 와일드카드 좁히기
+- `main.py` `allow_methods=["*"]`/`allow_headers=["*"]` + `allow_credentials=True` → 실제 필요한 메서드/헤더로 제한(루트 CLAUDE.md "CORS 와일드카드 금지" 정렬).
+
+### I4. 죽은 테스트 픽스처 정리
+- `tests/conftest.py` `TestClient` 기반 `client` 픽스처 제거(미사용·루프 불일치 위험) + `async_client`/`existing_user`를 conftest로 승격(M3/M4 재사용).
+
+> 설계 메모 (5명 공통 맹점): ① 메일 발송 단일 장애점(발송 실패/지연, 이메일 변경 시 토큰 무효화 미설계) ② 배포 토폴로지(멀티워커) 미명시 → race 해법은 앱 락이 아닌 DB 제약 ③ 미인증 유저 세션 상태기계 검증 0.
 
 ---
 
