@@ -96,5 +96,5 @@
 
 B2 단위로는 정상이며 아래는 후속에서 처리한다.
 
-- **`refresh_tokens.token_hash`에 UNIQUE 인덱스 추가** (C4 전, 마이그레이션 필요): `/auth/refresh`마다 `WHERE token_hash=?`가 hot path인데 현재 인덱스가 없어 seq scan. 결정적 해시라 UNIQUE가 의도에도 맞다(조회 가속 + 무결성). 모델엔 `idx_refresh_tokens_user_id`만 있음.
+- ~~**`refresh_tokens.token_hash`에 UNIQUE 인덱스 추가** (C4 전, 마이그레이션 필요)~~ → ✅ **해결(M1 I1, 2026-06-10)**: `uq_refresh_tokens_token_hash` 추가로 `/auth/refresh`·로그인 hot path의 seq scan 제거 + 회전 불변식 DB 방어선. [IMPLEMENTATION_REFRESH_ROTATION_RACE.md](./IMPLEMENTATION_REFRESH_ROTATION_RACE.md).
 - **`config.jwt_secret`을 `SecretStr`로 전환**: 현재 평문 `str`이라 시크릿 3형제 중 혼자 로그 마스킹 안 됨(`password_pepper`/`token_pepper`는 `SecretStr`). JWT 서명 로직 손댈 때 같이.

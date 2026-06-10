@@ -115,4 +115,4 @@ service가 commit을 소유한다(레이어 분리): `signup`(신규 경로)·`l
 - **E1 실제 발송**: 현재 `email_service`는 no-op 스텁(시그니처 고정). Resend 연동은 그룹 E(A4 DKIM 선행).
 - **Rate limit / 계정 lockout**: 그룹 F. signup/login 비열거의 자동 열거 억제는 F1과 함께 완성.
 - **구글 OAuth**: 그룹 D.
-- **FYI (M1 규모 허용)**: signup 존재확인↔insert 사이 동시성(이메일 UNIQUE 위반 가능), refresh 회전 row lock 부재. 저트래픽이라 수용, 다중 인스턴스 전환 시 재검토.
+- **FYI (M1 규모 허용)**: signup 존재확인↔insert 사이 동시성(이메일 UNIQUE 위반 가능)은 저트래픽이라 수용, 다중 인스턴스 전환 시 재검토. (~~refresh 회전 row lock 부재~~ → ✅ M1 I1에서 조건부 UPDATE로 원자화, [IMPLEMENTATION_REFRESH_ROTATION_RACE.md](./IMPLEMENTATION_REFRESH_ROTATION_RACE.md))

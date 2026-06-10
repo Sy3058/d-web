@@ -74,5 +74,5 @@ POST /auth/verify-email  { "token": "<raw>" }
 
 - **프론트 G4 전까지 메일 클릭 미완결**: 메일 링크는 `{APP_BASE_URL}/auth/verify-email`(프론트 페이지). G4가 생겨야 클릭 -> 토큰 추출 -> 이 POST 호출로 이어진다. 백엔드 검증 자체는 완료.
 - **soft-deleted 유저 (FYI)**: `verify_email`은 user를 id로 조회(`deleted_at` 필터 없음) - soft delete(AUTH-07, P1) 구현 시 함께 처리.
-- **`refresh_tokens.token_hash` 인덱스 누락 (후속)**: 동일 조회 패턴인데 인덱스 없음(B2 영역, 이미 커밋됨). 별도 마이그레이션으로 추가 예정 - `DB_SCHEMA.md` §6 메모.
+- ~~**`refresh_tokens.token_hash` 인덱스 누락 (후속)**~~ → ✅ **해결(M1 I1, 2026-06-10)**: `uq_refresh_tokens_token_hash` UNIQUE 인덱스 추가. [IMPLEMENTATION_REFRESH_ROTATION_RACE.md](./IMPLEMENTATION_REFRESH_ROTATION_RACE.md).
 - **E3**: 재발송 + `require_verified_email` 가드 구현 완료(2026-06-06). [IMPLEMENTATION_EMAIL_RESEND.md](./IMPLEMENTATION_EMAIL_RESEND.md).
