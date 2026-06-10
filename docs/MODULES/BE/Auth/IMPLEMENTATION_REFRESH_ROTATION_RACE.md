@@ -10,6 +10,8 @@
 
 council 리뷰(2026-06-06)가 **머지 블로커(보안)**로 식별한 회전 race 수정. 기존 `rotate_refresh`는 락 없이 `SELECT`(revoke 확인) → `record.revoked_at=now()` → 신규 INSERT라, 동시 2요청이 SELECT를 둘 다 통과하면 **한 옛 토큰에서 새 토큰 2개**가 발급된다(회전 불변식 붕괴 → 재사용 탐지 무력화 / 정상유저 오탐). DB 조건부 UPDATE 선점 + `token_hash` UNIQUE 인덱스로 원자화한다.
 
+> **운영 전제 (긴급도)**: 현재 `Dockerfile`은 단일 uvicorn 워커라 이 race는 같은 유저의 동시 refresh(모바일 access 만료 시 더블요청·SPA 재시도) 정도로만 발생한다. 이 변경은 긴급 핫픽스가 아니라 **멀티워커 확장 대비 선제 방어 + council 백로그 소진**이다. 단, 단일 워커에서도 asyncio 동시 코루틴 + 더블클릭으로 재현 가능하므로 닫아 둘 가치가 있다.
+
 ---
 
 ## 1. 산출물
@@ -68,7 +70,7 @@ get_refresh_token(raw)
 
 - **race 패자 = 401 단순 거부, 세션 유지** (확정 2026-06-10): 패자 분기는 SELECT 땐 유효였는데 그 사이 동시 회전/로그아웃이 끼어든 경우라 **탈취 신호가 아니다**(정상 더블클릭). 전체 revoke하면 정상 유저 세션이 통째로 끊기는 오탐. 라우터가 `TokenReuseError`(자식)를 먼저, `InvalidTokenError`(부모)를 나중에 잡아 매핑 자동 정합.
 - **진짜 stale-reuse는 기존 분기 유지**: SELECT 시점에 이미 `revoked_at`이 set이면 회전이 끝난 토큰의 재제출 → 전체 revoke(탈취 대응).
-- **`token_hash` UNIQUE 인덱스**: (a) `/auth/refresh`·로그인의 `WHERE token_hash=?` hot path seq scan 제거 (b) 한 토큰에서 새 토큰 2개를 DB가 거부하는 불변식 방어선. 결정적 해시 + 고엔트로피라 충돌 없어 UNIQUE 가능. 단일 소형 VPS라 plain `CREATE UNIQUE INDEX`(대용량이면 `CONCURRENTLY`).
+- **`token_hash` UNIQUE 인덱스**: 주 목적은 `/auth/refresh`·로그인의 `WHERE token_hash=?` hot path seq scan 제거(성능) + 데이터 무결성. **race를 막는 건 `_claim`이고 UNIQUE는 보강**이다 - 같은 옛 토큰에서 발급되는 두 새 토큰은 각각 고유 랜덤 해시라 UNIQUE로는 안 걸린다(거르는 건 해시 충돌뿐). 결정적 해시 + 고엔트로피라 충돌 없어 UNIQUE 가능. 단일 소형 VPS라 plain `CREATE UNIQUE INDEX`(대용량이면 `CONCURRENTLY`).
 
 study: `db-atomic-claim`, `refresh-token-rotation`.
 
@@ -94,3 +96,11 @@ study: `db-atomic-claim`, `refresh-token-rotation`.
 - **절대 수명 cap 미구현**: 회전이 무한 연장되지 않게 하는 상한(예: 30일)은 별도. [IMPLEMENTATION_TOKEN.md](./IMPLEMENTATION_TOKEN.md) §후속, I1 범위 밖.
 - **rate limit (I2)**: `/auth/refresh` 자체엔 rate limit 미부착. 인증 표면 rate limit은 `be/feat/auth-rate-limit`(I2).
 - 이 fix로 [IMPLEMENTATION_TOKEN.md](./IMPLEMENTATION_TOKEN.md) §후속·[IMPLEMENTATION_EMAIL_VERIFY.md](./IMPLEMENTATION_EMAIL_VERIFY.md) §5의 "token_hash 인덱스 누락", [IMPLEMENTATION_AUTH_ENDPOINTS.md](./IMPLEMENTATION_AUTH_ENDPOINTS.md)의 "refresh 회전 row lock 부재" FYI가 해소됨.
+
+---
+
+## 7. 알려진 한계 (council 리뷰 2026-06-11)
+
+- **reuse-detection의 동시성 한계**: `_claim`은 *발급* race(한 토큰 → 새 토큰 2개)는 닫지만 *탐지* race는 아니다. 탈취 토큰과 정상 토큰이 **동시** 제출되면 둘 다 SELECT에서 `revoked_at IS NULL`을 봐 재사용 탐지 분기(전체 revoke)를 우회하고, 한쪽이 패자(401)가 된다. 다음 회전에서 stale-reuse로 잡히지만 동시 윈도에선 즉시 탐지되지 않는다(OAuth 2.0 BCP의 알려진 한계). 노출창을 줄이려면 절대 수명 cap이 함께 필요.
+- **동시성 실측 미검증**: 동시성 보증은 DB 조건부 UPDATE 의미론 + 단일 세션 프록시 테스트(`_claim` 1→0)에 의존한다. 독립 커넥션 2개로 실제 동시 `rotate_refresh`를 거는 통합 테스트는 **아직 없음** → I4(conftest 정리)에서 `asyncio.gather` 2세션 테스트로 메우고 M3 결제 멱등에 재사용 예정.
+- **백로그 (I1 범위 밖)**: refresh 절대 수명 cap, 만료/revoked 토큰 cleanup 잡(UNIQUE 인덱스 비대 예방), signup 동시 중복가입 IntegrityError→비열거 응답 처리. 메모리 `project_m1_council_fix_backlog` 트래킹.
