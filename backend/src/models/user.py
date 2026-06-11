@@ -141,6 +141,9 @@ class EmailVerification(SQLModel, table=True):
         # 검증(M1 E2)은 WHERE token=HMAC해시 직접 조회 - 인덱스 필수.
         # 결정적 해시 + 고엔트로피 랜덤이라 충돌이 없어 UNIQUE 가능(중복 방지 겸용)
         Index("uq_email_verifications_token", "token", unique=True),
+        # 재발송/무효화(M1 E3)의 WHERE user_id=? AND used_at IS NULL 조회용.
+        # Postgres는 FK에 인덱스를 자동 생성하지 않으므로 명시 (DB_SCHEMA §6, council I2)
+        Index("idx_email_verifications_user_id", "user_id"),
     )
 
     id: uuid.UUID | None = Field(default=None, sa_column=_pk_column())
