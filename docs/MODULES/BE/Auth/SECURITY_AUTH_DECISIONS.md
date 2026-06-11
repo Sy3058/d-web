@@ -61,7 +61,7 @@ M1 인증 설계 리뷰에서 확정한 보안 결정을 한곳에 모은 문서
 ## 5. 로그인 보호 (brute-force)
 
 - **IP rate limit 5회/분 (I2 구현 완료, 2026-06-11)**: `login`·`signup`·`resend-verification`에 IP 키 슬라이딩 윈도우. 구현 = `limits`(5.8.0) 직접 + FastAPI `Depends(RateLimit(limit, scope))` (slowapi 아님 - 2024 정체·alpha + 데코레이터/`request` 주입이 우리 Depends 합성과 이질). **키 = IP only**(이메일 미혼합): 핸들러 로직 전에 429라 회원 존재 여부 무관 → §6 비열거 중립. 초과 시 429 + Retry-After. 상세 [IMPLEMENTATION_RATE_LIMIT.md](./IMPLEMENTATION_RATE_LIMIT.md).
-  - ⚠️ **한계**: MemoryStorage는 프로세스별 → 멀티워커면 실효 한도 ≈ N×limit(엄밀 분산 한도는 `async+redis://`로 교체). ⚠️ Caddy 프록시 뒤 `request.client.host`가 실제 IP가 되려면 uvicorn `--proxy-headers --forwarded-allow-ips=<caddy>` 필수(미설정 시 전역 1키 = 자기 DoS) → **infra 후속**.
+  - ⚠️ **한계**: MemoryStorage는 프로세스별 → 멀티워커면 실효 한도 ≈ N×limit(엄밀 분산 한도는 `async+redis://`로 교체). ✅ Caddy 프록시 뒤 실제 IP 전달은 uvicorn `--proxy-headers --forwarded-allow-ips '*'` + Caddy `header_up X-Forwarded-For {remote_host}` 2겹으로 구현(#31, docker는 Caddy IP 동적이라 `*` + overwrite 조합).
 - **계정 단위 lockout + 지수 백오프 → 후속 PR `be/feat/auth-account-lockout`**: IP 제한과 별개로 계정별 연속 실패 누적 시 잠금/지연 → 분산 IP로 한 계정 노리는 느린 brute-force 방어. 성공 시 카운터 리셋. 카운터는 I1 교훈상 **DB**(`users.failed_login_attempts`/`locked_until`, 인메모리 아님). 비열거 충돌(잠김 응답=회원 확정) 처리 설계가 필요해 I2에서 분리. 이슈 #28.
 - **일반화 에러**: 이메일/비번 중 어느 쪽이 틀렸는지 구분 노출 금지(동일 메시지).
 - **타이밍 평탄화**: 미존재 유저도 더미 해시 검증 후 동일 응답 시간.
