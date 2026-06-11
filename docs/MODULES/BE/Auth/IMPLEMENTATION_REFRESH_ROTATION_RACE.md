@@ -94,7 +94,7 @@ study: `db-atomic-claim`, `refresh-token-rotation`.
 ## 6. 제약 / 후속
 
 - **절대 수명 cap 미구현**: 회전이 무한 연장되지 않게 하는 상한(예: 30일)은 별도. [IMPLEMENTATION_TOKEN.md](./IMPLEMENTATION_TOKEN.md) §후속, I1 범위 밖.
-- **rate limit (I2)**: `/auth/refresh` 자체엔 rate limit 미부착. 인증 표면 rate limit은 `be/feat/auth-rate-limit`(I2).
+- **rate limit (I2 ✅)**: 인증 표면 rate limit(login/signup/resend, IP 5회/분)은 I2에서 완료([IMPLEMENTATION_RATE_LIMIT.md](./IMPLEMENTATION_RATE_LIMIT.md)). 단 `/auth/refresh` 자체엔 미부착 - refresh 토큰은 256bit 랜덤이라 추측 brute-force가 불가 + 재사용 탐지가 별도로 남용을 처리(의도된 제외).
 - 이 fix로 [IMPLEMENTATION_TOKEN.md](./IMPLEMENTATION_TOKEN.md) §후속·[IMPLEMENTATION_EMAIL_VERIFY.md](./IMPLEMENTATION_EMAIL_VERIFY.md) §5의 "token_hash 인덱스 누락", [IMPLEMENTATION_AUTH_ENDPOINTS.md](./IMPLEMENTATION_AUTH_ENDPOINTS.md)의 "refresh 회전 row lock 부재" FYI가 해소됨.
 
 ---

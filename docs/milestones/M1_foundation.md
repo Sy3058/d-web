@@ -2,7 +2,7 @@
 
 | 항목 | 내용 |
 |------|------|
-| 문서 버전 | v0.6 (2026-06-11, council I1 검증: 문서 정직성 보정 + I4에 실측 동시성 테스트 추가) |
+| 문서 버전 | v0.7 (2026-06-11, I2 IP rate limit 구현: limits 기반 + email_verifications.user_id 인덱스. 계정 lockout은 후속 분리) |
 | 상위 마일스톤 | [M1](./README.md#m1-인증-이메일--구글) |
 | 예상 기간 | 약 3주 (이메일 발송/구글 OAuth 콘솔 왕복 포함) |
 | 완료 기준 | 신규 유저가 이메일/구글로 가입 → 인증 메일 수신 → 로그인 상태로 마이페이지 진입 (그룹 H 체크리스트) |
@@ -216,7 +216,7 @@ git stash pop stash@{0}
 - 선행: E1, E2
 - 산출물: 인증 메일 재발송 엔드포인트 + `lib/auth.py` `require_verified_email` FastAPI Depends
 - DoD: 재발송 시 기존 미사용 토큰 무효화 + 신규 발급. `require_verified_email` 의존성이 미인증 유저에 403 반환(단위 테스트). **실제 적용은 M3/M4** - M1에서는 가드 함수만 제공하고 라우터 부착은 안 함
-- 결정: 재발송 rate limit(남용 방지)은 F1과 함께 검토.
+- 결정: 재발송 rate limit(남용 방지)은 F1과 함께 검토 → ✅ I2에서 `/auth/resend-verification`에 IP 5회/분 부착.
 
 > **구현 요약 (2026-06-06)**: `POST /auth/resend-verification`(비인증·body email·비열거 동일 200) + `require_verified_email` 가드(get_current_user 합성, 미인증 403, **라우터 미부착**). 산출물: `routers/auth.py`, `services/auth_service.py`(`invalidate_email_verifications` + `resend_verification`), `schemas/auth.py` `ResendVerificationRequest`, `lib/auth.py` `require_verified_email`, `tests/test_auth_endpoints.py` 5개(재발송 3 + 가드 단위 2). 스키마 무변경(마이그레이션 불필요). 검증: pytest 57개 통과·ruff check clean·alembic check 클린. /council 5렌즈 플랜 리뷰 + Opus 코드리뷰 통과(Critical/Major 없음). 구현: [IMPLEMENTATION_EMAIL_RESEND.md](../MODULES/BE/Auth/IMPLEMENTATION_EMAIL_RESEND.md).
 > - **결정 (확정)**: 재발송 = 직전 미사용 토큰 무효화(`used_at`) + 신규 발급을 **단일 트랜잭션 commit**, 메일은 commit 후 BackgroundTasks. 무효화는 이 토큰 자체 보안보다 **P1 비번재설정 resend와의 의미론 통일**('재발송=직전 토큰 무효화')이 목적(이 토큰만 보면 verify가 다건 유효 토큰을 허용하므로 무효화는 UX·위생 수준). 조회는 `get_user_by_email`(정규화) 경유로 대소문자/공백 가용성 버그 차단. resend엔 bcrypt가 없어 타이밍 평탄화 미적용 - 잔여 차(미인증 경로 DB write 몇 건)는 응답 바디 동일 + 재발송 rate limit(F1)으로 커버(완전 평탄화 아님, 의도된 한계).
@@ -225,12 +225,12 @@ git stash pop stash@{0}
 
 ## 그룹 F. 보안 가드
 
-### F1. Rate limiting - 로그인 5회/분
+### F1. Rate limiting - 로그인 5회/분 - ✅ IP rate limit 완료 (I2, 2026-06-11) / 계정 lockout 후속
 - 선행: C2
-- 산출물: 로그인(및 가입/재발송) 엔드포인트 rate limit 미들웨어
-- DoD: 1분 내 6회째 로그인 시도 429 반환
-- **결정 (확정): 계정 단위 lockout + 지수 백오프 병행.** IP rate limit과 별개로 **계정별 연속 실패 누적** 시 잠금/지연(예: 5회 실패 후 점증 지연, N회 후 일시 잠금) → 분산 IP로 한 계정 노리는 느린 brute-force 방어. 실패 카운터는 성공 로그인 시 리셋.
-- 결정 필요: 구현 방식 - `slowapi`(인메모리/Redis) vs 자체 미들웨어. 단일 인스턴스 초기엔 인메모리로 충분, 다중 인스턴스 전환 시 Redis. 계정 lockout 카운터도 동일 저장소. 설치 라이브러리는 WebSearch로 최신 버전 확인.
+- 산출물: 로그인(및 가입/재발송) 엔드포인트 rate limit 의존성 (`lib/rate_limit.py`)
+- DoD: 1분 내 6회째 로그인 시도 429 반환 ✅ (I2에서 구현, `test_rate_limit.py`)
+- **결정 (확정, I2): 구현 = `limits` 직접 + FastAPI 의존성** (slowapi 아님 - 상세 그룹 I I2). 단일 인스턴스 초기엔 MemoryStorage, 다중 워커/인스턴스 전환 시 `async+redis://` storage. 계정 lockout 카운터는 DB로(인메모리 아님).
+- **결정 (확정): 계정 단위 lockout + 지수 백오프 병행 → 후속 PR `be/feat/auth-account-lockout`.** IP rate limit과 별개로 **계정별 연속 실패 누적** 시 잠금/지연(예: 5회 실패 후 점증 지연, N회 후 일시 잠금) → 분산 IP로 한 계정 노리는 느린 brute-force 방어. 실패 카운터는 성공 로그인 시 리셋. 비열거 충돌(잠김 응답=회원 확정) 처리 + DB 카운터 설계가 필요해 I2에서 분리. 이슈 #28.
 - 메모: PRD §4.2 - 로그인 5회/분(여기), 결제 10회/분(M3), 댓글 10회/분(M4). IP rate limit 키는 IP + 이메일 조합 고려.
 
 ---
@@ -275,7 +275,7 @@ git stash pop stash@{0}
 - [ ] 이메일 로그인 → access/refresh 쿠키 발급(HttpOnly, 플래그 정확) → `/auth/me` 200 → 마이페이지 진입
 - [ ] 구글 가입/로그인 → id_token 검증 통과 → 신규 `users`+`oauth_accounts` 생성, 기존 유저 로그인 동작
 - [ ] 토큰 갱신(`/auth/refresh`) 동작(회전), 로그아웃 후 갱신 거부됨, revoke된 refresh 재제출 시 세션 전체 무효화
-- [ ] 로그인 5회/분 초과 시 429
+- [x] 로그인 5회/분 초과 시 429 (I2: IP rate limit, 계정 lockout은 후속 `be/feat/auth-account-lockout`)
 - [x] `require_verified_email` 의존성이 미인증 403 반환(단위 테스트, 부착은 아직 안 함) - E3 완료
 - [ ] 동일 이메일 소셜 시도 시 자동 병합 없이 안내 노출 (Q6)
 - [ ] 비열거 검증: 신규/중복 이메일 가입의 HTTP 응답·응답시간이 동일, 중복 시 안내 메일은 수신함 주인에게만 발송
@@ -301,8 +301,14 @@ git stash pop stash@{0}
 
 > **구현 요약 (2026-06-10)**: `_claim_refresh_token`(조건부 `UPDATE … WHERE id=? AND revoked_at IS NULL`의 `rowcount`로 revoke 선점) 도입 + `rotate_refresh`가 비원자 `record.revoked_at=now()`를 `_claim` 분기로 교체. 패자(rowcount=0)는 `session.rollback()` + `InvalidTokenError`→401(세션 유지), stale-reuse(SELECT 시점 이미 revoked)는 기존대로 전체 revoke→`TokenReuseError`. 라우터가 `TokenReuseError`(자식)를 먼저, `InvalidTokenError`(부모)를 나중에 잡아 매핑 자동 정합. `RefreshToken.token_hash` UNIQUE 인덱스(`uq_refresh_tokens_token_hash`, 누락 인덱스 보강 + 회전 불변식 방어선) + 마이그레이션 `97b9912aa03e`(forward-only, down=`6d33b06659a8`). 멀티워커 안전성은 앱 락이 아닌 DB 단일 직렬화 지점(Postgres 행 락 + READ COMMITTED 재평가)에 의존. 산출물: `models/user.py`, `services/auth_service.py`(`_claim_refresh_token`+`rotate_refresh`), `tests/test_token.py` 2개(`_claim` 1True/2False·`token_hash` UNIQUE IntegrityError). 검증: pytest 59개 통과(경고 0)·ruff clean·`alembic check` 클린·single head. Opus 자가 검증 Critical/Major 없음. 커밋 3개(`eed8de2` feat · `557ea45` fix · `ed67937` test). study: [[refresh-token-rotation]], [[db-atomic-claim]].
 
-### I2. 인증 표면 rate limit (M1 F1) - `be/feat/auth-rate-limit`
-- `/auth/resend-verification`·`signup`·`login` 무제한 → 이메일 폭탄/브루트포스. IP 5회/분 + 계정 lockout, `email_verifications.user_id` 인덱스 동반. 상세는 그룹 F.
+### I2. 인증 표면 rate limit (M1 F1) - `be/feat/auth-rate-limit` - ✅ IP rate limit 구현 완료 (2026-06-11)
+- 문제: `/auth/resend-verification`·`signup`·`login` 무제한 → 이메일 폭탄/브루트포스. IP 5회/분 + 계정 lockout, `email_verifications.user_id` 인덱스 동반.
+- **결정 (확정, 2026-06-11): 구현 = `limits` 직접 + FastAPI 의존성** (slowapi 아님). slowapi 0.1.9는 2024 정체·alpha + 데코레이터/`request` 주입 강제라 우리 `Depends` 합성 패턴과 이질적. slowapi가 내부에서 쓰는 코어 `limits`(5.8.0, async 네이티브)를 `Depends(RateLimit(limit, scope))`로 직접 감싸 429 모양·키 함수를 완전 제어. 나중 분산 한도는 storage를 `async+redis://`로 교체.
+- **결정 (확정): 키 = IP only** (이메일 조합 X). 핸들러 로직 '전에' 429를 던져 회원 존재 여부와 무관 → 비열거 중립. 이메일을 키에 섞으면 한도/헤더 차이로 enumeration 누출.
+- **결정 (확정): 계정 lockout/백오프는 후속 PR로 분리** (`be/feat/auth-account-lockout`). lockout은 (a) 존재 계정만 잠겨 "잠김" 응답이 회원 확정 신호가 되는 비열거 충돌, (b) 카운터를 I1 교훈상 인메모리가 아닌 DB(`users.failed_login_attempts`/`locked_until`)에 둬야 신뢰 가능 → 설계·council 리뷰가 별도로 필요. 이 PR은 IP rate limit + 인덱스로 한정(Small-PR). 이슈 #28 트래킹.
+- **한계 (정직성)**: ⚠️ MemoryStorage는 프로세스별 → 멀티워커면 실효 한도 ≈ N×limit(I1 "인메모리 앱 상태 워커 간 신뢰 불가"와 동형). ⚠️ Caddy 프록시 뒤에서 `request.client.host`가 실제 IP가 되려면 uvicorn `--proxy-headers --forwarded-allow-ips=<caddy>` 필수(안 하면 전역 1키 = 자기 DoS) → **infra 후속**.
+
+> **구현 요약 (2026-06-11)**: `lib/rate_limit.py`(`limits.aio` MemoryStorage + MovingWindow + `RateLimit` 의존성, IP 키, 429+Retry-After) 도입 + `login`/`signup`/`resend-verification`에 `dependencies=[Depends(RateLimit("5/minute", scope=...))]` 부착(엔드포인트별 독립 버킷). `email_verifications.user_id` 인덱스(`idx_email_verifications_user_id`) + 마이그레이션 `fefbcb3265c0`(forward-only, down=`97b9912aa03e`). 테스트 격리는 conftest autouse `_reset_rate_limits`(동기 rebind - 동기 테스트 호환). 산출물: `lib/rate_limit.py`, `routers/auth.py`, `models/user.py`, `tests/conftest.py`, `tests/test_rate_limit.py` 2개(6회째 429+Retry-After·scope 독립), 의존성 `limits>=5.8.0`. 검증: pytest 61개 통과·ruff clean·alembic check 클린. Opus 자가 검증 Critical/Major(코드) 없음 - 단 프록시 IP 설정이 배포 전 필수 후속. study: [[rate-limiting]].
 
 ### I3. CORS 와일드카드 좁히기
 - `main.py` `allow_methods=["*"]`/`allow_headers=["*"]` + `allow_credentials=True` → 실제 필요한 메서드/헤더로 제한(루트 CLAUDE.md "CORS 와일드카드 금지" 정렬).

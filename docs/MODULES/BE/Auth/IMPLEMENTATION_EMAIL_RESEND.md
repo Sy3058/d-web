@@ -88,9 +88,9 @@ require_verified_email( current_user = Depends(get_current_user) )
 
 ## 5. 제약 / 후속 (council 5렌즈 + Opus 리뷰에서 확인)
 
-- **rate limit 부재 (F1 대기, 알려진 열린 구멍)**: `/auth/resend-verification`은 **비인증 + 메일 발송 트리거**다. 임의 주소 폭격은 불가(미인증 유저에게만 발송)하나, **알려진 미인증 주소 1개에 반복 호출 = 이메일 폭탄 + Resend 쿼터 소진**이 가능하다. F1(IP rate limit 5회/분 + 계정 lockout)에서 마감 예정. signup도 동일 성질이라 F1이 일괄 커버한다.
-- **타이밍 비대칭 (의도된 한계)**: no-op 경로(미존재/이미인증, 빠름) vs 미인증 경로(DB write 2건 + commit, 느림)로 "등록된 미인증 유저"를 응답시간으로 구분할 여지가 남는다. 응답 바디 동일 + F1로 완화. `email_verifications.user_id` 인덱스가 붙으면 미인증 경로도 빨라져 차가 더 줄어든다.
-- **`email_verifications.user_id` 인덱스 누락**: `invalidate_email_verifications`/`resend_verification`이 `user_id`로 필터하는데 인덱스가 없다(현재 인증 도메인엔 `idx_refresh_tokens_user_id`만 존재). 소규모(5천명)에선 무해하나 **F1 또는 별도 forward-only 마이그레이션에서 추가 권장**.
+- **~~rate limit 부재 (F1 대기, 알려진 열린 구멍)~~ → ✅ I2에서 닫음**: `/auth/resend-verification`은 **비인증 + 메일 발송 트리거**라 알려진 미인증 주소 1개에 반복 호출 = 이메일 폭탄 + Resend 쿼터 소진이 가능했다. I2가 `resend`/`signup`/`login`에 IP 5회/분(`RateLimit`)을 부착해 마감. 계정 lockout은 후속 PR. 상세 [IMPLEMENTATION_RATE_LIMIT.md](./IMPLEMENTATION_RATE_LIMIT.md).
+- **타이밍 비대칭 (의도된 한계)**: no-op 경로(미존재/이미인증, 빠름) vs 미인증 경로(DB write 2건 + commit, 느림)로 "등록된 미인증 유저"를 응답시간으로 구분할 여지가 남는다. 응답 바디 동일 + rate limit으로 완화. **I2에서 `email_verifications.user_id` 인덱스가 붙어** 미인증 경로가 빨라져 차가 더 줄었다.
+- **~~`email_verifications.user_id` 인덱스 누락~~ → ✅ I2에서 추가**: `invalidate_email_verifications`/`resend_verification`의 `WHERE user_id=?` seq scan이던 것을 `idx_email_verifications_user_id`(마이그레이션 `fefbcb3265c0`, forward-only)로 보강.
 - **resend 동시성 (Nit)**: 같은 유저로 동시 2 resend → 각자 옛 토큰 무효화 + 신규 발급 → **유효 토큰 2개**가 남아 "최신 링크만 동작" 약속이 약화된다. 둘 다 본인 수신함이라 보안 위험은 낮음. 필요 시 강화 대상.
 - **메일 클릭 완결은 G4 의존 (E2와 동일)**: 재발송 메일 링크도 `{APP_BASE_URL}/auth/verify-email`(프론트 페이지)을 가리킨다. G4가 생겨야 클릭 → 토큰 추출 → `POST /auth/verify-email` 호출로 완결된다. 백엔드 재발송/검증 자체는 완료.
 - **`require_verified_email` 미부착**: M1은 가드 함수 + 단위테스트만. 실제 부착은 M3·M4. 관리자용 `require_admin`(M1.5)도 동일 합성 패턴으로 추가 예정.
