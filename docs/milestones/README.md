@@ -102,7 +102,7 @@ M1 (인증) ──┐
 - [x] **미인증 차단 의존성 + 인증 메일 재발송** (E3): `require_verified_email` 가드(함수+단위테스트) + `POST /auth/resend-verification`(비열거 재발송, 직전 토큰 무효화) - 가드 실제 부착은 M3/M4
 - [x] Rate limiting IP 5회/분 (I2: login/signup/resend, limits 기반·`test_rate_limit`) - 계정 lockout은 후속 `be/feat/auth-account-lockout`
 - [ ] 동일 이메일 소셜 별도 계정 안내 메시지 (Q6 결정)
-- [ ] **council 리뷰 fix (선존 이슈, #28)** - ~~refresh 회전 race 원자화 🔴 (I1 ✅)~~ → ~~인증 표면 rate limit IP (I2 ✅)~~ → CORS(I3) → 죽은 테스트 픽스처(I4). 상세는 M1_foundation.md 그룹 I
+- [ ] **council 리뷰 fix (선존 이슈, #28)** - ~~refresh 회전 race 원자화 🔴 (I1 ✅)~~ → ~~인증 표면 rate limit IP (I2 ✅)~~ → ~~CORS(I3) ✅~~ → 죽은 테스트 픽스처(I4). 상세는 M1_foundation.md 그룹 I
 
 ### 프론트엔드 (Astro + React 아일랜드)
 - [ ] 회원가입 / 로그인 페이지 (이메일 + 구글 버튼)

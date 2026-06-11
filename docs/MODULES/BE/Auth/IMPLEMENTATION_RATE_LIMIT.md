@@ -59,10 +59,10 @@ class RateLimit:
 ## 4. 알려진 한계 (정직성)
 
 - ⚠️ **멀티워커**: `MemoryStorage`는 프로세스별이라 N워커면 실효 한도 ≈ N×limit (I1 "인메모리 앱 상태는 워커 간 신뢰 불가"와 동형). coarse anti-automation 속도 제한이라 초기 단일/소수 워커에선 허용. 엄밀 분산 한도는 Redis storage.
-- ⚠️ **프록시 IP (배포 필수, 신뢰 경계 2겹)**: Caddy 뒤에서 `request.client.host`가 실제 클라이언트 IP가 되려면 **둘 다** 필요하다.
-  - (1) uvicorn `--proxy-headers --forwarded-allow-ips=<caddy>`: 외부가 uvicorn에 직접 연결해 XFF 위조하는 경로 차단(Caddy 우회 방지). 미설정 시 모든 요청이 프록시 IP 한 키 → **전역 5회/분 = 자기 DoS**.
-  - (2) Caddy가 `X-Forwarded-For`를 **overwrite로 정화** (`header_up X-Forwarded-For {http.request.remote.host}`): XFF는 프록시마다 append되는 리스트라, append만 하면 클라가 보낸 위조값이 왼쪽에 남고 uvicorn 옛 기본은 leftmost를 채택해 그 위조값을 믿을 수 있다. overwrite로 위조값을 버리고 실제 peer만 남긴다.
-  - (1)만으론 Caddy를 통과시킨 위조 XFF 밀반입을 못 막는다. infra(Dockerfile/compose + Caddyfile)에서 둘 다 설정해야 실효.
+- ✅ **프록시 IP (구현 완료 #31, 신뢰 경계 2겹)**: Caddy 뒤에서 `request.client.host`가 실제 클라이언트 IP가 되려면 **둘 다** 필요하다.
+  - (1) uvicorn `--proxy-headers --forwarded-allow-ips '*'` (`backend/Dockerfile`): 외부가 uvicorn에 직접 연결해 XFF 위조하는 경로 차단(Caddy 우회 방지). 미설정 시 기본 `127.0.0.1`이라 Caddy 컨테이너 IP를 불신해 XFF 무시 → 모든 요청이 프록시 IP 한 키 → **전역 5회/분 = 자기 DoS**. 값을 `<caddy>`로 핀하려 했으나 docker compose는 Caddy 컨테이너 IP가 동적이라 `*`로 두고, 위조 차단은 (2)가 담당(직접 경로 `127.0.0.1:8000`은 로컬 전용, prod는 포트 제거).
+  - (2) Caddy가 `X-Forwarded-For`를 **overwrite로 정화** (`header_up X-Forwarded-For {remote_host}`, Caddyfile `api.localhost`): XFF는 프록시마다 append되는 리스트라, append만 하면 클라가 보낸 위조값이 왼쪽에 남고 uvicorn 옛 기본은 leftmost를 채택해 그 위조값을 믿을 수 있다. overwrite로 위조값을 버리고 실제 peer만 남긴다.
+  - 📌 남은 한계: 로컬 docker는 NAT로 Caddy가 보는 source IP가 게이트웨이일 수 있어, 엣지의 real-client-IP 충실도는 D4(VPS 배포 토폴로지)에서 확정. 이 PR은 Caddy→uvicorn XFF plumbing 확립이 목적.
 - 📌 `Retry-After`는 `get_expiry()`(윈도우 60초 전체)로 - 정확한 잔여시간 아닌 안전 상한. 단순성 우선.
 - 📌 `async_client` 픽스처가 `test_auth_endpoints`와 중복 - I4(conftest 정리)에서 승격하며 통합 예정.
 
