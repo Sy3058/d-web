@@ -9,6 +9,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.config import settings
 from src.lib.db import get_session
+from src.lib.rate_limit import reset_rate_limits
 from src.main import app
 
 
@@ -17,6 +18,14 @@ def _disable_sentry():
     # 테스트에서 Sentry 초기화를 막아 teardown 시 I/O 에러 방지
     with patch("sentry_sdk.init"):
         yield
+
+
+@pytest.fixture(autouse=True)
+def _reset_rate_limits():
+    # 모듈 전역 rate limiter는 프로세스 내내 공유되므로, 각 테스트의 누적 hit이
+    # 다른 테스트를 429로 깨뜨리지 않도록 매 테스트 전에 비운다(동기 - 동기 테스트 호환).
+    reset_rate_limits()
+    yield
 
 
 @pytest_asyncio.fixture(scope="session")

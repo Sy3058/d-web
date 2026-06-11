@@ -381,6 +381,8 @@ CREATE UNIQUE INDEX uq_refresh_tokens_token_hash ON refresh_tokens(token_hash);
 
 -- 이메일 인증 토큰 해시 직접 조회(M1 E2) + 중복 방지(결정적 해시 + 고엔트로피 랜덤)
 CREATE UNIQUE INDEX uq_email_verifications_token ON email_verifications(token);
+-- 재발송/무효화(M1 E3)의 WHERE user_id=? 조회 (M1 I2, forward-only 마이그레이션)
+CREATE INDEX idx_email_verifications_user_id ON email_verifications(user_id);
 
 -- 공개된 에피소드만 조회 (idx_episodes_work_id와 별개의 partial index)
 CREATE INDEX idx_episodes_published     ON episodes(work_id) WHERE is_published = TRUE;

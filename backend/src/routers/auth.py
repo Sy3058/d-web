@@ -27,6 +27,7 @@ from src.lib.exceptions import (
     PwnedPasswordError,
     TokenReuseError,
 )
+from src.lib.rate_limit import RateLimit
 from src.models.user import User, UserRead
 from src.schemas.auth import (
     LoginRequest,
@@ -53,7 +54,12 @@ _INVALID_VERIFICATION = "유효하지 않거나 만료된 인증 링크입니다
 _RESEND_MESSAGE = "인증 메일을 보냈어요"
 
 
-@router.post("/signup", response_model=MessageResponse, status_code=status.HTTP_200_OK)
+@router.post(
+    "/signup",
+    response_model=MessageResponse,
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(RateLimit("5/minute", scope="signup"))],
+)
 async def signup(
     body: SignupRequest,
     background_tasks: BackgroundTasks,
@@ -71,7 +77,11 @@ async def signup(
     return MessageResponse(message=_SIGNUP_MESSAGE)
 
 
-@router.post("/login", response_model=UserRead)
+@router.post(
+    "/login",
+    response_model=UserRead,
+    dependencies=[Depends(RateLimit("5/minute", scope="login"))],
+)
 async def login(
     body: LoginRequest,
     response: Response,
@@ -156,6 +166,7 @@ async def verify_email(
     "/resend-verification",
     response_model=MessageResponse,
     status_code=status.HTTP_200_OK,
+    dependencies=[Depends(RateLimit("5/minute", scope="resend"))],
 )
 async def resend_verification(
     body: ResendVerificationRequest,
