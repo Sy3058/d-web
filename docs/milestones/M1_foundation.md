@@ -2,7 +2,7 @@
 
 | 항목 | 내용 |
 |------|------|
-| 문서 버전 | v0.7 (2026-06-11, I2 IP rate limit 구현: limits 기반 + email_verifications.user_id 인덱스. 계정 lockout은 후속 분리) |
+| 문서 버전 | v0.8 (2026-06-12, I3 CORS 와일드카드 제거: allow_methods/headers를 공유 api.ts 메서드(GET/POST/PUT/DELETE/OPTIONS)+Content-Type으로 제한) |
 | 상위 마일스톤 | [M1](./README.md#m1-인증-이메일--구글) |
 | 예상 기간 | 약 3주 (이메일 발송/구글 OAuth 콘솔 왕복 포함) |
 | 완료 기준 | 신규 유저가 이메일/구글로 가입 → 인증 메일 수신 → 로그인 상태로 마이페이지 진입 (그룹 H 체크리스트) |
@@ -310,8 +310,13 @@ git stash pop stash@{0}
 
 > **구현 요약 (2026-06-11)**: `lib/rate_limit.py`(`limits.aio` MemoryStorage + MovingWindow + `RateLimit` 의존성, IP 키, 429+Retry-After) 도입 + `login`/`signup`/`resend-verification`에 `dependencies=[Depends(RateLimit("5/minute", scope=...))]` 부착(엔드포인트별 독립 버킷). `email_verifications.user_id` 인덱스(`idx_email_verifications_user_id`) + 마이그레이션 `fefbcb3265c0`(forward-only, down=`97b9912aa03e`). 테스트 격리는 conftest autouse `_reset_rate_limits`(동기 rebind - 동기 테스트 호환). 산출물: `lib/rate_limit.py`, `routers/auth.py`, `models/user.py`, `tests/conftest.py`, `tests/test_rate_limit.py` 2개(6회째 429+Retry-After·scope 독립), 의존성 `limits>=5.8.0`. 검증: pytest 61개 통과·ruff clean·alembic check 클린. Opus 자가 검증 Critical/Major(코드) 없음 - 단 프록시 IP 설정이 배포 전 필수 후속. study: [[rate-limiting]].
 
-### I3. CORS 와일드카드 좁히기
-- `main.py` `allow_methods=["*"]`/`allow_headers=["*"]` + `allow_credentials=True` → 실제 필요한 메서드/헤더로 제한(루트 CLAUDE.md "CORS 와일드카드 금지" 정렬).
+### I3. CORS 와일드카드 좁히기 ✅ 구현 완료 (2026-06-12)
+- 브랜치: `be/fix/cors-wildcard`
+- `main.py` `allow_methods=["*"]`/`allow_headers=["*"]` + `allow_credentials=True` → 명시 집합으로 제한(루트 CLAUDE.md "CORS 와일드카드 금지" 정렬). `allow_origins`는 이미 `config.cors_origins`로 제한돼 있어 와일드카드 위반은 methods/headers에만 있었음.
+- **결정 (확정, 2026-06-12): `allow_methods=["GET","POST","PUT","DELETE","OPTIONS"]`, `allow_headers=["Content-Type"]`.** 메서드 집합 기준은 백엔드 현재 라우트(GET/POST)가 아니라 **공유 fetch 래퍼 `packages/shared/src/lib/api.ts`가 노출하는 메서드(GET/POST/PUT/DELETE)** - admin/결제(M1.5+)가 PUT/DELETE를 cross-origin 호출할 때 CORS를 다시 안 넓혀도 되게(미래 함정 차단). 엔드포인트 없는 메서드는 404라 보안 리스크 없음. `allow_credentials=True` + `*`는 브라우저가 무력화하므로 명시가 기능적으로도 정확. OPTIONS preflight는 미들웨어가 자동 처리(목록의 OPTIONS는 ACAM 표기용).
+- 구현 중 충돌: 처음 백엔드 라우트만 보고 `["GET","POST"]`로 커밋했다가 backlog 메모리의 직전 결정값(공유 api.ts 기준 넓은 집합)과 충돌 발견 → 미push 2커밋 `git reset` 후 최종값으로 재커밋(테스트 거부 케이스 DELETE→PATCH).
+
+> **구현 요약 (2026-06-12)**: `main.py` CORSMiddleware `allow_methods`/`allow_headers` 와일드카드 2줄을 명시 집합으로 교체(스키마/마이그레이션 없음). 산출물: `src/main.py`, `tests/test_cors.py`(신규 5개 - 허용 preflight의 메서드/헤더 좁힘·credentials·origin 반영, 목록 밖 메서드(PATCH)/헤더 400, 비허용 origin ACAO 미부여). 테스트는 origin을 `settings.cors_origins`에서 읽어 하드코딩 회피, DB 불필요해 동기 `TestClient`. 검증: pytest 66개 통과·ruff clean. Opus 자가 검증 Critical/Major 없음. 보안 결정 [SECURITY_AUTH_DECISIONS.md](../MODULES/BE/Auth/SECURITY_AUTH_DECISIONS.md) §10. study: [[cors-credentials]].
 
 ### I4. 죽은 테스트 픽스처 정리
 - `tests/conftest.py` `TestClient` 기반 `client` 픽스처 제거(미사용·루프 불일치 위험) + `async_client`/`existing_user`를 conftest로 승격(M3/M4 재사용).

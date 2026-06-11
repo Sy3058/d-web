@@ -4,7 +4,7 @@
 |------|------|
 | 영역 | BE (+ FE 쿠키 처리) |
 | 대상 마일스톤 | M1 (인증: 이메일 + 구글) |
-| 상태 | A1·B1~B3·C·E1~E3·I1·I2(IP rate limit) 구현 완료(~2026-06-11), D(OAuth)·F 계정 lockout는 설계 확정·구현 전 |
+| 상태 | A1·B1~B3·C·E1~E3·I1·I2(IP rate limit)·I3(CORS) 구현 완료(~2026-06-12), D(OAuth)·F 계정 lockout는 설계 확정·구현 전 |
 | 작성 | 2026-05-31 (Opus 설계 리뷰 세션) |
 | 근거 | OWASP ASVS, OAuth 2.0 Security BCP, DB_SCHEMA §1, PRD §4.2 |
 
@@ -97,6 +97,13 @@ M1 인증 설계 리뷰에서 확정한 보안 결정을 한곳에 모은 문서
 
 - `SECRET_KEY`(JWT 서명)와 **pepper는 별도 키**로 `.env` 관리, 하드코딩 금지. pepper 로테이션 시 재해싱 전략 필요.
 - **개인정보(이메일 등) plaintext 로깅 금지**, 토큰 로깅 금지. 마스킹 규칙(M0 B4) 적용.
+
+## 10. CORS (I3 구현 완료, 2026-06-12)
+
+- **`allow_origins` = `config.cors_origins`(=`[APP_BASE_URL, ADMIN_BASE_URL]`)로 제한** - env 직박 금지, 베이스 URL에서 조립(§7·DECISIONS "환경 베이스 URL"). 와일드카드 origin은 처음부터 없었음.
+- **`allow_methods=["GET","POST","PUT","DELETE","OPTIONS"]`, `allow_headers=["Content-Type"]`** (와일드카드 `["*"]` 제거). 메서드 집합 기준은 백엔드 현재 라우트가 아니라 **공유 fetch 래퍼 `packages/shared/src/lib/api.ts`가 노출하는 메서드** - admin/결제(M1.5+)의 PUT/DELETE cross-origin 호출 시 CORS 재확장 불필요(미래 함정 차단). 엔드포인트 없는 메서드는 404라 보안 리스크 없음.
+- `allow_credentials=True` + `["*"]`는 브라우저가 무력화(매칭 실패)하므로 명시가 기능적으로도 정확. OPTIONS preflight는 Starlette CORSMiddleware가 자동 처리(목록의 OPTIONS는 `Access-Control-Allow-Methods` 표기용).
+- **dev cross-origin 전제**: 운영은 Caddy 단일 도메인(same-origin)이라 CORS가 거의 안 타지만, 로컬 dev는 Astro(`:4321`)/Admin(`:5173`)→API(`:8000`) 포트가 달라 cross-origin → 이 화이트리스트가 실제로 작동해야 로그인 플로우가 산다(쿠키는 SameSite로 포트 무관 전송되나 CORS는 포트 구분, §3 same-site 전제와 다른 관문). 회귀는 `tests/test_cors.py`. study `cors-credentials`.
 
 ---
 
