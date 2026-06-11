@@ -12,5 +12,10 @@ http://admin.localhost {
 
 # API 직접 접근 편의용 (localhost:8000 으로도 접근 가능)
 http://api.localhost {
-    reverse_proxy api:8000
+    reverse_proxy api:8000 {
+        # 클라이언트가 위조한 XFF를 실제 peer IP로 덮어씀 (append 아님).
+        # rate limit(I2) 키가 실제 클라이언트 IP가 되도록 하는 2겹 방어의 한 겹.
+        # 나머지 한 겹은 uvicorn --proxy-headers --forwarded-allow-ips (backend/Dockerfile).
+        header_up X-Forwarded-For {remote_host}
+    }
 }
