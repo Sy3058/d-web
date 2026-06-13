@@ -360,6 +360,7 @@ main (항상 배포 가능 상태)
 |------|------|------|
 | 기능 | `{영역}/feat/{기능}` | `be/feat/auth-jwt` |
 | 버그 | `{영역}/fix/{내용}` | `fe/fix/viewer-scroll` |
+| 리팩토링 | `{영역}/refactor/{내용}` | `be/refactor/test-fixtures` |
 | 공통/설정/문서 | `common/{type}/{내용}` | `common/docs/code-review` |
 | 긴급 핫픽스 | `{영역}/hotfix/{내용}` | `be/hotfix/payment-duplicate` |
 

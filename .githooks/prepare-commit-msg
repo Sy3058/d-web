@@ -12,7 +12,7 @@ fi
 # Branch name pattern:
 #   {be|fe|admin}/{feat|fix|chore|hotfix}/{desc}
 #   common/{docs|chore|setup|...}/{desc}
-pattern='^((be|fe|admin)/(feat|fix|chore|hotfix)|common/[a-z-]+)/.+$'
+pattern='^((be|fe|admin)/(feat|fix|chore|hotfix|refactor)|common/[a-z-]+)/.+$'
 
 if ! printf '%s' "$branch" | grep -qE "$pattern"; then
   cat >&2 <<EOF
@@ -20,7 +20,7 @@ if ! printf '%s' "$branch" | grep -qE "$pattern"; then
 
   요구 형식: {area}/{type}/{description}
     area = be | fe | admin | common
-    type = feat | fix | chore | hotfix
+    type = feat | fix | chore | hotfix | refactor
     desc = kebab-case (예: auth-jwt, episode-viewer)
 
   예시:
