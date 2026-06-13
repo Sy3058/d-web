@@ -12,7 +12,6 @@ from unittest.mock import AsyncMock
 import pytest
 import pytest_asyncio
 from fastapi import HTTPException
-from httpx import ASGITransport, AsyncClient
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -22,25 +21,20 @@ from src.lib.auth import (
     create_access_token,
     require_verified_email,
 )
-from src.lib.db import get_session
-from src.main import app
 from src.models.user import EmailVerification, RefreshToken, User
 from src.services import auth_service, email_service, hibp
+from tests.conftest import (
+    EXISTING_USER_EMAIL,
+    EXISTING_USER_NICKNAME,
+    EXISTING_USER_PASSWORD,
+)
 
-_CREDS = {"email": "user@example.com", "password": "Passw0rd!", "nickname": "tester"}
-_LOGIN = {"email": _CREDS["email"], "password": _CREDS["password"]}
-
-
-@pytest_asyncio.fixture
-async def async_client(db_session: AsyncSession):
-    async def _override():
-        yield db_session
-
-    app.dependency_overrides[get_session] = _override
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test.example") as client:
-        yield client
-    app.dependency_overrides.clear()
+_CREDS = {
+    "email": EXISTING_USER_EMAIL,
+    "password": EXISTING_USER_PASSWORD,
+    "nickname": EXISTING_USER_NICKNAME,
+}
+_LOGIN = {"email": EXISTING_USER_EMAIL, "password": EXISTING_USER_PASSWORD}
 
 
 @pytest.fixture(autouse=True)
@@ -52,15 +46,6 @@ def externals(monkeypatch) -> SimpleNamespace:
     monkeypatch.setattr(email_service, "send_verification_email", verification)
     monkeypatch.setattr(email_service, "send_already_registered_email", already)
     return SimpleNamespace(verification=verification, already=already, monkeypatch=monkeypatch)
-
-
-@pytest_asyncio.fixture
-async def existing_user(db_session: AsyncSession) -> User:
-    user = await auth_service.create_user(
-        _CREDS["email"], _CREDS["password"], _CREDS["nickname"], db_session
-    )
-    await db_session.commit()
-    return user
 
 
 @pytest_asyncio.fixture
