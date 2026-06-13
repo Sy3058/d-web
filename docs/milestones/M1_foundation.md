@@ -225,12 +225,12 @@ git stash pop stash@{0}
 
 ## 그룹 F. 보안 가드
 
-### F1. Rate limiting - 로그인 5회/분 - ✅ IP rate limit 완료 (I2, 2026-06-11) / 계정 lockout 후속
+### F1. Rate limiting - 로그인 5회/분 - ✅ IP rate limit 완료 (I2, 2026-06-11) / 계정 lockout 보류 (council 2026-06-14, 관측 로그로 대체)
 - 선행: C2
 - 산출물: 로그인(및 가입/재발송) 엔드포인트 rate limit 의존성 (`lib/rate_limit.py`)
 - DoD: 1분 내 6회째 로그인 시도 429 반환 ✅ (I2에서 구현, `test_rate_limit.py`)
 - **결정 (확정, I2): 구현 = `limits` 직접 + FastAPI 의존성** (slowapi 아님 - 상세 그룹 I I2). 단일 인스턴스 초기엔 MemoryStorage, 다중 워커/인스턴스 전환 시 `async+redis://` storage. 계정 lockout 카운터는 DB로(인메모리 아님).
-- **결정 (확정): 계정 단위 lockout + 지수 백오프 병행 → 후속 PR `be/feat/auth-account-lockout`.** IP rate limit과 별개로 **계정별 연속 실패 누적** 시 잠금/지연(예: 5회 실패 후 점증 지연, N회 후 일시 잠금) → 분산 IP로 한 계정 노리는 느린 brute-force 방어. 실패 카운터는 성공 로그인 시 리셋. 비열거 충돌(잠김 응답=회원 확정) 처리 + DB 카운터 설계가 필요해 I2에서 분리. 이슈 #28.
+- **결정 (council 리뷰 2026-06-14): 계정 단위 하드 락 도입 보류 (이슈 #28 deferred).** council 5렌즈 검토 결과 IP rate limit(머지) + HIBP + 강비번 + bcrypt12로 현 위협모델 충분, 하드 락은 한계이득 < 비용(enumeration oracle 신설·reflective DoS·모바일 정상유저 오잠금·1인 CS). 비열거·가용성·DoS는 구조적 트레이드오프라 동시 만족 불가. 대신 로그인 성공/실패를 structlog `auth.login` 이벤트로 남겨 분산 표적 징후를 수집(구현 완료 2026-06-14: `routers/auth.py`, `target`=HMAC 해시·`ip` 마스킹), 증거 시 재검토(스키마 무변경, 카운터 컬럼 안 만듦). 상세 [SECURITY_AUTH_DECISIONS.md](../MODULES/BE/Auth/SECURITY_AUTH_DECISIONS.md) §5. 이슈 #28.
 - 메모: PRD §4.2 - 로그인 5회/분(여기), 결제 10회/분(M3), 댓글 10회/분(M4). IP rate limit 키는 IP + 이메일 조합 고려.
 
 ---
@@ -275,7 +275,7 @@ git stash pop stash@{0}
 - [ ] 이메일 로그인 → access/refresh 쿠키 발급(HttpOnly, 플래그 정확) → `/auth/me` 200 → 마이페이지 진입
 - [ ] 구글 가입/로그인 → id_token 검증 통과 → 신규 `users`+`oauth_accounts` 생성, 기존 유저 로그인 동작
 - [ ] 토큰 갱신(`/auth/refresh`) 동작(회전), 로그아웃 후 갱신 거부됨, revoke된 refresh 재제출 시 세션 전체 무효화
-- [x] 로그인 5회/분 초과 시 429 (I2: IP rate limit, 계정 lockout은 후속 `be/feat/auth-account-lockout`)
+- [x] 로그인 5회/분 초과 시 429 (I2: IP rate limit, 계정 lockout은 council 2026-06-14 보류·로그인 관측 로그 `auth.login`으로 대체)
 - [x] `require_verified_email` 의존성이 미인증 403 반환(단위 테스트, 부착은 아직 안 함) - E3 완료
 - [ ] 동일 이메일 소셜 시도 시 자동 병합 없이 안내 노출 (Q6)
 - [ ] 비열거 검증: 신규/중복 이메일 가입의 HTTP 응답·응답시간이 동일, 중복 시 안내 메일은 수신함 주인에게만 발송
@@ -366,7 +366,7 @@ git stash pop stash@{0}
   - id_token 완전 검증 + OAuth state/nonce + open redirect 차단
   - 단일 도메인(same-site) 쿠키 전제
   - 비번: `bcrypt` 직접(5.x, passlib 아님) + cost=12(argon2id 아님 - 소형 VPS 메모리 제약), **OWASP pre-hash 구조** `bcrypt(base64(hmac_sha384(pw, password_pepper)))`(72byte·shucking 해결), async+`anyio.to_thread` 오프로드, 길이 상한, HIBP 유출 비번 차단
-  - 로그인: IP rate limit + 계정 lockout/백오프
+  - 로그인: IP rate limit (계정 lockout은 council 2026-06-14 보류, 관측 로그로 대체)
   - 이메일 인증 토큰 at-rest 해시
   - **인증 표면 전체 비열거** (가입/로그인/비번재설정/재발송 응답·타이밍 통일, 회원 여부는 수신함 주인만 인지)
   - 이메일 인증 검증(E2) = **POST**(GET prefetch 토큰 소비 차단) + 토큰 body + 실패 단일 generic, `email_verifications.token` UNIQUE INDEX

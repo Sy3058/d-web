@@ -62,7 +62,11 @@ M1 인증 설계 리뷰에서 확정한 보안 결정을 한곳에 모은 문서
 
 - **IP rate limit 5회/분 (I2 구현 완료, 2026-06-11)**: `login`·`signup`·`resend-verification`에 IP 키 슬라이딩 윈도우. 구현 = `limits`(5.8.0) 직접 + FastAPI `Depends(RateLimit(limit, scope))` (slowapi 아님 - 2024 정체·alpha + 데코레이터/`request` 주입이 우리 Depends 합성과 이질). **키 = IP only**(이메일 미혼합): 핸들러 로직 전에 429라 회원 존재 여부 무관 → §6 비열거 중립. 초과 시 429 + Retry-After. 상세 [IMPLEMENTATION_RATE_LIMIT.md](./IMPLEMENTATION_RATE_LIMIT.md).
   - ⚠️ **한계**: MemoryStorage는 프로세스별 → 멀티워커면 실효 한도 ≈ N×limit(엄밀 분산 한도는 `async+redis://`로 교체). ✅ Caddy 프록시 뒤 실제 IP 전달은 uvicorn `--proxy-headers --forwarded-allow-ips '*'` + Caddy `header_up X-Forwarded-For {remote_host}` 2겹으로 구현(#31, docker는 Caddy IP 동적이라 `*` + overwrite 조합).
-- **계정 단위 lockout + 지수 백오프 → 후속 PR `be/feat/auth-account-lockout`**: IP 제한과 별개로 계정별 연속 실패 누적 시 잠금/지연 → 분산 IP로 한 계정 노리는 느린 brute-force 방어. 성공 시 카운터 리셋. 카운터는 I1 교훈상 **DB**(`users.failed_login_attempts`/`locked_until`, 인메모리 아님). 비열거 충돌(잠김 응답=회원 확정) 처리 설계가 필요해 I2에서 분리. 이슈 #28.
+- **계정 단위 하드 락: 도입 보류 (council 리뷰 결정 2026-06-14, 이슈 #28 deferred)**: 설계(연속 10회 → 15분 하드 락, DB 카운터 `failed_login_attempts`/`locked_until`)를 council 5렌즈로 검토한 결과 **지금 도입하지 않기로 결정**. 근거:
+  - **한계 이득 < 비용**: 이미 IP rate limit(I2 머지) + HIBP 유출비번 차단 + 8자 혼합 비번 정책 + bcrypt12로 온라인 추측 brute-force는 비현실적. lockout이 추가로 막는 "분산 IP + 저속 표적"은 강비번 앞에서 이득이 작다.
+  - **새로 만드는 비용은 구체적**: (a) 실존 계정만 잠겨 "잠김" 거동이 **enumeration oracle 신설**(미존재는 추적 안 해 절대 안 잠김 → 비대칭이 회원 여부를 누설), (b) 공격자가 남의 계정을 일부러 잠그는 **reflective DoS**, (c) 모바일 정상 유저 오잠금 + unlock 자가복구 없음 → **1인 운영 CS 부담**. 비열거·가용성·DoS는 동시 만족 불가한 구조적 트레이드오프(설계 디테일로 안 풀림).
+  - **대신 관측 신호 (스키마 무변경, 구현 완료 2026-06-14)**: 로그인 성공/실패를 structlog 이벤트(`auth.login`)로 남겨 "분산 IP가 한 계정을 노리는" 징후를 사후 집계. `routers/auth.py` login에서 `target`=HMAC-SHA256(정규화 이메일)+`TOKEN_PEPPER` 16자(평문 이메일 미로깅)·`ip`는 `mask_pii`가 /24 마스킹·실패엔 `user_id` 미포함(비열거). 카운터 컬럼·잠금 로직은 만들지 않음. 실측 증거가 나오면 그때 lockout(또는 더 나은 대안)을 재검토.
+  - **재도입 시 must-fix (council 발견)**: 카운터를 넣게 되면 - 실패 경로 commit(현 `login`은 성공 시에만 commit), 단일 `RETURNING` UPDATE로 증가+조건부 잠금(I1 `_claim`은 0/1행만이라 부족), "연속"(성공 시 리셋, decay 정의), 소셜 전용 계정(`hashed_password is None`) 제외, 타이밍 "동일"은 엄밀 보장 말고 정직한 한계로 문서화(경로별 DB 왕복 차이).
 - **일반화 에러**: 이메일/비번 중 어느 쪽이 틀렸는지 구분 노출 금지(동일 메시지).
 - **타이밍 평탄화**: 미존재 유저도 더미 해시 검증 후 동일 응답 시간.
 
