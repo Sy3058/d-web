@@ -64,7 +64,7 @@ class RateLimit:
   - (2) Caddy가 `X-Forwarded-For`를 **overwrite로 정화** (`header_up X-Forwarded-For {remote_host}`, Caddyfile `api.localhost`): XFF는 프록시마다 append되는 리스트라, append만 하면 클라가 보낸 위조값이 왼쪽에 남고 uvicorn 옛 기본은 leftmost를 채택해 그 위조값을 믿을 수 있다. overwrite로 위조값을 버리고 실제 peer만 남긴다.
   - 📌 남은 한계: 로컬 docker는 NAT로 Caddy가 보는 source IP가 게이트웨이일 수 있어, 엣지의 real-client-IP 충실도는 D4(VPS 배포 토폴로지)에서 확정. 이 PR은 Caddy→uvicorn XFF plumbing 확립이 목적.
 - 📌 `Retry-After`는 `get_expiry()`(윈도우 60초 전체)로 - 정확한 잔여시간 아닌 안전 상한. 단순성 우선.
-- 📌 `async_client` 픽스처가 `test_auth_endpoints`와 중복 - I4(conftest 정리)에서 승격하며 통합 예정.
+- ✅ `async_client` 픽스처 중복 해소 (I4, 2026-06-14): conftest로 승격해 `test_auth_endpoints`·`test_rate_limit`가 공용 픽스처를 공유한다.
 
 ---
 

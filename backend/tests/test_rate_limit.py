@@ -1,37 +1,16 @@
 """인증 표면 rate limit 테스트 (M1 F1 / council I2).
 
 IP 단위 5회/분. 6회째 429. limiter는 conftest의 autouse _reset_rate_limits로 매 테스트
-초기화되므로 누적 hit이 새지 않는다.
-
-async_client 픽스처는 현재 test_auth_endpoints와 중복이다 - I4에서 conftest로 승격하며
-정리 예정(이 PR은 I2 범위라 로컬 정의 유지).
+초기화되므로 누적 hit이 새지 않는다. async_client는 conftest 공용 픽스처를 쓴다(I4 승격).
 """
 
 from unittest.mock import AsyncMock
 
-import pytest_asyncio
-from httpx import ASGITransport, AsyncClient
-from sqlmodel.ext.asyncio.session import AsyncSession
-
-from src.lib.db import get_session
-from src.main import app
 from src.services import email_service, hibp
 
 # 미존재 이메일: 비열거상 매번 401(회원/비회원 동일). rate limit은 회원 여부와 무관하게
 # IP로만 카운트하므로 이 경로로 6회째 429를 검증할 수 있다.
 _LOGIN = {"email": "nobody@example.com", "password": "Whatever1!"}
-
-
-@pytest_asyncio.fixture
-async def async_client(db_session: AsyncSession):
-    async def _override():
-        yield db_session
-
-    app.dependency_overrides[get_session] = _override
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test.example") as client:
-        yield client
-    app.dependency_overrides.clear()
 
 
 async def test_login_sixth_request_returns_429(async_client):

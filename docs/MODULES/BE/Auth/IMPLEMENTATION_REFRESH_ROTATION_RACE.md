@@ -87,7 +87,7 @@ study: `db-atomic-claim`, `refresh-token-rotation`.
 | `test_refresh_rotates_token` (기존) | happy-path 회전: 2행, 1 revoked / 1 active 유지 |
 | `test_refresh_reuse_revokes_session` (기존) | stale 재제출 → 세션 전체 revoke + 401 |
 
-> 진짜 동시성은 결정적 재현이 불가해 `_claim` rowcount 멱등(1→0)을 프록시로 검증. 실제 동시성 보증은 DB 조건부 UPDATE 의미론에 위임.
+> I1 당시엔 `_claim` rowcount 멱등(1→0) 프록시로만 검증했으나, I4(2026-06-14)에서 `asyncio.Barrier`로 두 세션의 SELECT를 정렬해 진짜 동시 `rotate_refresh`를 결정적으로 재현하는 실측 테스트(`test_concurrent_rotation_single_winner`)를 추가했다(§7 참조).
 
 ---
 
@@ -102,5 +102,5 @@ study: `db-atomic-claim`, `refresh-token-rotation`.
 ## 7. 알려진 한계 (council 리뷰 2026-06-11)
 
 - **reuse-detection의 동시성 한계**: `_claim`은 *발급* race(한 토큰 → 새 토큰 2개)는 닫지만 *탐지* race는 아니다. 탈취 토큰과 정상 토큰이 **동시** 제출되면 둘 다 SELECT에서 `revoked_at IS NULL`을 봐 재사용 탐지 분기(전체 revoke)를 우회하고, 한쪽이 패자(401)가 된다. 다음 회전에서 stale-reuse로 잡히지만 동시 윈도에선 즉시 탐지되지 않는다(OAuth 2.0 BCP의 알려진 한계). 노출창을 줄이려면 절대 수명 cap이 함께 필요.
-- **동시성 실측 미검증**: 동시성 보증은 DB 조건부 UPDATE 의미론 + 단일 세션 프록시 테스트(`_claim` 1→0)에 의존한다. 독립 커넥션 2개로 실제 동시 `rotate_refresh`를 거는 통합 테스트는 **아직 없음** → I4(conftest 정리)에서 `asyncio.gather` 2세션 테스트로 메우고 M3 결제 멱등에 재사용 예정.
+- **동시성 실측 검증 ✅ (I4, 2026-06-14)**: 독립 커넥션 2개로 실제 동시 `rotate_refresh`를 거는 `asyncio.gather` 통합 테스트(`test_concurrent_rotation_single_winner`)를 추가해 단일 세션 프록시(`_claim` 1→0)가 못 메운 실측을 채웠다. `asyncio.Barrier(2)`로 두 코루틴이 SELECT를 마친 뒤 `_claim` UPDATE를 동시 발사하도록 강제(둘 다 `revoked_at IS NULL`을 본 진짜 race) → 정확히 1개만 새 토큰 발급, 패자는 세션 유지 `InvalidTokenError`(stale-reuse 아님), active 토큰 1개 불변식 확인. 2세션 헬퍼(`session_factory`)는 conftest에 둬 M3 결제 멱등에 재사용. 상세 [M1_foundation.md](../../../milestones/M1_foundation.md) I4.
 - **백로그 (I1 범위 밖)**: refresh 절대 수명 cap, 만료/revoked 토큰 cleanup 잡(UNIQUE 인덱스 비대 예방), signup 동시 중복가입 IntegrityError→비열거 응답 처리. 메모리 `project_m1_council_fix_backlog` 트래킹.

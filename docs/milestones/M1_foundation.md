@@ -160,7 +160,7 @@ git stash pop stash@{0}
 > **구현 요약 (2026-06-05)**: C1~C5 구현 + Opus 리뷰 완료. 상세 [IMPLEMENTATION_AUTH_ENDPOINTS.md](../MODULES/BE/Auth/IMPLEMENTATION_AUTH_ENDPOINTS.md).
 > - 산출물: `routers/auth.py`(5개), `schemas/auth.py`, `services/hibp.py`(HIBP k-anonymity), `services/email_service.py`(E1 계약 스텁), `services/auth_service.py`(유저 CRUD+플로우), `lib/auth.py` `get_current_user`, `lib/exceptions.py`, `tests/test_auth_endpoints.py`(15개). 의존성 `httpx`·`email-validator` 추가.
 > - 결정: **로그아웃 = 세션 전체 revoke**(refresh 쿠키 `Path=/auth/refresh`라 `/auth/logout`엔 미전송 → access로 유저 식별 후 전체 revoke). 타이밍 평탄화 더미 해시는 **import 시 eager 생성**(lazy면 첫 호출 때 bcrypt가 이벤트 루프 블로킹 - Opus 리뷰 Major 수정).
-> - 검증: 단위 17개 통과. DB 통합 테스트는 현재 환경 docker/Postgres 부재로 미실행 → 기동 후 그린 확인 + 커밋 예정. 그룹 H의 pytest DoD는 그때 체크.
+> - 검증: 단위 17개 통과. DB 통합 테스트는 이후 Postgres 기동 후 그린 확인 완료(I4 시점 `uv run pytest` 67개 전체 통과). 그룹 H의 pytest DoD 충족.
 
 ---
 
@@ -318,9 +318,11 @@ git stash pop stash@{0}
 
 > **구현 요약 (2026-06-12)**: `main.py` CORSMiddleware `allow_methods`/`allow_headers` 와일드카드 2줄을 명시 집합으로 교체(스키마/마이그레이션 없음). 산출물: `src/main.py`, `tests/test_cors.py`(신규 5개 - 허용 preflight의 메서드/헤더 좁힘·credentials·origin 반영, 목록 밖 메서드(PATCH)/헤더 400, 비허용 origin ACAO 미부여). 테스트는 origin을 `settings.cors_origins`에서 읽어 하드코딩 회피, DB 불필요해 동기 `TestClient`. 검증: pytest 66개 통과·ruff clean. Opus 자가 검증 Critical/Major 없음. 보안 결정 [SECURITY_AUTH_DECISIONS.md](../MODULES/BE/Auth/SECURITY_AUTH_DECISIONS.md) §10. study: [[cors-credentials]].
 
-### I4. 죽은 테스트 픽스처 정리
+### I4. 죽은 테스트 픽스처 정리 + 회전 실측 동시성 테스트 ✅ 구현 완료 (2026-06-14)
 - `tests/conftest.py` `TestClient` 기반 `client` 픽스처 제거(미사용·루프 불일치 위험) + `async_client`/`existing_user`를 conftest로 승격(M3/M4 재사용).
 - **추가 (council 2026-06-11)**: 독립 엔진/세션 2개로 동시 `rotate_refresh`를 거는 `asyncio.gather` **실측 동시성 테스트**를 함께 넣는다 - I1이 단일 세션 프록시 테스트(`_claim` 1→0)만 둬서 DoD "동시 회전 중 하나만 발급"을 실측 미검증으로 남겼다(council 합의: 동시성 보증이 DB 의미론에만 기댐). 2세션 헬퍼는 conftest에 둬 M3 결제 멱등 테스트에 재사용. `test_token.py` 로컬 `test_user`와 승격된 `existing_user` 중복도 함께 정리.
+
+> **구현 요약 (2026-06-14)**: `tests/conftest.py`에서 죽은 `TestClient` 기반 `client` 픽스처 제거 + `async_client`/`existing_user`/`session_factory`(2세션 동시성·M3 결제 멱등 재사용용)를 conftest로 승격, `user`(bcrypt 없는 경량 FK 부모) 픽스처 분리, 공유 계정 상수(`EXISTING_USER_*`) 단일 출처화. `test_token.py`에 실측 동시성 테스트 `test_concurrent_rotation_single_winner` 추가 - 독립 커넥션 2세션을 `asyncio.gather`로 동시 `rotate_refresh`, `asyncio.Barrier(2)`로 두 SELECT 후 `_claim` UPDATE를 동시 발사(둘 다 `revoked_at IS NULL`을 본 진짜 race) → 정확히 1개만 발급, 패자는 세션 유지 `InvalidTokenError`(stale-reuse 아님, `type() is`로 정확히 구분), active 토큰 1개 불변식 확인. I1이 단일 세션 프록시(`_claim` 1→0)로만 검증한 DoD "동시 회전 중 하나만 발급"을 실측으로 메움. `test_token.py` 로컬 `test_user`→공용 `user` 통합, `test_auth_endpoints`·`test_rate_limit` 로컬 픽스처도 conftest 공용으로 정리. 검증: pytest 67개 통과(동시성 테스트 5회 반복 비플레이키)·ruff clean. Opus 자가 검증 Critical/Major 없음. 커밋 2개(`29d2a3f` refactor · `8930367` test). study: [[refresh-token-rotation]], [[db-atomic-claim]].
 
 > 설계 메모 (5명 공통 맹점): ① 메일 발송 단일 장애점(발송 실패/지연, 이메일 변경 시 토큰 무효화 미설계) ② 배포 토폴로지(멀티워커) 미명시 → race 해법은 앱 락이 아닌 DB 제약 ③ 미인증 유저 세션 상태기계 검증 0.
 
