@@ -262,6 +262,21 @@ def _normalize_email(email: str) -> str:
     return email.strip().lower()
 
 
+def email_login_tag(email: str) -> str:
+    """로그인 관측 로그용 계정 태그: HMAC-SHA256(정규화 이메일, TOKEN_PEPPER) 앞 16자.
+
+    평문 이메일 로깅 금지(개인정보)라 비가역 해시만 남긴다. 정규화 후 해시라
+    대소문자/공백 차이로 같은 계정이 다른 태그로 흩어지지 않고, 미존재 이메일도
+    동일 규칙이라 로그가 실존/미존재를 구분하지 않는다(비열거 중립). 실패 로그를
+    이 태그로 묶으면 '분산 IP가 한 계정을 노리는' 징후를 사후 집계할 수 있다.
+    """
+    return hmac.new(
+        settings.token_pepper.get_secret_value().encode("utf-8"),
+        _normalize_email(email).encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()[:16]
+
+
 # 타이밍 평탄화용 고정 더미 해시. 비번과 무관하게 항상 같은 값이라 import 시 1회 생성한다.
 # lazy로 미루면 첫 호출(최초 로그인 실패/중복 가입) 때 bcrypt(~300ms)가 이벤트 루프를
 # 블로킹한다. 부팅 시점(루프 없음)에 미리 내면 무해. _prehash/_hash_sync 정의 이후라 OK.

@@ -7,6 +7,7 @@
 import uuid
 from typing import Annotated
 
+import structlog
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response, status
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -39,6 +40,7 @@ from src.schemas.auth import (
 from src.services import auth_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+logger = structlog.get_logger(__name__)
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 CurrentUser = Annotated[User, Depends(get_current_user)]
@@ -84,15 +86,23 @@ async def signup(
 )
 async def login(
     body: LoginRequest,
+    request: Request,
     response: Response,
     session: SessionDep,
 ) -> User:
+    # 관측 신호(F1, lockout 보류 결정): 로그인 시도를 구조화 로그로 남겨 '분산 IP가
+    # 한 계정을 노리는' 징후를 사후 집계한다. target은 평문 이메일이 아닌 비가역 해시,
+    # ip는 mask_pii가 /24까지 마스킹. 실패는 실존/미존재를 구분하지 않는다(비열거).
+    tag = auth_service.email_login_tag(body.email)
+    client_ip = request.client.host if request.client else None
     try:
         user, access, refresh = await auth_service.login(body.email, body.password, session)
     except InvalidCredentialsError as exc:
+        logger.info("auth.login", outcome="fail", target=tag, ip=client_ip)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail=_INVALID_CREDENTIALS
         ) from exc
+    logger.info("auth.login", outcome="success", user_id=str(user.id), target=tag, ip=client_ip)
     set_auth_cookies(response, access, refresh)
     return user
 
