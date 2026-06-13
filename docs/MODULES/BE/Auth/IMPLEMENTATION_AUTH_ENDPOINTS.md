@@ -98,7 +98,7 @@ service가 commit을 소유한다(레이어 분리): `signup`(신규 경로)·`l
 
 ## 8. 검증
 
-`uv run pytest` - 기존 단위 17개 통과. 신규 통합 15개는 **httpx `ASGITransport`**로 작성(TestClient는 자체 이벤트 루프라 session-scope async `db_session`(asyncpg)과 루프가 어긋나 `different loop` 에러 → 같은 루프에서 앱을 돌리는 ASGITransport로 회피). HIBP·이메일 발송은 mock. **현재 환경에 docker/Postgres가 없어 DB 의존 테스트는 미실행 상태**(기존 `test_token` 6개도 동일 사유로 대기). Postgres 기동 후 전체 그린 확인 예정.
+`uv run pytest` - 기존 단위 17개 통과. 신규 통합 15개는 **httpx `ASGITransport`**로 작성(TestClient는 자체 이벤트 루프라 session-scope async `db_session`(asyncpg)과 루프가 어긋나 `different loop` 에러 → 같은 루프에서 앱을 돌리는 ASGITransport로 회피). HIBP·이메일 발송은 mock. **이후 Postgres 기동 후 DB 통합 테스트 포함 전체 그린 확인 완료** (~2026-06-14, `uv run pytest` 67개 통과).
 
 | 테스트 그룹 | 확인 |
 |------------|------|

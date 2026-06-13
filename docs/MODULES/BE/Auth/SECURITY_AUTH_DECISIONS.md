@@ -4,7 +4,7 @@
 |------|------|
 | 영역 | BE (+ FE 쿠키 처리) |
 | 대상 마일스톤 | M1 (인증: 이메일 + 구글) |
-| 상태 | A1·B1~B3·C·E1~E3·I1·I2(IP rate limit)·I3(CORS) 구현 완료(~2026-06-12), D(OAuth)·F 계정 lockout는 설계 확정·구현 전 |
+| 상태 | A1·B1~B3·C·E1~E3·I1·I2(IP rate limit)·I3(CORS)·I4(테스트 픽스처 정리+회전 실측 동시성) 구현 완료(~2026-06-14), D(OAuth)·F 계정 lockout는 설계 확정·구현 전 |
 | 작성 | 2026-05-31 (Opus 설계 리뷰 세션) |
 | 근거 | OWASP ASVS, OAuth 2.0 Security BCP, DB_SCHEMA §1, PRD §4.2 |
 
@@ -35,7 +35,7 @@ M1 인증 설계 리뷰에서 확정한 보안 결정을 한곳에 모은 문서
 - 이미 revoke된(=회전 지난) 토큰이 다시 들어오면 **탈취 신호**로 간주 → 해당 유저 refresh **전체 revoke**(세션 강제 종료).
 - 근거: OAuth 2.0 Security BCP의 refresh token rotation 권장.
 - 회전 시 기존 revoke + 신규 발급은 **단일 트랜잭션**.
-- **회전 revoke 원자화 (I1, 2026-06-10)**: 락 없는 `SELECT→revoke→INSERT`는 동시 2요청이 한 옛 토큰에서 새 토큰 2개를 발급하는 race가 있었다(원자성 ≠ 동시성). revoke를 조건부 `UPDATE … WHERE id=? AND revoked_at IS NULL`의 rowcount로 선점(`_claim_refresh_token`)해 **단일 승자만 발급**. 멀티워커에선 앱 락이 무효라 **DB가 유일한 직렬화 지점**(Postgres 행 락 + READ COMMITTED 재평가). **race 패자(rowcount=0) = 401 단순 거부·세션 유지**(동시 더블클릭이라 탈취 아님), 진짜 stale-reuse(SELECT 시점에 이미 revoked)만 전체 revoke. `refresh_tokens.token_hash` UNIQUE 인덱스(`uq_refresh_tokens_token_hash`)가 조회 가속 + 불변식 DB 방어선. 상세: [IMPLEMENTATION_REFRESH_ROTATION_RACE.md](./IMPLEMENTATION_REFRESH_ROTATION_RACE.md), study `db-atomic-claim`.
+- **회전 revoke 원자화 (I1, 2026-06-10)**: 락 없는 `SELECT→revoke→INSERT`는 동시 2요청이 한 옛 토큰에서 새 토큰 2개를 발급하는 race가 있었다(원자성 ≠ 동시성). revoke를 조건부 `UPDATE … WHERE id=? AND revoked_at IS NULL`의 rowcount로 선점(`_claim_refresh_token`)해 **단일 승자만 발급**. 멀티워커에선 앱 락이 무효라 **DB가 유일한 직렬화 지점**(Postgres 행 락 + READ COMMITTED 재평가). **race 패자(rowcount=0) = 401 단순 거부·세션 유지**(동시 더블클릭이라 탈취 아님), 진짜 stale-reuse(SELECT 시점에 이미 revoked)만 전체 revoke. `refresh_tokens.token_hash` UNIQUE 인덱스(`uq_refresh_tokens_token_hash`)가 조회 가속 + 불변식 DB 방어선. **동시성 실측 검증 (I4, 2026-06-14)**: 독립 2세션 `asyncio.gather` + `asyncio.Barrier`로 실제 동시 회전을 재현해 '정확히 1개만 발급(나머지 세션 유지 401)'을 실측 확인(`test_concurrent_rotation_single_winner`). 상세: [IMPLEMENTATION_REFRESH_ROTATION_RACE.md](./IMPLEMENTATION_REFRESH_ROTATION_RACE.md), study `db-atomic-claim`.
 - **로그아웃 = 세션 전체 revoke (확정, 2026-06-05)**: refresh 쿠키가 `Path=/auth/refresh`라 `/auth/logout` 요청엔 전송되지 않아 무효화할 특정 토큰을 받을 수 없다. → access 쿠키로 유저를 식별해 그 유저 refresh를 **전체 revoke**(전 기기 로그아웃). 1인 개인 사이트라 단순·충분하고, access JWT에 session_id를 넣는 복잡도를 피했다. access 만료/무효면 쿠키만 clear(best-effort).
 
 ## 3. 쿠키 정책

@@ -82,7 +82,7 @@
 | `test_unknown_token_returns_none` | 미존재 토큰 None |
 | `test_revoke_all` | 유저 전체 revoke |
 
-> 테스트 인프라: session-scope 엔진을 쓰므로 `asyncio_default_fixture_loop_scope`/`asyncio_default_test_loop_scope` 둘 다 `"session"`. 프리미티브는 commit하지 않고 같은 세션 내 flush 가시성으로 검증된다. `db_session`은 commit된 픽스처(`test_user`)를 위해 테이블 cleanup으로 격리. FK 때문에 `test_user`로 부모 행 선생성. 상세 함정은 `docs/MISTAKES.md` "pytest / 비동기 DB 테스트".
+> 테스트 인프라: session-scope 엔진을 쓰므로 `asyncio_default_fixture_loop_scope`/`asyncio_default_test_loop_scope` 둘 다 `"session"`. 프리미티브는 commit하지 않고 같은 세션 내 flush 가시성으로 검증된다. `db_session`은 commit된 픽스처를 위해 테이블 cleanup으로 격리. FK 부모 행은 conftest 공용 `user` 픽스처로 선생성(I4에서 로컬 `test_user`를 conftest로 승격·통합). 상세 함정은 `docs/MISTAKES.md` "pytest / 비동기 DB 테스트".
 
 ---
 
