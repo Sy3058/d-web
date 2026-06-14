@@ -47,6 +47,7 @@
 ## 검증 체크
 
 - [ ] `ruff check src/` 통과
+- [ ] `ruff format --check src/ tests/` 통과
 - [ ] `pytest` 통과 (테스트 있는 경우)
 - [ ] `uvicorn src.main:app` 정상 실행
 - [ ] 변경된 API 엔드포인트 직접 호출 확인
