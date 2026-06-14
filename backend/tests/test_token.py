@@ -163,21 +163,15 @@ async def test_claim_refresh_token_single_winner(db_session, user):
 async def test_refresh_token_hash_unique(db_session, user):
     """token_hash UNIQUE 인덱스가 같은 해시 중복 INSERT를 차단(회전 불변식 방어선)."""
     expires = datetime.now(UTC) + timedelta(days=7)
-    db_session.add(
-        RefreshToken(user_id=user.id, token_hash="dup-hash", expires_at=expires)
-    )
+    db_session.add(RefreshToken(user_id=user.id, token_hash="dup-hash", expires_at=expires))
     await db_session.flush()
-    db_session.add(
-        RefreshToken(user_id=user.id, token_hash="dup-hash", expires_at=expires)
-    )
+    db_session.add(RefreshToken(user_id=user.id, token_hash="dup-hash", expires_at=expires))
     with pytest.raises(IntegrityError):
         await db_session.flush()
     await db_session.rollback()
 
 
-async def test_concurrent_rotation_single_winner(
-    db_session, user, session_factory, monkeypatch
-):
+async def test_concurrent_rotation_single_winner(db_session, user, session_factory, monkeypatch):
     """실측 동시성: 같은 refresh 토큰으로 두 독립 세션(커넥션 분리)이 동시에 rotate_refresh를
     호출하면 DB 행 락 + READ COMMITTED 재평가로 정확히 하나만 새 토큰을 발급하고 나머지는
     거부된다. I1의 _claim 프록시 테스트(단일 세션)가 못 메운 실제 동시성을 검증한다.
@@ -214,9 +208,7 @@ async def test_concurrent_rotation_single_winner(
 
     # 한 옛 토큰에서 새 토큰이 정확히 1개만 발급(이중 발급 없음) + 세션 유지 확인
     async with session_factory() as verify:
-        result = await verify.exec(
-            select(RefreshToken).where(RefreshToken.user_id == user.id)
-        )
+        result = await verify.exec(select(RefreshToken).where(RefreshToken.user_id == user.id))
         rows = result.all()
     active = [r for r in rows if r.revoked_at is None]
     assert len(active) == 1

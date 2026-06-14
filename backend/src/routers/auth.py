@@ -144,9 +144,7 @@ async def refresh(
             detail="세션이 만료되었습니다. 다시 로그인하세요",
         ) from exc
     except InvalidTokenError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail=_UNAUTHORIZED
-        ) from exc
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=_UNAUTHORIZED) from exc
     set_auth_cookies(response, access, new_refresh)
     return MessageResponse(message="토큰이 갱신되었습니다")
 

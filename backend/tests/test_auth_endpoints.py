@@ -69,9 +69,7 @@ def _set_cookie_value(response, name: str) -> str | None:
 
 
 async def _refresh_tokens(session: AsyncSession, user_id) -> list[RefreshToken]:
-    result = await session.exec(
-        select(RefreshToken).where(RefreshToken.user_id == user_id)
-    )
+    result = await session.exec(select(RefreshToken).where(RefreshToken.user_id == user_id))
     return list(result.all())
 
 
@@ -86,9 +84,7 @@ async def test_signup_new_creates_unverified_user(async_client, db_session, exte
     assert resp.status_code == 200
     assert resp.json()["message"] == "입력하신 주소로 메일을 보냈어요"
 
-    users = (
-        await db_session.exec(select(User).where(User.email == "new@example.com"))
-    ).all()
+    users = (await db_session.exec(select(User).where(User.email == "new@example.com"))).all()
     assert len(users) == 1
     assert users[0].is_email_verified is False
     assert len((await db_session.exec(select(EmailVerification))).all()) == 1
@@ -107,9 +103,7 @@ async def test_signup_duplicate_is_indistinguishable(
     assert resp.status_code == 200
     assert resp.json()["message"] == "입력하신 주소로 메일을 보냈어요"
     # user 추가 생성 없음
-    users = (
-        await db_session.exec(select(User).where(User.email == "user@example.com"))
-    ).all()
+    users = (await db_session.exec(select(User).where(User.email == "user@example.com"))).all()
     assert len(users) == 1
     externals.already.assert_awaited_once()
     externals.verification.assert_not_awaited()
@@ -182,9 +176,7 @@ def test_email_login_tag_is_stable_and_normalized():
     assert "example.com" not in tag  # 평문 미포함(비가역)
 
 
-async def test_login_failure_emits_observability_log(
-    async_client, existing_user, monkeypatch
-):
+async def test_login_failure_emits_observability_log(async_client, existing_user, monkeypatch):
     fake = MagicMock()
     monkeypatch.setattr("src.routers.auth.logger", fake)
     resp = await async_client.post(
@@ -199,9 +191,7 @@ async def test_login_failure_emits_observability_log(
     assert "user_id" not in kwargs  # 실패엔 user_id 미노출(비열거)
 
 
-async def test_login_success_emits_observability_log(
-    async_client, existing_user, monkeypatch
-):
+async def test_login_success_emits_observability_log(async_client, existing_user, monkeypatch):
     fake = MagicMock()
     monkeypatch.setattr("src.routers.auth.logger", fake)
     resp = await async_client.post("/auth/login", json=_LOGIN)
@@ -348,9 +338,7 @@ async def test_verify_email_reuse_rejected(async_client, db_session, existing_us
 
 
 async def test_verify_email_unknown_token_rejected(async_client, existing_user):
-    resp = await async_client.post(
-        "/auth/verify-email", json={"token": "nonexistent-token"}
-    )
+    resp = await async_client.post("/auth/verify-email", json={"token": "nonexistent-token"})
     assert resp.status_code == 400
     assert resp.json()["detail"] == _INVALID_VERIFICATION
 
@@ -384,16 +372,12 @@ async def test_resend_invalidates_old_and_issues_new(
     user_id = existing_user.id
     old_raw = await _issue_verification(db_session, user_id)
 
-    resp = await async_client.post(
-        "/auth/resend-verification", json={"email": _CREDS["email"]}
-    )
+    resp = await async_client.post("/auth/resend-verification", json={"email": _CREDS["email"]})
     assert resp.status_code == 200
     assert resp.json()["message"] == _RESEND_MESSAGE
 
     records = (
-        await db_session.exec(
-            select(EmailVerification).where(EmailVerification.user_id == user_id)
-        )
+        await db_session.exec(select(EmailVerification).where(EmailVerification.user_id == user_id))
     ).all()
     # 기존 1개 무효화(used_at) + 신규 1개 발급(미사용)
     assert len(records) == 2
@@ -417,9 +401,7 @@ async def test_resend_unknown_email_is_silent(async_client, db_session, external
     externals.verification.assert_not_awaited()
 
 
-async def test_resend_already_verified_no_send(
-    async_client, db_session, social_user, externals
-):
+async def test_resend_already_verified_no_send(async_client, db_session, social_user, externals):
     resp = await async_client.post(
         "/auth/resend-verification", json={"email": "social@example.com"}
     )

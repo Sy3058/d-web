@@ -162,8 +162,6 @@ async def test_verification_html_escapes_url(monkeypatch, set_api_key):
         sent["html"] = html
 
     monkeypatch.setattr(email_service, "_send", capture)
-    await email_service.send_verification_email(
-        "user@example.com", 'tok&evil="<script>'
-    )
+    await email_service.send_verification_email("user@example.com", 'tok&evil="<script>')
     # 원본 특수문자가 그대로 출력되면 안 됨
     assert "<script>" not in sent["html"]
