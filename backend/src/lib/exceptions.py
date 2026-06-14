@@ -27,3 +27,18 @@ class TokenReuseError(InvalidTokenError):
 
 class EmailVerificationError(AuthError):
     """이메일 인증 토큰 무효/만료/사용됨 (router → 400, 단일 generic 메시지)."""
+
+
+class OAuthError(AuthError):
+    """소셜 로그인(OAuth/OIDC) 도메인 베이스 예외. router → 프론트로 generic 에러 302."""
+
+
+class OAuthExchangeError(OAuthError):
+    """코드 교환 실패 또는 id_token 검증 실패(서명/aud/iss/exp/nonce) (router → oauth_failed)."""
+
+
+class OAuthEmailExistsError(OAuthError):
+    """소셜 이메일과 같은 비-소셜 계정이 이미 존재 - 자동 병합 금지(DB_SCHEMA Q6).
+
+    router → email_exists. 자동 병합은 계정 탈취 벡터라 의도적으로 거부한다.
+    """
