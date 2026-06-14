@@ -95,9 +95,9 @@
   → 실제 사고: 이미 PR로 squash-merge된 브랜치를 "작업 안 끝남"이라 잘못 보고함
   → 확인법: `git fetch` 후 `git log origin/main --oneline`에 squash 커밋(`... (#PR번호)`) 있는지, 또는 PR 상태 직접 확인
 
-- 이 환경엔 `gh` CLI가 설치돼 있지 않음 (`gh: command not found`)
-  → `gh pr status` 등이 빈/에러 출력을 내도 "PR 없음"으로 단정 금지 (빈 셸 출력 오판 패턴의 변종)
-  → PR 상태는 사용자가 알려주는 GitHub 화면 정보나 `git log origin/main`으로 교차 확인
+- `gh` CLI는 이제 설치·인증돼 있음 (`/usr/bin/gh`, 2026-06-14 확인. 과거 "미설치"는 옛 환경)
+  → `gh issue view`, `gh pr view/list`로 이슈·PR 상태 직접 조회 가능. 이슈 닫기/코멘트는 외부 동작이라 사용자 확인 후
+  → 단 빈/에러 출력을 "없음"으로 단정하는 일반 함정은 여전히 주의. 머지는 `gh`로도 `git log origin/main`(squash 커밋 `... (#PR)`)으로도 교차 확인
 
 - Bash 호출 간 작업 디렉터리(cwd)가 리셋될 수 있음 - 지속을 보장하지 말 것
   → backend 명령은 항상 `cd /home/ash99/project/d-web/backend && uv run ...` 형태로 경로를 명시
@@ -111,6 +111,11 @@
 - 계획 단계에서 사용자 승인 전에 파일 편집(코딩)으로 건너뛰지 말 것
   → 실제 사고: E1에서 "계획 세우자" 단계인데 `config.py`를 바로 Edit하기 시작 → 사용자가 두 번 제지("지금은 계획 세우는 단계야")
   → 계획(Opus)은 "무엇을·어떻게"와 변경 파일 목록까지만. 파일 쓰기는 사용자가 계획에 OK한 뒤 코딩 단계에서. 순서: 계획 → (승인) → 코딩 → 검증 → 커밋
+
+- diff 조각만 보고 "버그"라 단정하기 전에 각 심볼의 실제 정의를 모듈별로 확인할 것
+  → 실제 사고: #27 포맷 diff에서 `routers/auth.py`의 `detail=_UNAUTHORIZED`를 "HTTPException 객체를 detail에 넣은 버그"라 FYI 보고 → 허위 이슈 등록 직전까지 감
+  → 원인: `_UNAUTHORIZED`가 두 모듈에 동명 존재(`routers/auth.py:52`=문자열 메시지, `lib/auth.py:145`=HTTPException 객체). diff 두 조각을 모듈 맥락 없이 한 화면에서 보다 한 바인딩으로 뭉침
+  → 교훈: cross-module 동명 심볼은 같은 게 아님. grep/Read로 각 모듈의 실제 정의를 확인한 뒤에야 버그 단정. squash-merge repo라 허위 이슈는 노이즈만
 
 ## Alembic 마이그레이션
 

@@ -10,7 +10,7 @@ from sentry_sdk.integrations.starlette import StarletteIntegration
 
 from src.config import settings
 from src.lib.logging import configure_logging
-from src.routers import auth
+from src.routers import auth, oauth
 
 
 @asynccontextmanager
@@ -49,6 +49,7 @@ app.add_middleware(
 
 
 app.include_router(auth.router)
+app.include_router(oauth.router)
 
 
 @app.get("/")

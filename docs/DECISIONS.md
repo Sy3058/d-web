@@ -278,9 +278,26 @@
 - env에 평면적으로 두면 환경(dev/prod) 이동 시 4~5군데 동시 수정 필요 → 누락 사고 잦음
 
 **구현 방향**
-- env: `APP_BASE_URL`(독자 사이트), `ADMIN_BASE_URL`(관리자) 두 개만 정의
-- `config.py`에서 `KAKAO_REDIRECT_URI`, `GOOGLE_REDIRECT_URI`, `CORS_ORIGINS` 등을 베이스 URL로 조립
+- env: `APP_BASE_URL`(독자 사이트), `ADMIN_BASE_URL`(관리자), `API_BASE_URL`(백엔드) 세 개 정의
+- `config.py`에서 `CORS_ORIGINS`는 app/admin 베이스로, `KAKAO_REDIRECT_URI`/`GOOGLE_REDIRECT_URI`는 **`API_BASE_URL`**(백엔드)로 조립
 - env에 콜백 URI/CORS 직접 박지 않음
+- ⚠️ 2026-06-14(D1) 정정: OAuth redirect_uri는 **백엔드 주소(`API_BASE_URL`)** 기준. 아래 "구글 OAuth: BFF" 참조. (초기엔 `APP_BASE_URL` 기준이었으나 콜백 수신 주체를 백엔드로 확정하며 변경)
+
+### 구글 OAuth: 백엔드가 콜백 수신 (BFF 표준, M1 D1, 2026-06-14 확정)
+
+**결정: authorization code flow를 백엔드가 받는다(BFF). 프론트는 "구글로 로그인" 버튼만.**
+
+- 업계 표준(NextAuth/Django allauth/Spring Security/Passport)이 전부 백엔드 콜백 수신. IETF "OAuth 2.0 for Browser-Based Apps" BCP도 BFF 권장(토큰을 JS에 두지 말 것).
+- "프론트가 콜백 받기"의 표준형은 브라우저(JS)가 토큰을 직접 교환·보관하는 것이라 우리 규칙(HttpOnly만, JWT localStorage 금지)과 충돌. 초기 문서(`callback.astro`)는 이 점을 놓친 설계라 폐기.
+- `__Host-` host-only 인증 쿠키는 **API 호스트(백엔드)가 자기 응답에서 Set-Cookie** 해야 하므로 백엔드 콜백 수신과 자연 정합.
+- 흐름: `GET /auth/login/google`(state·nonce 쿠키 set + 구글로 302) → 구글 → `GET /auth/callback/google`(백엔드: code 교환·id_token 검증·유저 처리·인증 쿠키 set) → `APP_BASE_URL` 홈으로 302.
+
+**검증/방어 (공식 문서 기준: identity/protocols/oauth2/web-server + openid-connect)**
+- id_token은 `google-auth`로 서명(JWKS)·`iss`·`aud`·`exp` 검증, `nonce`는 수동 대조. JWKS fetch는 sync라 `anyio.to_thread` 오프로드.
+- `state`(CSRF) + `nonce`(replay)를 단명 서명 JWT 쿠키(`oauth_tx`, SameSite=Lax)로 stateless 운반.
+- **PKCE 제외**: 공식 server-side 플로우는 state 기반이고, 컨피덴셜 클라이언트(client_secret 보유)라 코드 탈취돼도 secret 없이는 교환 불가 → PKCE 이득 미미. (원하면 방어심도로 추가 가능)
+- `access_type=offline` 미설정(구글 API 지속 호출 불필요, 로그인엔 id_token만 필요).
+- **자동 병합 금지(Q6)**: 같은 이메일의 비-소셜 계정이 있으면 병합 안 하고 안내. **open redirect 차단**: 복귀경로 파라미터 미지원(홈 고정).
 
 ### 비밀번호 해싱: bcrypt pre-hash + pepper (M1 B1, 2026-06-02 확정)
 

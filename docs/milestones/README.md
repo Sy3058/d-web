@@ -97,11 +97,11 @@ M1 (인증) ──┐
 - [x] JWT 발급/검증 (Access 15분 / Refresh 7일) (B2, PyJWT, 단위 테스트 통과)
 - [x] HttpOnly + Secure + SameSite=Lax 쿠키 발급 (refresh는 SameSite=Strict) (B3, `__Host-` 프리픽스/Path 제한, 단위 테스트 통과)
 - [x] 회원가입 / 로그인 / 로그아웃 / 토큰 갱신 엔드포인트 (그룹 C + `/auth/me`, 비열거·HIBP·회전, 구현+Opus 리뷰 완료, DB 통합 테스트 그린)
-- [ ] 구글 OAuth2 콜백 처리 (신규 시 user + oauth_accounts 동시 생성)
+- [x] 구글 OAuth2 콜백 처리 (D1, BFF 백엔드 수신, 신규 시 user+oauth_accounts 단일 트랜잭션, id_token google-auth 검증, 통합 테스트 8개)
 - [x] 이메일 인증 메일 발송 (1시간 토큰) + 검증 엔드포인트 (E1 Resend 발송 / E2 POST 검증·`uq_email_verifications_token`, 통합 테스트 통과)
 - [x] **미인증 차단 의존성 + 인증 메일 재발송** (E3): `require_verified_email` 가드(함수+단위테스트) + `POST /auth/resend-verification`(비열거 재발송, 직전 토큰 무효화) - 가드 실제 부착은 M3/M4
 - [x] Rate limiting IP 5회/분 (I2: login/signup/resend, limits 기반·`test_rate_limit`) - 계정 lockout은 council 2026-06-14 보류, 대신 로그인 관측 로그(`auth.login`)
-- [ ] 동일 이메일 소셜 별도 계정 안내 메시지 (Q6 결정)
+- [x] 동일 이메일 소셜 별도 계정 (Q6): 백엔드 `email_exists` 거부(자동 병합 금지) 완료 - 사용자 메시지 표시는 G3(프론트)
 - [x] **council 리뷰 fix (선존 이슈, #28)** - ~~refresh 회전 race 원자화 🔴 (I1 ✅)~~ → ~~인증 표면 rate limit IP (I2 ✅)~~ → ~~CORS(I3) ✅~~ → ~~죽은 테스트 픽스처 + 회전 실측 동시성 테스트(I4) ✅~~. 상세는 M1_foundation.md 그룹 I
 
 ### 프론트엔드 (Astro + React 아일랜드)

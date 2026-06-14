@@ -23,8 +23,7 @@ frontend/src/
 │   │   └── [id].astro        # 작품 상세 (SSG)
 │   ├── works/[id]/episodes/[episodeId].astro  # 뷰어 (SSR)
 │   ├── auth/
-│   │   ├── login.astro       # 로그인 (SSG)
-│   │   └── callback.astro    # OAuth 콜백 (SSR)
+│   │   └── login.astro       # 로그인 + 구글 버튼 (SSG). 구글 콜백은 백엔드 수신(BFF), 프론트 콜백 페이지 없음. ?error=로 실패 표시
 │   ├── my/purchases.astro    # 구매 내역 (SSR, 로그인 필수)
 │   └── api/
 │       ├── auth/logout.ts    # POST 엔드포인트 (백엔드 경유)
@@ -33,7 +32,7 @@ frontend/src/
 ├── components/
 │   ├── viewer/EpisodeViewer.tsx    # 세로 스크롤 뷰어 (React, client:idle)
 │   ├── auth/LoginForm.tsx          # 로그인 폼 (React, client:load)
-│   ├── auth/GoogleButton.tsx       # 구글 OAuth (React, client:load)
+│   ├── auth/GoogleButton.tsx       # 구글 로그인 버튼 → 백엔드 /auth/login/google 로 이동(BFF)
 │   ├── payment/PurchaseButton.tsx  # 결제 (React, client:idle)
 │   ├── community/CommentForm.tsx   # 댓글 (React, client:idle)
 │   ├── common/Navbar.astro         # 네비게이션 (Astro)
@@ -88,7 +87,7 @@ frontend/src/
 
 **SSR (동적 렌더링, 선택적)**
 - `export const prerender = false`로 명시
-- OAuth 콜백, 로그인 후 페이지 (구매 내역 등)
+- 로그인 후 페이지 (구매 내역 등). 구글 OAuth 콜백은 백엔드가 받으므로 프론트 SSR 콜백 페이지 없음(BFF)
 
 **클라이언트 페칭 (React 섬)**
 - 댓글, 하트 같은 실시간 데이터

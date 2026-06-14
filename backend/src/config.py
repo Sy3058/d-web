@@ -32,9 +32,12 @@ class Settings(BaseSettings):
     # post-hash라 pepper 교체 시 재-HMAC으로 무중단 로테이션 가능(password_pepper와 다름).
     token_pepper: SecretStr
 
-    # 앱 URL (이 두 값으로 아래 항목들을 조립)
+    # 앱 URL (이 세 값으로 아래 항목들을 조립)
+    # app=독자 사이트, admin=관리자, api=백엔드 공개 주소.
+    # OAuth는 BFF 표준(백엔드가 콜백 수신)이라 redirect_uri는 api_base_url에서 조립한다.
     app_base_url: str
     admin_base_url: str
+    api_base_url: str
 
     # OAuth
     kakao_client_id: str = ""
@@ -76,12 +79,15 @@ class Settings(BaseSettings):
     @computed_field
     @property
     def kakao_redirect_uri(self) -> str:
-        return f"{self.app_base_url}/auth/callback/kakao"
+        # BFF 표준: 콜백을 백엔드가 받으므로 redirect_uri는 api_base_url(백엔드) 기준.
+        return f"{self.api_base_url}/auth/callback/kakao"
 
     @computed_field
     @property
     def google_redirect_uri(self) -> str:
-        return f"{self.app_base_url}/auth/callback/google"
+        # BFF 표준: 콜백을 백엔드가 받으므로 redirect_uri는 api_base_url(백엔드) 기준.
+        # 구글 콘솔의 '승인된 리디렉션 URI'에 이 값과 정확히 일치하게 등록해야 한다.
+        return f"{self.api_base_url}/auth/callback/google"
 
     @computed_field
     @property
