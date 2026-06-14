@@ -2,7 +2,7 @@
 
 | 항목 | 내용 |
 |------|------|
-| 문서 버전 | v0.8 (2026-06-12, I3 CORS 와일드카드 제거: allow_methods/headers를 공유 api.ts 메서드(GET/POST/PUT/DELETE/OPTIONS)+Content-Type으로 제한) |
+| 문서 버전 | v0.9 (2026-06-14, D1 구글 OAuth 구현: BFF 표준(백엔드 콜백 수신), redirect_uri=API_BASE_URL, state/nonce 서명쿠키, PKCE 제외) |
 | 상위 마일스톤 | [M1](./README.md#m1-인증-이메일--구글) |
 | 예상 기간 | 약 3주 (이메일 발송/구글 OAuth 콘솔 왕복 포함) |
 | 완료 기준 | 신규 유저가 이메일/구글로 가입 → 인증 메일 수신 → 로그인 상태로 마이페이지 진입 (그룹 H 체크리스트) |
@@ -168,19 +168,20 @@ git stash pop stash@{0}
 
 > 선행 외부키: M0 A6 (구글 Client ID + 로컬/스테이징 리다이렉트 URI). 카카오(AUTH-03)는 M1.5 이후 사업자 서류 완료 후 별도 진행 - **M1 범위 외** (Q20).
 
-### D1. 구글 OAuth2 콜백 처리
+### D1. 구글 OAuth2 콜백 처리 ✅ 구현 완료 (2026-06-14)
 - 선행: B, A6
-- 산출물: `services/auth_service.py` 구글 토큰 교환·프로필 조회, `routers/auth.py` 콜백 엔드포인트
-- DoD: 구글 동의 → 콜백 → 신규 시 `users` + `oauth_accounts` **단일 트랜잭션** 생성 → JWT 쿠키 발급. 기존 유저는 로그인 처리
+- 산출물: `services/oauth_service.py`(authorize URL·코드 교환·id_token 검증·유저 확정), `routers/oauth.py`(`/auth/login/google`·`/auth/callback/google`), `lib/auth.py` `oauth_tx` 쿠키 헬퍼, `config.py` `API_BASE_URL`
+- DoD: 구글 동의 → 콜백 → 신규 시 `users` + `oauth_accounts` **단일 트랜잭션** 생성 → JWT 쿠키 발급. 기존 유저는 로그인 처리 ✅ (목 기반 통합 테스트 8개)
+- **결정 (확정): 백엔드가 콜백 수신(BFF 표준).** redirect_uri는 `API_BASE_URL`(백엔드)에서 조립. 프론트는 "구글로 로그인" 버튼만(→ `/auth/login/google`). 상세 DECISIONS "구글 OAuth: 백엔드가 콜백 수신".
 - 결정:
-  - 소셜 가입 이메일은 **이미 검증됨**으로 간주 → `is_email_verified=True` 즉시 세팅 (DECISIONS "이메일 인증 필수": 소셜은 별도 인증 생략)
-  - **자동 병합 금지** (Q6): 동일 이메일의 비번 계정이 이미 있으면 병합하지 않고 "이미 해당 이메일로 가입된 계정이 있어요" 안내 → 별도 계정 생성 흐름과 분리
-  - 리다이렉트 URI/CORS는 `config.py`가 `APP_BASE_URL`에서 조립 (env 직박 금지, DECISIONS "환경 베이스 URL")
-  - **id_token 완전 검증**: 구글 OIDC `id_token`의 서명(JWKS)·`iss`·`aud`·`exp` 검증 후 신뢰. 프로필을 검증 없이 신뢰하지 말 것
-  - **open redirect 차단**: 로그인 후 복귀 경로(`next`/`redirect`)는 **same-origin 허용목록**으로만 통과 (외부 URL 리다이렉트 금지)
-- 결정 필요:
-  - OAuth **state(CSRF) 파라미터 저장 위치** - 단기 HttpOnly 쿠키 vs 서버 측 임시 저장. 콜백에서 state 대조 누락 시 CSRF 취약. D1 직전 확정.
-  - **nonce** 사용 여부 - id_token 재생(replay) 방지. state와 함께 발급·대조 권장.
+  - 소셜 이메일 검증 상태는 **구글 `email_verified` claim을 따름**(거의 항상 true). 마일스톤 초안의 "무조건 True"보다 안전(구글이 미검증이라 한 걸 검증됨으로 박지 않음).
+  - **자동 병합 금지** (Q6): 동일 이메일의 비번 계정이 있으면 병합 안 하고 `?error=email_exists` 안내.
+  - 리다이렉트 URI는 `config.py`가 **`API_BASE_URL`**에서 조립 (env 직박 금지). CORS는 app/admin 베이스.
+  - **id_token 완전 검증**: `google-auth` `verify_oauth2_token`으로 서명(JWKS)·`iss`·`aud`·`exp` 검증, `nonce` 수동 대조. JWKS sync fetch는 `anyio.to_thread` 오프로드.
+  - **open redirect 차단**: 복귀경로 파라미터(`next`) 미지원 → 성공 시 `APP_BASE_URL` 홈 고정(외부 URL 리다이렉트 원천 차단).
+- **결정 (확정, 2026-06-14): state·nonce 운반 = 단명 서명 JWT 쿠키(`oauth_tx`).** state(CSRF)·nonce(replay)를 jwt_secret 서명 JWT로 stateless 운반(서버 저장 없음), SameSite=Lax(구글 복귀는 cross-site top-level GET이라 Strict면 미전송), Path=/auth, 10분 만료. 콜백에서 `state`는 `secrets.compare_digest`, `nonce`는 id_token 대조. **PKCE는 제외**(공식 server-side 플로우가 state 기반 + 컨피덴셜 클라이언트라 이득 미미).
+
+> **구현 요약 (2026-06-14)**: BFF 표준(백엔드 콜백 수신)으로 구글 OAuth 구현. `GET /auth/login/google`(state·nonce 생성 → `oauth_tx` 서명쿠키 set → 구글 authorize 302) + `GET /auth/callback/google`(state CSRF 대조 → `oauth_service.exchange_code`(httpx) → `verify_id_token`(google-auth, to_thread) → `resolve_google_user`(sub로 OAuthAccount 조회: 기존 로그인 / 같은 이메일 비-소셜 존재 시 email_exists 거부 / 신규 시 User+OAuthAccount 단일 트랜잭션 생성) → 인증 쿠키 set + 홈 302). 실패는 비열거 generic(`?error=oauth_failed`/`email_exists`)으로 프론트 로그인 302, 쿠키는 RedirectResponse에 직접 set. 산출물: `services/oauth_service.py`, `routers/oauth.py`, `lib/auth.py`(`oauth_tx` 쿠키 3종), `lib/exceptions.py`(`OAuthError`/`OAuthStateError`/`OAuthExchangeError`/`OAuthEmailExistsError`), `config.py`+`.env.example`(`API_BASE_URL`), `main.py`(라우터 등록), `tests/test_oauth.py`(8개). 의존성 `google-auth`(2.54)·`urllib3`(검증 transport, requests 회피). 마이그레이션 불필요(`oauth_accounts` A1 기존). 공식 문서(identity/protocols/oauth2/web-server + openid-connect) 대조로 PKCE·access_type=offline 제외 확정. 검증: pytest 78개 통과·ruff clean·`alembic check` 클린. Opus 자가 검증 Critical/Major 없음(FYI: email_verified claim 신뢰·next 미지원·최초로그인 동시클릭 race). study: [[cookie-security]], [[account-enumeration]].
 
 ---
 
@@ -248,13 +249,13 @@ git stash pop stash@{0}
 ### G2. 로그인 페이지 + 구글 버튼 - AUTH-02 / 04
 - 선행: C2, D1
 - 산출물: `pages/auth/login.astro` + `components/auth/LoginForm.tsx` + `components/auth/GoogleButton.tsx`(`client:load`)
-- DoD: 이메일 로그인 성공 → 쿠키 세팅 후 마이페이지 이동. 구글 버튼 → OAuth 동의 → 콜백 복귀
-- 메모: ⚠️ Astro `SECRET_*` 클라이언트 참조 금지. 구글 Client ID 등 공개 가능 값만 `PUBLIC_*`로.
+- DoD: 이메일 로그인 성공 → 쿠키 세팅 후 마이페이지 이동. 구글 버튼 → 백엔드 `/auth/login/google` 이동 → 동의 → 백엔드가 쿠키 set 후 홈으로 302 복귀
+- 메모: ⚠️ Astro `SECRET_*` 클라이언트 참조 금지. **BFF라 프론트는 구글 Client ID도 불필요**(버튼은 백엔드 login-init로 가는 단순 링크 - `client:load` 불요, 정적 `<a>`로 충분).
 
-### G3. OAuth 콜백 페이지 (SSR)
+### G3. 구글 로그인 실패 표시 (BFF - 프론트 콜백 페이지 없음)
 - 선행: D1
-- 산출물: `pages/auth/callback.astro` (`export const prerender = false`)
-- DoD: 백엔드 콜백 처리 후 쿠키 보유 상태로 원래 페이지/마이페이지로 리다이렉트. 실패 시 로그인 페이지 + 에러 안내
+- 산출물: 별도 콜백 페이지 없음. `login.astro`가 백엔드 콜백이 돌려보내는 `?error=oauth_failed|email_exists` 쿼리를 읽어 안내 표시
+- DoD: 구글 버튼 → 백엔드 경유 동의 → 성공 시 백엔드가 홈으로 302(쿠키 보유). 실패 시 백엔드가 `login.astro?error=...`로 302 → 에러 메시지. (콜백 수신은 백엔드라 프론트 SSR 콜백 페이지 불필요)
 
 ### G4. 이메일 인증 안내 + 재발송
 - 선행: E2, E3
@@ -348,7 +349,7 @@ git stash pop stash@{0}
 | Resend SPF/DKIM 전파 (M0 A4) | 최대 24h, 스팸 분류 | M0에서 첫날 시작했어야 함. 미완료면 E 그룹 전 점검 |
 | 구글 OAuth 동의 화면 인증 (M0 A6) | 미인증 앱 60일 제한 / 사용자 수 제약 | 개발·베타는 테스트 사용자 등록으로 회피, 정식 인증은 M7 |
 | 리프레시 회전/재사용 탐지 | 구현 후 변경 시 쿠키/DB 흐름 재작업 | B2에서 선결정 후 C4 진행 (회전+탐지 권장) |
-| OAuth state/nonce 미설정 | CSRF·id_token replay 취약 | D1 직전 확정, 콜백에서 state·nonce 대조 필수 |
+| OAuth state/nonce 미설정 | CSRF·id_token replay 취약 | ✅ 해소(D1): state·nonce를 `oauth_tx` 서명쿠키로 운반, 콜백에서 state `compare_digest`·nonce id_token 대조 |
 | 인증 쿠키 same-site 전제 | API 별도 도메인 분리 시 로그인 붕괴 | Caddy 단일 도메인 구조 유지(B3), 분리 필요 시 토큰 전략 재설계 |
 
 ---
