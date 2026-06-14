@@ -61,13 +61,9 @@ class User(SQLModel, table=True):
     id: uuid.UUID | None = Field(default=None, sa_column=_pk_column())
     email: str = Field(sa_column=Column(String(255), nullable=False, unique=True))
     # 소셜 전용 가입은 NULL (DB_SCHEMA §1)
-    hashed_password: str | None = Field(
-        default=None, sa_column=Column(String(255), nullable=True)
-    )
+    hashed_password: str | None = Field(default=None, sa_column=Column(String(255), nullable=True))
     nickname: str = Field(sa_column=Column(String(50), nullable=False))
-    profile_image: str | None = Field(
-        default=None, sa_column=Column(Text, nullable=True)
-    )
+    profile_image: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
     is_admin: bool = Field(
         default=False,
         sa_column=Column(Boolean, nullable=False, server_default=text("false")),
@@ -126,9 +122,7 @@ class RefreshToken(SQLModel, table=True):
     user_id: uuid.UUID = Field(sa_column=_fk_user_column())
     # 원문 토큰 저장 금지 - HMAC-SHA256(+TOKEN_PEPPER) 해시만 (DB_SCHEMA §1, M1 B2)
     token_hash: str = Field(sa_column=Column(String(255), nullable=False))
-    expires_at: datetime = Field(
-        sa_column=Column(DateTime(timezone=True), nullable=False)
-    )
+    expires_at: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False))
     created_at: datetime | None = Field(default=None, sa_column=_created_at_column())
     revoked_at: datetime | None = Field(
         default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
@@ -151,9 +145,7 @@ class EmailVerification(SQLModel, table=True):
     # 컬럼명은 token이나 저장값은 해시 (HMAC-SHA256+pepper). 원문은 메일 링크에만 (M1 E1)
     token: str = Field(sa_column=Column(String(255), nullable=False))
     # 발급 후 1시간 (DB_SCHEMA §1)
-    expires_at: datetime = Field(
-        sa_column=Column(DateTime(timezone=True), nullable=False)
-    )
+    expires_at: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False))
     used_at: datetime | None = Field(
         default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
     )

@@ -142,9 +142,7 @@ def clear_auth_cookies(response: Response) -> None:
 # 현재 유저 의존성 (M1 C5 /auth/me, 후속 보호 라우트 공용)
 # ---------------------------------------------------------------------------
 
-_UNAUTHORIZED = HTTPException(
-    status_code=status.HTTP_401_UNAUTHORIZED, detail="인증이 필요합니다"
-)
+_UNAUTHORIZED = HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="인증이 필요합니다")
 
 
 async def get_current_user(

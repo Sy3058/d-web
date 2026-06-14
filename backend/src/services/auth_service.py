@@ -121,9 +121,7 @@ async def get_refresh_token(raw: str, session: AsyncSession) -> RefreshToken | N
     revoked/만료 여부는 호출자가 판단한다. revoke된 행도 반환해야 C4 재사용 탐지 가능.
     """
     token_hash = _hash_token(raw)
-    result = await session.exec(
-        select(RefreshToken).where(RefreshToken.token_hash == token_hash)
-    )
+    result = await session.exec(select(RefreshToken).where(RefreshToken.token_hash == token_hash))
     return result.first()
 
 
@@ -210,11 +208,7 @@ async def verify_email(raw_token: str, session: AsyncSession) -> None:
         select(EmailVerification).where(EmailVerification.token == token_hash)
     )
     record = result.first()
-    if (
-        record is None
-        or record.used_at is not None
-        or record.expires_at <= datetime.now(UTC)
-    ):
+    if record is None or record.used_at is not None or record.expires_at <= datetime.now(UTC):
         raise EmailVerificationError
 
     user = await session.get(User, record.user_id)
@@ -231,9 +225,7 @@ async def verify_email(raw_token: str, session: AsyncSession) -> None:
     await session.commit()
 
 
-async def invalidate_email_verifications(
-    user_id: uuid.UUID, session: AsyncSession
-) -> None:
+async def invalidate_email_verifications(user_id: uuid.UUID, session: AsyncSession) -> None:
     """유저의 미사용 이메일 인증 토큰을 전부 무효화(used_at 세팅). commit은 호출자 책임.
 
     재발송(E3) 시 직전 토큰들을 죽여 '최신 메일 링크만 동작'을 보장한다.
@@ -303,9 +295,7 @@ async def get_user_by_email(email: str, session: AsyncSession) -> User | None:
     return result.first()
 
 
-async def create_user(
-    email: str, password: str, nickname: str, session: AsyncSession
-) -> User:
+async def create_user(email: str, password: str, nickname: str, session: AsyncSession) -> User:
     """이메일/비번 유저를 미인증 상태로 생성(flush). commit은 호출자 책임."""
     user = User(
         email=_normalize_email(email),
@@ -370,14 +360,10 @@ async def resend_verification(
     await invalidate_email_verifications(user.id, session)
     raw_token = await create_email_verification(user.id, session)
     await session.commit()
-    background_tasks.add_task(
-        email_service.send_verification_email, user.email, raw_token
-    )
+    background_tasks.add_task(email_service.send_verification_email, user.email, raw_token)
 
 
-async def login(
-    email: str, password: str, session: AsyncSession
-) -> tuple[User, str, str]:
+async def login(email: str, password: str, session: AsyncSession) -> tuple[User, str, str]:
     """이메일/비번 검증 후 (user, access_token, refresh_token) 반환. 실패 시 401 매핑.
 
     미존재/소셜전용 계정도 더미 해시를 돌려 응답 시간을 맞춘다(비열거).
