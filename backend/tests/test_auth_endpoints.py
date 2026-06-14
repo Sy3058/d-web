@@ -7,7 +7,7 @@ HIBP/이메일 발송은 외부 의존이라 mock으로 대체한다.
 
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import pytest_asyncio
@@ -170,6 +170,48 @@ async def test_login_social_only_account_rejected(async_client, social_user):
         "/auth/login", json={"email": "social@example.com", "password": "Whatever1!"}
     )
     assert resp.status_code == 401
+
+
+# --- 관측 신호 (lockout 보류 결정, auth.login 로그) --------------------------
+
+
+def test_email_login_tag_is_stable_and_normalized():
+    tag = auth_service.email_login_tag("User@Example.com ")
+    assert tag == auth_service.email_login_tag("user@example.com")  # 정규화 후 해시
+    assert len(tag) == 16
+    assert "example.com" not in tag  # 평문 미포함(비가역)
+
+
+async def test_login_failure_emits_observability_log(
+    async_client, existing_user, monkeypatch
+):
+    fake = MagicMock()
+    monkeypatch.setattr("src.routers.auth.logger", fake)
+    resp = await async_client.post(
+        "/auth/login", json={"email": EXISTING_USER_EMAIL, "password": "WrongPass1!"}
+    )
+    assert resp.status_code == 401
+    fake.info.assert_called_once()
+    args, kwargs = fake.info.call_args
+    assert args[0] == "auth.login"
+    assert kwargs["outcome"] == "fail"
+    assert kwargs["target"] == auth_service.email_login_tag(EXISTING_USER_EMAIL)
+    assert "user_id" not in kwargs  # 실패엔 user_id 미노출(비열거)
+
+
+async def test_login_success_emits_observability_log(
+    async_client, existing_user, monkeypatch
+):
+    fake = MagicMock()
+    monkeypatch.setattr("src.routers.auth.logger", fake)
+    resp = await async_client.post("/auth/login", json=_LOGIN)
+    assert resp.status_code == 200
+    fake.info.assert_called_once()
+    args, kwargs = fake.info.call_args
+    assert args[0] == "auth.login"
+    assert kwargs["outcome"] == "success"
+    assert kwargs["user_id"] == str(existing_user.id)
+    assert kwargs["target"] == auth_service.email_login_tag(EXISTING_USER_EMAIL)
 
 
 # --- C5 /auth/me ------------------------------------------------------------
