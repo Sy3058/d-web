@@ -68,7 +68,7 @@ M1 (인증) ──┐
 ### 외부 서비스 연결
 - [ ] **SMTP 외부 메일 서비스** 가입 + 발신 도메인 SPF/DKIM 인증 (Resend 또는 SendGrid 무료 플랜)
 - [ ] **토스페이먼츠 샌드박스** 테스트 키 발급 (Q4 결정 - 출시 결정 시 포트원으로 교체)
-- [ ] 구글 OAuth Client ID 발급
+- [x] 구글 OAuth Client ID 발급 (로컬 리다이렉트 URI 등록 완료, 스테이징 URI는 도메인(A1) 후)
 - [ ] UptimeRobot 모니터 등록 (5분 간격)
 
 ### CI/CD
