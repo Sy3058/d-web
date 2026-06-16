@@ -68,6 +68,7 @@
 - 백엔드: @backend/CLAUDE.md
 - 기획 결정: @docs/DECISIONS.md
 - 워크플로우 (브랜치/커밋/PR/블로그/세션종료/검색): @docs/guides/GUIDE_WORKFLOW.md
+- 작업 진행 프레임워크 (goal 입력판 + 고정 루프): @docs/guides/GUIDE_TASK_HARNESS.md
 - 커밋 메시지 형식: @docs/guides/GUIDE_COMMIT.md
 - 코드 리뷰 원칙: @docs/reviews/GUIDE_REVIEW.md
 - 반복 실수: @docs/MISTAKES.md (필요할 때만 호출)
