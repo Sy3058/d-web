@@ -213,9 +213,10 @@
 
 ### F1. lint + test 워크플로우
 - 선행: B1, B5, B6, B7
-- 산출물: `.github/workflows/ci.yml` - PR 시 ruff + pytest + biome/eslint + tsc
+- 산출물: `.github/workflows/ci.yml` - PR 시 ruff + pytest + eslint + tsc
 - DoD: PR 생성 시 5분 내 체크 통과
 - 결정 필요: 변경된 영역만 실행 vs 전체 실행 (`paths` 필터 사용 여부)
+- 메모: 린트는 ESLint로 통일(biome 미채택, DECISIONS "린트/포맷"). frontend는 ESLint 미설정이라 F1 전 `eslint-plugin-astro` 셋업이 선행 필요.
 
 ### F2. build + push 워크플로우
 - 선행: F1, D3
