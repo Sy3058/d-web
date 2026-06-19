@@ -33,7 +33,7 @@
 - [ ] **A3. Cloudflare R2** - 운영 버킷 + **백업 버킷** 2개, S3 호환 access key. *(보류 - E1이 D4에 의존하므로 그룹 D와 함께 보류)*
 - [ ] **A4. Resend (SMTP)** - 발신 도메인 SPF/DKIM DNS 등록. **A1 직후, 첫날 시작** (DKIM 전파 24h).
 - [ ] **A5. 토스페이먼츠 샌드박스** - 클라이언트/시크릿 키. 실 키 교체는 M7.
-- [ ] **A6. 구글 OAuth Client ID** - 로컬 + 스테이징 리다이렉트 URI 양쪽 등록.
+- [x] **A6. 구글 OAuth Client ID** - 로컬 리다이렉트 URI 등록 완료. 스테이징 URI는 도메인(A1)·그룹 D 보류와 함께 후속.
 - [x] **A7. Sentry / UptimeRobot 가입** - Sentry BE/FE 프로젝트 2개 DSN, UptimeRobot 가입까지 (모니터 등록은 E2). *(B4/B9 연동 완료)*
 
 ---
@@ -213,9 +213,10 @@
 
 ### F1. lint + test 워크플로우
 - 선행: B1, B5, B6, B7
-- 산출물: `.github/workflows/ci.yml` - PR 시 ruff + pytest + biome/eslint + tsc
+- 산출물: `.github/workflows/ci.yml` - PR 시 ruff + pytest + eslint + tsc
 - DoD: PR 생성 시 5분 내 체크 통과
 - 결정 필요: 변경된 영역만 실행 vs 전체 실행 (`paths` 필터 사용 여부)
+- 메모: 린트는 ESLint로 통일(biome 미채택, DECISIONS "린트/포맷"). frontend는 ESLint 미설정이라 F1 전 `eslint-plugin-astro` 셋업이 선행 필요.
 
 ### F2. build + push 워크플로우
 - 선행: F1, D3

@@ -1,0 +1,17 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import SignupForm from '../../components/auth/SignupForm';
+---
+
+<BaseLayout title="회원가입">
+  <div class="bg-canvas py-16 px-5">
+    <div class="w-full mx-auto sm:max-w-[400px] sm:rounded-control sm:border sm:border-line sm:bg-paper sm:px-8 sm:py-10">
+      <h1 class="text-xl font-semibold tracking-tight text-ink mb-6">회원가입</h1>
+      <SignupForm client:load />
+      <p class="mt-8 text-sm text-muted text-center">
+        이미 계정이 있나요?{' '}
+        <a href="/auth/login" class="text-ink underline underline-offset-4">로그인</a>
+      </p>
+    </div>
+  </div>
+</BaseLayout>

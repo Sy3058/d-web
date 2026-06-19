@@ -95,6 +95,16 @@
 
 향후 FastAPI OpenAPI → TS 타입 자동 생성으로 발전 가능.
 
+### 린트/포맷: ESLint로 통일 (biome 미채택, 2026-06-20)
+
+**결정: frontend·admin 모두 ESLint를 쓴다. biome는 채택하지 않는다.**
+
+- admin은 Vite `react-ts` 스캐폴드가 ESLint(flat config)를 기본 포함 - 이미 동작 중(`admin/eslint.config.js`).
+- frontend(Astro)는 스캐폴드에 린트 미포함 → ESLint를 별도 도입 예정(`eslint-plugin-astro`). Astro는 ESLint+Prettier 조합 지원이 성숙.
+- **biome 탈락 이유**: (a) `.astro` 파일 린트/포맷 지원이 제한적, (b) admin이 이미 ESLint라 통일 시 추가 마이그레이션 불필요. Rust 속도 이점보다 일관성·생태계를 우선.
+- 명령은 pnpm 워크스페이스로 통일: `pnpm --filter <pkg> lint`.
+- frontend ESLint 실제 셋업은 M0 CI(F1) 작업 범위. (린트는 React와 무관 - admin/frontend 차이는 스캐폴드 기본값 때문이지 React 사용 여부가 아님)
+
 ---
 
 ## 백엔드 스택 결정

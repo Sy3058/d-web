@@ -1,0 +1,55 @@
+---
+export const prerender = false;
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import LogoutButton from '../../components/auth/LogoutButton';
+import { getMe } from '../../lib/auth';
+
+const cookie = Astro.request.headers.get('cookie') ?? undefined;
+const user = await getMe(cookie);
+
+if (!user) {
+  return Astro.redirect('/auth/login');
+}
+---
+
+<BaseLayout title="마이페이지">
+  <div class="max-w-[720px] mx-auto px-6 py-16">
+    <h1 class="text-2xl font-semibold tracking-tight text-ink mb-8">마이페이지</h1>
+
+    <section class="rounded-control border border-line p-6 mb-6">
+      <h2 class="text-sm font-medium tracking-wide text-muted uppercase mb-4">계정 정보</h2>
+      <dl class="space-y-3">
+        <div class="flex gap-4">
+          <dt class="text-sm text-muted w-20 shrink-0">닉네임</dt>
+          <dd class="text-sm text-ink">{user.nickname}</dd>
+        </div>
+        <div class="flex gap-4">
+          <dt class="text-sm text-muted w-20 shrink-0">이메일</dt>
+          <dd class="text-sm text-ink flex items-center gap-2">
+            {user.email}
+            {!user.is_email_verified && (
+              <a
+                href="/auth/verify-email"
+                class="text-xs text-muted underline underline-offset-4"
+              >
+                인증 필요
+              </a>
+            )}
+          </dd>
+        </div>
+      </dl>
+    </section>
+
+    <section class="rounded-control border border-line p-6 mb-6">
+      <h2 class="text-sm font-medium tracking-wide text-muted uppercase mb-2">구매 내역</h2>
+      <p class="text-sm text-muted">구매 내역 기능은 준비 중이에요.</p>
+    </section>
+
+    <section class="rounded-control border border-line p-6 mb-8">
+      <h2 class="text-sm font-medium tracking-wide text-muted uppercase mb-2">알림 설정</h2>
+      <p class="text-sm text-muted">알림 설정 기능은 준비 중이에요.</p>
+    </section>
+
+    <LogoutButton client:load />
+  </div>
+</BaseLayout>

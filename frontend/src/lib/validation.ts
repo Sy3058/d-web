@@ -1,1 +1,1 @@
-export { loginSchema, type LoginInput } from '@d-web/shared';
+export { loginSchema, signupSchema, type LoginInput, type SignupInput } from '@d-web/shared';

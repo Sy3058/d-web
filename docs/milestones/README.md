@@ -68,11 +68,11 @@ M1 (인증) ──┐
 ### 외부 서비스 연결
 - [ ] **SMTP 외부 메일 서비스** 가입 + 발신 도메인 SPF/DKIM 인증 (Resend 또는 SendGrid 무료 플랜)
 - [ ] **토스페이먼츠 샌드박스** 테스트 키 발급 (Q4 결정 - 출시 결정 시 포트원으로 교체)
-- [ ] 구글 OAuth Client ID 발급
+- [x] 구글 OAuth Client ID 발급 (로컬 리다이렉트 URI 등록 완료, 스테이징 URI는 도메인(A1) 후)
 - [ ] UptimeRobot 모니터 등록 (5분 간격)
 
 ### CI/CD
-- [ ] GitHub Actions: lint(ruff/biome) + test + build
+- [ ] GitHub Actions: lint(ruff + eslint) + test + build
 - [ ] main 머지 시 스테이징 자동 배포 (docker pull → compose up)
 - [ ] PR 템플릿/이슈 템플릿 동작 확인
 
@@ -105,10 +105,13 @@ M1 (인증) ──┐
 - [x] **council 리뷰 fix (선존 이슈, #28)** - ~~refresh 회전 race 원자화 🔴 (I1 ✅)~~ → ~~인증 표면 rate limit IP (I2 ✅)~~ → ~~CORS(I3) ✅~~ → ~~죽은 테스트 픽스처 + 회전 실측 동시성 테스트(I4) ✅~~. 상세는 M1_foundation.md 그룹 I
 
 ### 프론트엔드 (Astro + React 아일랜드)
-- [ ] 회원가입 / 로그인 페이지 (이메일 + 구글 버튼)
-- [ ] OAuth 콜백 페이지 (SSR)
-- [ ] 이메일 인증 안내 페이지 + 재발송 버튼
-- [ ] 마이페이지 골격 (구매 목록은 M3, 알림 설정은 M6에서 채움)
+- [x] 회원가입 / 로그인 페이지 (이메일 + 구글 버튼) (G1/G2, RHF+Zod, 구글 버튼은 백엔드 login-init 링크)
+- [x] 구글 로그인 실패 표시 (G3, BFF - 프론트 콜백 페이지 없음, `login.astro`가 `?error=` 표시)
+- [x] 이메일 인증 안내 페이지 + 재발송 버튼 (G4, `verify-email.astro` + VerifyEmail 아일랜드, 429 표시)
+- [x] 마이페이지 골격 (G5, SSR, `/auth/me`로 로그인 판정·미로그인 리다이렉트. 구매 목록 M3·알림 M6은 placeholder)
+
+> 프론트 인증 UI(그룹 G)는 **구현·커밋 완료, 브랜치 `fe/feat/auth-pages` PR·Opus 리뷰 전** (BE 항목 `[x]`=구현+리뷰 완료와 구분).
+> ⚠️ 네비 로그인 상태(NavUser)는 SSG+HttpOnly라 콜드로드 첫 프레임에 깜빡임 - 힌트 쿠키/SSR fix는 후속 PR로 분리.
 
 > ⚠️ JWT는 HttpOnly 쿠키만 사용. localStorage 저장 절대 금지.
 > ⚠️ Astro `SECRET_*` 환경변수는 빌드 타임 HTML에 노출되므로 클라이언트 코드에서 참조 금지.

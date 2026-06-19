@@ -2,7 +2,7 @@
 
 | 항목 | 내용 |
 |------|------|
-| 문서 버전 | v0.9 (2026-06-14, D1 구글 OAuth 구현: BFF 표준(백엔드 콜백 수신), redirect_uri=API_BASE_URL, state/nonce 서명쿠키, PKCE 제외) |
+| 문서 버전 | v0.10 (2026-06-20, 그룹 G 프론트 인증 UI 구현: signup/login/verify-email/my + NavUser, BFF G3 콜백페이지 없음. 네비 깜빡임 fix는 후속 PR) |
 | 상위 마일스톤 | [M1](./README.md#m1-인증-이메일--구글) |
 | 예상 기간 | 약 3주 (이메일 발송/구글 OAuth 콘솔 왕복 포함) |
 | 완료 기준 | 신규 유저가 이메일/구글로 가입 → 인증 메일 수신 → 로그인 상태로 마이페이지 진입 (그룹 H 체크리스트) |
@@ -241,32 +241,34 @@ git stash pop stash@{0}
 > frontend/CLAUDE.md 패턴: 인증·OAuth는 `client:load`. 쿠키는 HttpOnly라 JS 접근 불가 → 로그인 상태는 SSR(`Astro.request.headers`)로 판정. fetch는 `credentials: 'include'`.
 > M0 B6 deferred 보강을 여기서 함께 처리: `lib/validation.ts` zod v4 `z.email()` 전환, `lib/api.ts` FastAPI `{"detail": ...}` JSON 파싱, `frontend/.env.example`에 `PUBLIC_API_BASE_URL` 문서화.
 
-### G1. 회원가입 페이지 - AUTH-01
+### G1. 회원가입 페이지 - AUTH-01 ✅ 구현 (2026-06-20)
 - 선행: C1 계약 확정
 - 산출물: `pages/auth/signup.astro` + `components/auth/SignupForm.tsx`(`client:load`), `packages/shared` Zod 스키마 재사용(react-hook-form + Zod)
 - DoD: 비번 정책 클라이언트 검증 + 서버 422 에러 표시. 가입 성공 → 이메일 인증 안내 페이지로 이동
 
-### G2. 로그인 페이지 + 구글 버튼 - AUTH-02 / 04
+### G2. 로그인 페이지 + 구글 버튼 - AUTH-02 / 04 ✅ 구현 (2026-06-20)
 - 선행: C2, D1
 - 산출물: `pages/auth/login.astro` + `components/auth/LoginForm.tsx` + `components/auth/GoogleButton.tsx`(`client:load`)
 - DoD: 이메일 로그인 성공 → 쿠키 세팅 후 마이페이지 이동. 구글 버튼 → 백엔드 `/auth/login/google` 이동 → 동의 → 백엔드가 쿠키 set 후 홈으로 302 복귀
 - 메모: ⚠️ Astro `SECRET_*` 클라이언트 참조 금지. **BFF라 프론트는 구글 Client ID도 불필요**(버튼은 백엔드 login-init로 가는 단순 링크 - `client:load` 불요, 정적 `<a>`로 충분).
 
-### G3. 구글 로그인 실패 표시 (BFF - 프론트 콜백 페이지 없음)
+### G3. 구글 로그인 실패 표시 (BFF - 프론트 콜백 페이지 없음) ✅ 구현 (2026-06-20)
 - 선행: D1
 - 산출물: 별도 콜백 페이지 없음. `login.astro`가 백엔드 콜백이 돌려보내는 `?error=oauth_failed|email_exists` 쿼리를 읽어 안내 표시
 - DoD: 구글 버튼 → 백엔드 경유 동의 → 성공 시 백엔드가 홈으로 302(쿠키 보유). 실패 시 백엔드가 `login.astro?error=...`로 302 → 에러 메시지. (콜백 수신은 백엔드라 프론트 SSR 콜백 페이지 불필요)
 
-### G4. 이메일 인증 안내 + 재발송
+### G4. 이메일 인증 안내 + 재발송 ✅ 구현 (2026-06-20)
 - 선행: E2, E3
 - 산출물: `pages/auth/verify-email.astro` (안내 + 재발송 버튼 React 아일랜드)
 - DoD: 메일 링크 클릭 → 검증 성공 화면. 재발송 버튼 동작(쿨다운/429 표시)
 
-### G5. 마이페이지 골격 (SSR, 로그인 필수)
+### G5. 마이페이지 골격 (SSR, 로그인 필수) ✅ 구현 (2026-06-20)
 - 선행: C5
 - 산출물: `pages/my/index.astro` (`prerender = false`, 쿠키를 `/auth/me`로 전달해 로그인 판정, 401이면 로그인 페이지 리다이렉트)
 - DoD: 로그인 유저 진입 시 `/auth/me` 응답의 닉네임/이메일 표시
 - 메모: 구매 목록(M3)·알림 설정(M6) 영역은 placeholder만.
+
+> **구현 요약 (2026-06-20)**: 그룹 G(독자 사이트 인증 UI) 구현. 산출물: `pages/auth/{signup,login,verify-email}.astro` + `pages/my/index.astro`(SSR `prerender=false`), `components/auth/{SignupForm,LoginForm,VerifyEmail,LogoutButton}.tsx`(`client:load`) + `GoogleButton.astro`(백엔드 `/auth/login/google`로 가는 정적 링크) + `ui.tsx`(공용 폼 UI), `components/common/NavUser.tsx`(네비 로그인 상태, `client:idle`). 폼 검증 RHF+Zod(회원가입 스키마는 `packages/shared`). 로그인·마이페이지는 SSR - 서버에서 `getMe(cookie)`로 판정하고 미로그인 시 `/auth/login` 302. 구글 실패는 `login.astro`가 `?error=oauth_failed|email_exists` 표시(G3, 프론트 콜백 페이지 없음). 인증 상태는 HttpOnly 쿠키만(`frontend/src` localStorage 0건), fetch는 `credentials:'include'`(shared `api.ts`). 동반: SSR node adapter(`astro.config.mjs`), RHF/Zod 의존성, 디자인 토큰 통일(`globals.css`/`BaseLayout`/`Footer`), `docs/guides/GUIDE_ASTRO.md`·`docs/DESIGN.md` 신설. ⚠️ **알려진 한계**: NavUser는 SSG+HttpOnly 조합이라 콜드로드 첫 프레임에 "로그인" 링크가 잠깐 보이는 깜빡임이 남음 - 비-HttpOnly 닉네임 힌트 쿠키 또는 SSR 방식 fix를 **후속 PR**로 분리. **상태: 구현·커밋 완료, 브랜치 `fe/feat/auth-pages` PR·Opus 리뷰 전** (BE 그룹들의 "구현 완료 + Opus 자가 검증"과 달리 아직 미검증). study: [[astro-auth-ui-state]], [[ssg-ssr-cdn-caching]].
 
 ---
 

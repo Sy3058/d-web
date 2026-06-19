@@ -32,7 +32,7 @@
 1. **`routeTree.gen.ts` ↔ `tsc -b` chicken-egg**
    - `build` 스크립트가 `tsc -b && vite build` 순서라 tsc가 **먼저** 돈다. 그런데 이 파일은 vite(플러그인)가 생성한다.
    - 따라서 파일이 없는 fresh checkout / CI에서 tsc가 `Cannot find module './routeTree.gen'`로 실패 → **반드시 커밋**해 둬야 함. **gitignore 추가 금지.**
-   - 파일 헤더에 `@ts-nocheck` + `/* eslint-disable */`가 있어 tsc/eslint는 안전하나, **biome 도입(F1) 시 포맷 대상이 될 수 있으니 ignore 등록** 필요.
+   - 파일 헤더에 `@ts-nocheck` + `/* eslint-disable */`가 있어 tsc/eslint는 안전. (린트는 ESLint로 통일·biome 미채택로 확정(2026-06-20, DECISIONS) → 기존 biome ignore 우려는 해소됨)
 
 2. **eslint `react-refresh/only-export-components` false positive**
    - 라우트 파일은 `export const Route` + 로컬 컴포넌트(`function Home`) 구조라 이 룰이 error를 낸다.
