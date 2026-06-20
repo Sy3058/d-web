@@ -329,19 +329,19 @@ bcrypt( base64( hmac_sha384(password, key=PASSWORD_PEPPER) ), gensalt(cost=12) )
 - **제약: pre-hash pepper는 로테이션 불가** - 교체하려면 원문 비번이 필요해 전 유저 비번 재설정 강제. (토큰 pepper는 post-hash라 재-HMAC으로 로테이션 가능)
 - 상세 원리: study `secret-hashing`, 계획: `docs/milestones/M1_foundation.md` B1.
 
-### 네비 로그인 표시: 비-HttpOnly 닉네임 힌트 쿠키 (2026-06-21 확정)
+### 네비 로그인 표시: 비-HttpOnly 힌트 쿠키 + pre-paint 인라인 스크립트 (2026-06-21 확정)
 
-**결정: 인증 쿠키와 나란히 표시 전용 `login_hint`(비-HttpOnly) 쿠키를 발급해, 독자 사이트 네비의 로그인/닉네임 라벨을 네트워크 왕복 없이 그린다.**
+**결정: 인증 쿠키와 나란히 표시 전용 `login_hint`(비-HttpOnly) 쿠키를 발급하고, 네비 라벨을 React 섬이 아니라 정적 `<a>` + 페인트 전 동기 인라인 스크립트로 채워, 로그인/닉네임을 네트워크 왕복·깜빡임 없이(0프레임) 그린다.**
 
-- **문제**: 네비(`NavUser`)는 SSG라 빌드 HTML에 로그인 상태가 없다. `getMe()` 왕복으로 채우면 콜드 로드마다 "빈 칸 → 닉네임" 깜빡임이 보인다.
+- **문제**: 네비 라벨은 SSG라 빌드 HTML에 로그인 상태가 없다. `getMe()` 왕복으로 채우면 콜드 로드마다 "빈 칸 → 닉네임" 깜빡임이 보인다.
 - **라벨 출처 = 리프레시 수명**: `getMe` 401은 access(15분) 만료일 수 있어 로그아웃과 구분되지 않는다 → 라벨 gate에 못 쓴다. 라벨은 리프레시 토큰 수명(7일)과 함께 가는 힌트 쿠키가 출처여야 한다.
-- **왜 비-HttpOnly가 안전한가**: 표시용(비민감 닉네임)이라 노출/위조돼도 인가에 영향이 없다. 서버는 이 값을 인증/인가에 전혀 쓰지 않는다(진짜 인증은 HttpOnly JWT 그대로). FE 섬이 `document.cookie`로 동기로 읽어야 하므로 HttpOnly면 목적 자체가 불가능.
+- **왜 비-HttpOnly가 안전한가**: 표시용(비민감 닉네임)이라 노출/위조돼도 인가에 영향이 없다. 서버는 이 값을 인증/인가에 전혀 쓰지 않는다(진짜 인증은 HttpOnly JWT 그대로). FE가 `document.cookie`로 동기로 읽어야 하므로 HttpOnly면 목적 자체가 불가능.
 - **속성**: `Path=/`, `SameSite=Lax`, `Secure`는 env 분기, `Max-Age`=리프레시 수명. `__Host-` 프리픽스는 미사용(JS가 dev/운영 무관하게 고정 이름으로 읽게).
 - **인젝션 차단**: 닉네임은 `quote(nickname, safe="")`로 URL 인코딩 후 set, FE는 `decodeURIComponent`로 복원. 쿠키/헤더 인젝션(`;`·CRLF) 방어.
 - **set/clear는 인증 쿠키와 한 함수**(`set_auth_cookies`/`clear_auth_cookies`)에서 → 둘이 항상 함께 발급/제거되어 desync(한쪽 누락) 구조적 차단.
-- **탈락**: 0프레임 pre-paint 인라인 스크립트(React 섬과 조율 까다로움)·네비 SSR화(SSG/CDN 캐시 포기) - 둘 다 과함. 쿠키+useEffect(하이드레이션 1틱)가 가장 싸고 SSG 유지.
+- **표시 방식 = pre-paint 인라인 스크립트(React 섬 제거)**: 쿠키+useEffect(React 섬)는 네트워크 왕복은 없애도 첫 페인트가 빈 칸이고 하이드레이션 1틱 뒤에야 닉네임이 채워져 "빈 칸→이름" 레이아웃 시프트가 남는다. 그래서 라벨을 React 섬에서 빼 순수 `<a id="nav-user">`로 두고, 바로 뒤 `<script is:inline>`(동기·파서 차단)가 **첫 페인트 전에** 쿠키를 읽어 보정한다 → 0프레임. (study no-flash-inline-script: 인라인 스크립트는 순수 HTML 대상일 때 빛난다.) **네비 SSR화는 탈락** - SSG/CDN 캐시를 포기해야 해 과함.
 - **제약(stale)**: 닉네임 변경 시 다음 refresh/login 전까지 옛 닉네임 표시(표시용이라 허용. 닉네임 변경 기능 자체 미구현).
-- 구현: BE는 `set_auth_cookies`(로그인/갱신/OAuth)·`clear_auth_cookies`(로그아웃/refresh 재사용)에서 발급/제거. FE 소비(`NavUser`)는 후속. study `astro-auth-ui-state`, `no-flash-inline-script`.
+- 구현: BE는 `set_auth_cookies`(로그인/갱신/OAuth)·`clear_auth_cookies`(로그아웃/refresh 재사용)에서 발급/제거. FE는 `Navbar.astro`의 정적 `<a id="nav-user">` + pre-paint `is:inline` 스크립트가 쿠키를 읽어 보정(React 섬 `NavUser.tsx`는 제거). study `astro-auth-ui-state`, `no-flash-inline-script`.
 
 ---
 
