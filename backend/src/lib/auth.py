@@ -12,6 +12,7 @@ payload 구조:
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
+from urllib.parse import quote
 
 import jwt
 from fastapi import Depends, HTTPException, Request, Response, status
@@ -83,6 +84,11 @@ def decode_token(token: str) -> dict[str, Any]:
 REFRESH_COOKIE_NAME = "refresh_token"
 REFRESH_COOKIE_PATH = "/auth/refresh"
 
+# 네비 표시용 힌트 쿠키. 비-HttpOnly: FE 섬이 document.cookie로 직접 읽어야 한다.
+# 인증이 아니라 표시용이라 노출/위조돼도 인가 영향이 없다(서버는 이 값을 신뢰하지 않는다).
+# access의 __Host- 프리픽스는 안 붙인다 - JS가 dev/운영 무관하게 고정 이름으로 읽게 한다.
+LOGIN_HINT_COOKIE_NAME = "login_hint"
+
 
 def access_cookie_name() -> str:
     """access 쿠키 이름. 운영(Secure)에서만 __Host- 프리픽스를 붙인다.
@@ -92,8 +98,15 @@ def access_cookie_name() -> str:
     return "__Host-access_token" if settings.cookie_secure else "access_token"
 
 
-def set_auth_cookies(response: Response, access_token: str, refresh_token: str) -> None:
-    """응답에 access/refresh 쿠키를 set. C2 로그인·C4 갱신·D1 OAuth에서 사용."""
+def set_auth_cookies(
+    response: Response, access_token: str, refresh_token: str, nickname: str
+) -> None:
+    """access/refresh + 네비 표시용 login_hint 쿠키를 set. 로그인·갱신·OAuth 공용.
+
+    login_hint는 인증 쿠키와 같은 함수에서 발급해 둘이 항상 함께 set/clear되도록 한다
+    (한쪽 누락 desync 방지). 라벨 출처는 access(15분)가 아니라 refresh 수명에 맞춘다 -
+    getMe 401은 access 만료일 수 있어 로그아웃과 구분되지 않으므로 라벨 gate에 쓸 수 없다.
+    """
     secure = settings.cookie_secure
     response.set_cookie(
         key=access_cookie_name(),
@@ -112,6 +125,17 @@ def set_auth_cookies(response: Response, access_token: str, refresh_token: str) 
         httponly=True,
         secure=secure,
         samesite="strict",
+    )
+    # 닉네임은 한글/특수문자 가능 -> quote(safe="")로 URL 인코딩해 쿠키/헤더 인젝션을 차단한다.
+    # FE는 document.cookie로 읽어 decodeURIComponent로 복원한다. httponly=False는 의도된 것.
+    response.set_cookie(
+        key=LOGIN_HINT_COOKIE_NAME,
+        value=quote(nickname, safe=""),
+        max_age=settings.jwt_refresh_token_expire_days * 86400,
+        path="/",
+        httponly=False,
+        secure=secure,
+        samesite="lax",
     )
 
 
@@ -135,6 +159,14 @@ def clear_auth_cookies(response: Response) -> None:
         httponly=True,
         secure=secure,
         samesite="strict",
+    )
+    # login_hint도 함께 제거. set 때와 path·secure·samesite·httponly가 일치해야 브라우저가 지운다.
+    response.delete_cookie(
+        key=LOGIN_HINT_COOKIE_NAME,
+        path="/",
+        httponly=False,
+        secure=secure,
+        samesite="lax",
     )
 
 

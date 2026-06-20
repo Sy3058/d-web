@@ -4,10 +4,13 @@
 Set-Cookie 헤더의 플래그가 정확한지 검증한다.
 """
 
+from urllib.parse import quote
+
 from fastapi import Response
 
 from src.config import settings
 from src.lib.auth import (
+    LOGIN_HINT_COOKIE_NAME,
     REFRESH_COOKIE_NAME,
     REFRESH_COOKIE_PATH,
     access_cookie_name,
@@ -51,9 +54,9 @@ def test_set_cookies_dev_flags(monkeypatch):
     """로컬(dev): Secure·__Host- 없음, access=Lax/Path=/, refresh=Strict/Path 제한."""
     monkeypatch.setattr(settings, "env", "development")
     resp = Response()
-    set_auth_cookies(resp, "acc-token", "ref-token")
+    set_auth_cookies(resp, "acc-token", "ref-token", "도군")
     headers = _set_cookie_headers(resp)
-    assert len(headers) == 2
+    assert len(headers) == 3
 
     access = _find(headers, "access_token")
     assert "access_token=acc-token" in access
@@ -70,13 +73,20 @@ def test_set_cookies_dev_flags(monkeypatch):
     assert "samesite=strict" in refresh.lower()
     assert "secure" not in refresh.lower()
 
+    # login_hint: 표시용이라 JS가 읽어야 함 -> HttpOnly 금지. Path=/, Lax, dev는 Secure 없음.
+    hint = _find(headers, LOGIN_HINT_COOKIE_NAME)
+    assert "HttpOnly" not in hint
+    assert "Path=/" in hint
+    assert "samesite=lax" in hint.lower()
+    assert "secure" not in hint.lower()
+
 
 def test_set_cookies_prod_flags(monkeypatch):
     """운영(prod): 둘 다 Secure, access만 __Host- 프리픽스 + Path=/."""
     monkeypatch.setattr(settings, "env", "production")
     assert settings.cookie_secure is True
     resp = Response()
-    set_auth_cookies(resp, "acc-token", "ref-token")
+    set_auth_cookies(resp, "acc-token", "ref-token", "도군")
     headers = _set_cookie_headers(resp)
 
     access = _find(headers, "__Host-access_token")
@@ -89,18 +99,43 @@ def test_set_cookies_prod_flags(monkeypatch):
     assert f"Path={REFRESH_COOKIE_PATH}" in refresh
     assert "__host-" not in refresh.lower()  # refresh는 Path 제한이라 프리픽스 제외
 
+    # login_hint: prod는 Secure, 단 __Host- 프리픽스는 안 붙인다(JS가 고정 이름으로 읽음).
+    hint = _find(headers, LOGIN_HINT_COOKIE_NAME)
+    assert "Secure" in hint
+    assert "Path=/" in hint
+    assert "HttpOnly" not in hint
+    assert "__host-" not in hint.lower()
+
 
 def test_set_cookies_max_age(monkeypatch):
     """access=15분, refresh=7일 만료가 Max-Age로 반영."""
     monkeypatch.setattr(settings, "env", "development")
     resp = Response()
-    set_auth_cookies(resp, "acc-token", "ref-token")
+    set_auth_cookies(resp, "acc-token", "ref-token", "도군")
     headers = _set_cookie_headers(resp)
 
     access = _find(headers, "access_token")
     refresh = _find(headers, REFRESH_COOKIE_NAME)
     assert f"Max-Age={settings.jwt_access_token_expire_minutes * 60}" in access
     assert f"Max-Age={settings.jwt_refresh_token_expire_days * 86400}" in refresh
+
+    # 라벨 출처는 리프레시 수명에 맞춘다(access 15분이 아니라).
+    hint = _find(headers, LOGIN_HINT_COOKIE_NAME)
+    assert f"Max-Age={settings.jwt_refresh_token_expire_days * 86400}" in hint
+
+
+def test_login_hint_url_encoded(monkeypatch):
+    """닉네임은 URL 인코딩되어 실린다 - 쿠키/헤더 인젝션(';' '\\r\\n')과 한글 깨짐 방지."""
+    monkeypatch.setattr(settings, "env", "development")
+    resp = Response()
+    set_auth_cookies(resp, "acc-token", "ref-token", "도 군")
+    headers = _set_cookie_headers(resp)
+
+    hint = _find(headers, LOGIN_HINT_COOKIE_NAME)
+    value = hint.split(";")[0]  # "login_hint=%EB..."
+    assert value == f"{LOGIN_HINT_COOKIE_NAME}={quote('도 군', safe='')}"
+    assert "도" not in value  # 원문 한글 미노출
+    assert " " not in value  # 공백도 %20으로 인코딩
 
 
 # ---------------------------------------------------------------------------
@@ -114,11 +149,14 @@ def test_clear_cookies_expire(monkeypatch):
     resp = Response()
     clear_auth_cookies(resp)
     headers = _set_cookie_headers(resp)
-    assert len(headers) == 2
+    assert len(headers) == 3
 
     access = _find(headers, "access_token")
     refresh = _find(headers, REFRESH_COOKIE_NAME)
+    hint = _find(headers, LOGIN_HINT_COOKIE_NAME)
     assert "Max-Age=0" in access
     assert "Max-Age=0" in refresh
+    assert "Max-Age=0" in hint
     assert "Path=/" in access
     assert f"Path={REFRESH_COOKIE_PATH}" in refresh
+    assert "Path=/" in hint
