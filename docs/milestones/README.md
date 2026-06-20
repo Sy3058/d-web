@@ -111,7 +111,7 @@ M1 (인증) ──┐
 - [x] 마이페이지 골격 (G5, SSR, `/auth/me`로 로그인 판정·미로그인 리다이렉트. 구매 목록 M3·알림 M6은 placeholder)
 
 > 프론트 인증 UI(그룹 G)는 **구현·커밋 완료, 브랜치 `fe/feat/auth-pages` PR·Opus 리뷰 전** (BE 항목 `[x]`=구현+리뷰 완료와 구분).
-> ⚠️ 네비 로그인 상태(NavUser)는 SSG+HttpOnly라 콜드로드 첫 프레임에 깜빡임 - 힌트 쿠키/SSR fix는 후속 PR로 분리.
+> ⚠️ 네비 로그인 상태(NavUser)는 SSG+HttpOnly라 콜드로드 첫 프레임에 깜빡임 - 힌트 쿠키/SSR fix는 후속 PR로 분리. → **BE 힌트 쿠키(`login_hint`) 발급 완료**(`be/feat/nav-login-hint-cookie`), FE 소비(NavUser 쿠키 읽기)·깜빡임 해소는 FE PR에서.
 
 > ⚠️ JWT는 HttpOnly 쿠키만 사용. localStorage 저장 절대 금지.
 > ⚠️ Astro `SECRET_*` 환경변수는 빌드 타임 HTML에 노출되므로 클라이언트 코드에서 참조 금지.
