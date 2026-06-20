@@ -103,7 +103,7 @@ async def login(
             status_code=status.HTTP_401_UNAUTHORIZED, detail=_INVALID_CREDENTIALS
         ) from exc
     logger.info("auth.login", outcome="success", user_id=str(user.id), target=tag, ip=client_ip)
-    set_auth_cookies(response, access, refresh)
+    set_auth_cookies(response, access, refresh, user.nickname)
     return user
 
 
@@ -145,7 +145,7 @@ async def refresh(
         ) from exc
     except InvalidTokenError as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=_UNAUTHORIZED) from exc
-    set_auth_cookies(response, access, new_refresh)
+    set_auth_cookies(response, access, new_refresh, user.nickname)
     return MessageResponse(message="토큰이 갱신되었습니다")
 
 

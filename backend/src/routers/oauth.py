@@ -100,6 +100,6 @@ async def google_callback(
         return _fail_redirect("oauth_failed")
 
     redirect = RedirectResponse(url=_HOME_REDIRECT, status_code=status.HTTP_302_FOUND)
-    set_auth_cookies(redirect, access, refresh)
+    set_auth_cookies(redirect, access, refresh, user.nickname)
     clear_oauth_tx_cookie(redirect)
     return redirect
