@@ -1,5 +1,4 @@
 ---
-import NavUser from './NavUser';
 ---
 
 <header class="border-b border-line bg-paper" transition:persist>
@@ -7,7 +6,31 @@ import NavUser from './NavUser';
     <a href="/" class="font-semibold text-base text-ink tracking-tight">도군</a>
     <div class="flex items-center gap-6">
       <a href="/works" class="text-sm font-medium text-ink tracking-wider hover:underline underline-offset-4">작품</a>
-      <NavUser client:idle />
+      <a id="nav-user" href="/auth/login" class="text-sm font-medium text-ink tracking-wider hover:underline underline-offset-4">로그인</a>
     </div>
   </nav>
+  <script is:inline>
+    // 페인트 전 동기 실행: login_hint 쿠키(비-HttpOnly 표시용)를 읽어 네비 라벨을 미리 보정한다.
+    // React 섬(하이드레이션 1틱)·getMe 왕복을 안 쓰므로 첫 프레임부터 닉네임이 보인다(레이아웃 시프트 0).
+    // 표시 전용 - 진짜 인증은 HttpOnly JWT가 담당. 라벨 출처는 리프레시 수명과 함께 가는 힌트 쿠키.
+    (function () {
+      var prefix = 'login_hint=';
+      var entry = document.cookie.split('; ').find(function (c) {
+        return c.indexOf(prefix) === 0;
+      });
+      if (!entry) return;
+      var name = '';
+      try {
+        name = decodeURIComponent(entry.slice(prefix.length));
+      } catch (e) {
+        return;
+      }
+      if (!name) return;
+      var el = document.getElementById('nav-user');
+      if (el) {
+        el.textContent = name;
+        el.setAttribute('href', '/my');
+      }
+    })();
+  </script>
 </header>

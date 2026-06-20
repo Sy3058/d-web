@@ -17,7 +17,6 @@ export default function LoginForm() {
     setFormError('');
     try {
       await api.post('/auth/login', data);
-      sessionStorage.removeItem('session');
       window.location.href = '/my';
     } catch (err) {
       if (err instanceof ApiError) {
