@@ -13,7 +13,6 @@ export default function LogoutButton() {
         // 네트워크 오류도 로그아웃으로 처리
       }
     } finally {
-      sessionStorage.setItem('session', 'out');
       window.location.href = '/';
     }
   }
