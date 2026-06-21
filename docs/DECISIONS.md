@@ -423,3 +423,19 @@ main (항상 배포 가능 상태)
 | Sentry | 코드 에러 추적, 프론트/백엔드 (무료 플랜) |
 | Hetzner 콘솔 | CPU/메모리/디스크 기본 확인 |
 | Grafana | 나중에 추가 (Docker로 쉽게 붙일 수 있음) |
+
+---
+
+## CI/CD 결정
+
+### CI: GitHub Actions, 백엔드 우선 (2026-06-22)
+
+**결정: M0 F1을 백엔드 CI부터 구현한다. PR(→main)·main 푸시 시 ruff + format + pytest를 GitHub Actions로 돌린다. CD/배포(F2~F3)와 FE/admin job은 후속.**
+
+- **범위 = 백엔드 우선**: 결제·인증·Signed URL 등 데이터 무결성 리스크가 BE에 집중 → 가장 비싼 회귀부터 막는다. FE/admin(eslint+tsc)은 frontend ESLint 셋업 선행 필요라 분리.
+- **도구**: `astral-sh/setup-uv`(캐시) + `uv sync --locked`(lockfile 재현성) + `actions/checkout`. Python은 `uv python install`이 `requires-python`(3.12)으로 자동 설치.
+- **검사 범위 = be.md PR 템플릿 게이트와 일치**: `ruff check src/`, `ruff format --check src/ tests/`. `migrations/`는 alembic 자동생성 + DB 적용 + forward-only라 의도적 제외(손대면 안 됨).
+- **테스트 DB**: GitHub Actions `postgres:16` 서비스. conftest가 `SQLModel.metadata.create_all`로 스키마를 직접 만들어 CI에 alembic 스텝 불필요. 필수 env(`PASSWORD_PEPPER` 등)는 테스트 전용 더미값 주입(실제 비밀 아님).
+- **`paths` 필터 미적용**: required check로 걸면 path-skip이 "pending"으로 남아 머지를 막는 트레이드오프 + 1인 저PR 볼륨이라 Actions 분 절약 한계효용 낮음.
+- **⚠️ CI 효력의 전제 = branch protection**: GitHub repo 설정에서 `backend`를 **required status check**로 등록하지 않으면, 워크플로가 빨강이어도 머지는 안 막힌다(1인 squash repo는 그냥 머지됨). 게이트의 실제 효력은 YAML이 아니라 branch protection rule에 있다(`/council` 5렌즈 공통 맹점). CI 첫 그린 확인 후 등록(후속 P0).
+- **후속**: HIBP 등 외부호출 테스트 격리(hermetic), `alembic upgrade head`+`alembic check` 게이트(모델↔마이그레이션 표류 차단), FE/admin job, 액션 SHA 핀(공급망), CD(F2~F3).
