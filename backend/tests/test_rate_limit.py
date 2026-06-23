@@ -6,7 +6,7 @@ IP 단위 5회/분. 6회째 429. limiter는 conftest의 autouse _reset_rate_limi
 
 from unittest.mock import AsyncMock
 
-from src.services import email_service, hibp
+from src.services import email_service
 
 # 미존재 이메일: 비열거상 매번 401(회원/비회원 동일). rate limit은 회원 여부와 무관하게
 # IP로만 카운트하므로 이 경로로 6회째 429를 검증할 수 있다.
@@ -24,8 +24,7 @@ async def test_login_sixth_request_returns_429(async_client):
 
 
 async def test_rate_limit_scopes_are_independent(async_client, monkeypatch):
-    # signup 경로의 외부 의존(HIBP/메일)은 mock - rate limit 버킷만 검증한다.
-    monkeypatch.setattr(hibp, "is_password_pwned", AsyncMock(return_value=False))
+    # signup 경로의 메일 발송은 mock(HIBP는 conftest 전역 stub) - rate limit 버킷만 검증한다.
     monkeypatch.setattr(email_service, "send_verification_email", AsyncMock())
     monkeypatch.setattr(email_service, "send_already_registered_email", AsyncMock())
 

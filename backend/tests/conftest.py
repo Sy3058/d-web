@@ -1,5 +1,5 @@
 from collections.abc import AsyncGenerator
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 import pytest_asyncio
@@ -13,7 +13,7 @@ from src.lib.db import get_session
 from src.lib.rate_limit import reset_rate_limits
 from src.main import app
 from src.models.user import User
-from src.services import auth_service
+from src.services import auth_service, hibp
 
 # 표준 테스트 계정 - existing_user 픽스처와 로그인 테스트(_LOGIN)가 공유하는 단일 출처.
 # test 파일이 같은 리터럴을 또 박아 불일치 버그가 나지 않도록 여기서만 정의한다.
@@ -35,6 +35,14 @@ def _reset_rate_limits():
     # 다른 테스트를 429로 깨뜨리지 않도록 매 테스트 전에 비운다(동기 - 동기 테스트 호환).
     reset_rate_limits()
     yield
+
+
+@pytest.fixture(autouse=True)
+def _stub_hibp(monkeypatch):
+    # HIBP는 외부 네트워크 의존(api.pwnedpasswords.com)이라 테스트 기본값으로 항상 stub(False).
+    # 유출 비번 경로를 보는 테스트만 명시적으로 True로 덮어쓴다. 이로써 어떤 테스트도 실수로
+    # 실제 요청을 보내지 못한다(hermetic - CI 자기완결성). HIBP stub의 단일 출처.
+    monkeypatch.setattr(hibp, "is_password_pwned", AsyncMock(return_value=False))
 
 
 @pytest_asyncio.fixture(scope="session")
