@@ -215,8 +215,9 @@
 - 선행: B1, B5, B6, B7
 - 산출물: `.github/workflows/ci.yml` - PR 시 ruff + pytest + eslint + tsc
 - DoD: PR 생성 시 5분 내 체크 통과
-- 결정 필요: 변경된 영역만 실행 vs 전체 실행 (`paths` 필터 사용 여부)
+- 결정 (2026-06-22): `paths` 필터 **미적용** - required check면 path-skip이 pending으로 머지를 막고, 1인 저PR 볼륨이라 분 절약 한계효용 낮음.
 - 메모: 린트는 ESLint로 통일(biome 미채택, DECISIONS "린트/포맷"). frontend는 ESLint 미설정이라 F1 전 `eslint-plugin-astro` 셋업이 선행 필요.
+- **부분 구현 (백엔드분, 2026-06-22, PR `common/ci/backend-ci`)**: `.github/workflows/ci.yml` 백엔드 job = `postgres:16` 서비스 + `uv sync --locked` + `ruff check src/` + `ruff format --check src/ tests/` + `pytest`(81). 범위는 be.md 게이트와 일치(migrations 제외). 상세 결정은 DECISIONS "CI/CD 결정". **FE/admin(eslint+tsc)은 frontend ESLint 셋업 선행 → 후속.** ⚠️ branch protection에 `backend` required check 등록이 게이트 효력의 전제(GHA 그린 확인 후 P0). 그린 확인 후 그룹 G "PR 푸시 시 CI 통과" 마킹.
 
 ### F2. build + push 워크플로우
 - 선행: F1, D3

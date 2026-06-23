@@ -72,7 +72,7 @@ M1 (인증) ──┐
 - [ ] UptimeRobot 모니터 등록 (5분 간격)
 
 ### CI/CD
-- [ ] GitHub Actions: lint(ruff + eslint) + test + build
+- [ ] GitHub Actions: lint(ruff + eslint) + test + build - **백엔드분 구현**(ruff+pytest+Postgres, PR `common/ci/backend-ci`; DECISIONS "CI/CD 결정"). GHA 그린 확인 후 체크. eslint/build(FE/admin)·CD는 후속
 - [ ] main 머지 시 스테이징 자동 배포 (docker pull → compose up)
 - [ ] PR 템플릿/이슈 템플릿 동작 확인
 
