@@ -14,6 +14,20 @@
 
 ---
 
+## GitHub Actions / CI
+
+- 액션을 `@vN`(메이저만)으로 박기 전에 그 메이저 **무빙 태그가 실제 있는지** 확인할 것
+  → `astral-sh/setup-uv`는 v8부터 무빙 메이저 태그(`v8`)를 안 만든다 → `@v8`은 "Set up job"에서 `Unable to resolve action ... unable to find version v8`로 즉사(3초컷, 테스트 도달 못 함)
+  → `actions/checkout`은 `v6` 무빙 태그가 있어 `@v6` OK. **액션마다 태그 정책이 다름**
+  → 확인: `gh api repos/<owner>/<repo>/tags --jq '.[].name'`로 실제 태그를 본 뒤 정확한 버전(`@v8.2.0`)으로 핀. WebSearch 요약("v8 있다더라")만 믿고 박지 말 것 (실제 사고: 첫 CI가 그래서 두 번 빨강)
+  → 정확한 버전 핀은 워크어라운드가 아니라 공급망 보안상 권장(무빙 태그는 같은 이름이 다른 커밋을 가리킬 수 있음). 다음 단계는 SHA 핀
+
+- 커밋 타입 `ci`/`build`는 GUIDE_COMMIT.md엔 있지만 **commit-msg 훅이 거부**한다
+  → 훅 허용 타입: `feat|fix|refactor|test|docs|style|chore|perf` 만
+  → CI/인프라 변경은 `[INFRA] chore:`로 (실제 사고: `[INFRA] ci:`가 훅에 막혀 커밋 실패)
+
+---
+
 ## FastAPI
 
 - 고정 비싼 값(타이밍 평탄화 더미 해시 등 비번과 무관한 상수)은 **import 시 eager 생성**할 것

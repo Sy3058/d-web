@@ -39,10 +39,9 @@ _LOGIN = {"email": EXISTING_USER_EMAIL, "password": EXISTING_USER_PASSWORD}
 
 @pytest.fixture(autouse=True)
 def externals(monkeypatch) -> SimpleNamespace:
-    """HIBP(기본 False) + 이메일 발송 함수를 mock. 호출 검증용 핸들 반환."""
+    """이메일 발송 함수를 mock(HIBP는 conftest _stub_hibp가 전역 stub). 호출 검증용 핸들 반환."""
     verification = AsyncMock()
     already = AsyncMock()
-    monkeypatch.setattr(hibp, "is_password_pwned", AsyncMock(return_value=False))
     monkeypatch.setattr(email_service, "send_verification_email", verification)
     monkeypatch.setattr(email_service, "send_already_registered_email", already)
     return SimpleNamespace(verification=verification, already=already, monkeypatch=monkeypatch)

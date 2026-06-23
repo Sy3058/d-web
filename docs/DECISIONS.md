@@ -438,4 +438,5 @@ main (항상 배포 가능 상태)
 - **테스트 DB**: GitHub Actions `postgres:16` 서비스. conftest가 `SQLModel.metadata.create_all`로 스키마를 직접 만들어 CI에 alembic 스텝 불필요. 필수 env(`PASSWORD_PEPPER` 등)는 테스트 전용 더미값 주입(실제 비밀 아님).
 - **`paths` 필터 미적용**: required check로 걸면 path-skip이 "pending"으로 남아 머지를 막는 트레이드오프 + 1인 저PR 볼륨이라 Actions 분 절약 한계효용 낮음.
 - **⚠️ CI 효력의 전제 = branch protection**: GitHub repo 설정에서 `backend`를 **required status check**로 등록하지 않으면, 워크플로가 빨강이어도 머지는 안 막힌다(1인 squash repo는 그냥 머지됨). 게이트의 실제 효력은 YAML이 아니라 branch protection rule에 있다(`/council` 5렌즈 공통 맹점). CI 첫 그린 확인 후 등록(후속 P0).
-- **후속**: HIBP 등 외부호출 테스트 격리(hermetic), `alembic upgrade head`+`alembic check` 게이트(모델↔마이그레이션 표류 차단), FE/admin job, 액션 SHA 핀(공급망), CD(F2~F3).
+- **후속**: `alembic upgrade head`+`alembic check` 게이트(모델↔마이그레이션 표류 차단), FE/admin job, 액션 SHA 핀(공급망), CD(F2~F3).
+- **완료된 후속**: HIBP 외부호출 테스트 격리(hermetic, 2026-06-24) - conftest autouse 전역 stub(`_stub_hibp`)으로 어떤 테스트도 `api.pwnedpasswords.com`에 실제 요청을 못 보내게 함(per-test mock 의존 제거). 실제 함수 본문 raise sabotage로 미도달 입증.
