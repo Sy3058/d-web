@@ -5,13 +5,14 @@ TestClient는 자체 이벤트 루프라 session-scope async db_session(asyncpg)
 HIBP/이메일 발송은 외부 의존이라 mock으로 대체한다.
 """
 
+import asyncio
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import pytest_asyncio
-from fastapi import HTTPException
+from fastapi import BackgroundTasks, HTTPException
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -123,6 +124,40 @@ async def test_signup_pwned_password_rejected(async_client, externals):
         json={"email": "pwned@example.com", "password": "Passw0rd!", "nickname": "n"},
     )
     assert resp.status_code == 422
+
+
+async def test_concurrent_signup_single_winner(db_session, session_factory, monkeypatch):
+    """실측 동시성: 두 독립 세션이 같은 이메일로 동시에 signup하면 한쪽만 유저를 만들고,
+    패자는 users.email UNIQUE 위반(IntegrityError)을 잡아 중복 경로와 동일하게 수렴한다.
+    둘 다 예외 없이 정상 반환해야 비열거가 깨지지 않는다(신규 200 vs race 500 방지).
+
+    회전 race 테스트(test_token)와 동형: Barrier로 두 코루틴이 create_user 직전
+    (= get_user_by_email가 None을 본 직후)까지 와서 동시에 INSERT/commit하도록 강제해
+    선체크↔INSERT 사이의 진짜 race를 만든다. db_session 의존은 생성 행의 테이블 정리용.
+    """
+    email = "race@example.com"
+    barrier = asyncio.Barrier(2)
+    real_create_user = auth_service.create_user
+
+    async def create_user_after_barrier(*args, **kwargs):
+        await barrier.wait()
+        return await real_create_user(*args, **kwargs)
+
+    monkeypatch.setattr(auth_service, "create_user", create_user_after_barrier)
+
+    async def do_signup():
+        async with session_factory() as session:
+            await auth_service.signup(email, "Passw0rd!", "racer", session, BackgroundTasks())
+
+    results = await asyncio.gather(do_signup(), do_signup(), return_exceptions=True)
+
+    # 비열거: race 패자도 신규와 동일하게 예외 없이 정상 반환
+    assert all(not isinstance(r, BaseException) for r in results), results
+
+    # 정확히 한 명만 생성(이중 가입 없음)
+    async with session_factory() as verify:
+        rows = (await verify.exec(select(User).where(User.email == email))).all()
+    assert len(rows) == 1
 
 
 # --- C2 로그인 --------------------------------------------------------------

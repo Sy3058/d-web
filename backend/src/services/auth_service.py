@@ -29,6 +29,7 @@ import bcrypt
 from anyio import to_thread
 from fastapi import BackgroundTasks
 from sqlalchemy import update
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -320,6 +321,7 @@ async def signup(
     - 유출 비번(HIBP) → PwnedPasswordError (이메일 존재와 무관 → 422 노출 안전)
     - 신규: 미인증 user 생성 + 인증 토큰 발급 → commit 후 인증 메일(백그라운드)
     - 중복: user 생성 안 함 + 더미 해시로 타이밍 평탄화 + '이미 가입됨' 안내 메일
+    - 동시 가입 race(선체크 통과 후 UNIQUE 충돌): rollback 후 중복과 동일하게 수렴(비열거)
     메일 발송은 BackgroundTasks라 DB commit 이후 실행(메일 실패가 가입을 롤백 안 함).
     """
     email = _normalize_email(email)
@@ -332,9 +334,19 @@ async def signup(
         background_tasks.add_task(email_service.send_already_registered_email, email)
         return
 
-    user = await create_user(email, password, nickname, session)
-    raw_token = await create_email_verification(user.id, session)
-    await session.commit()
+    try:
+        user = await create_user(email, password, nickname, session)
+        raw_token = await create_email_verification(user.id, session)
+        await session.commit()
+    except IntegrityError:
+        # 동시 가입 race 패자: get_user_by_email가 None을 본 직후 다른 요청이 같은 이메일을
+        # 먼저 commit → users.email UNIQUE 위반. 신규(인증 메일)와 응답이 갈리면 비열거가
+        # 깨지므로 rollback 후 중복 경로와 동일하게 수렴시킨다(패자는 이미 create_user에서
+        # bcrypt 비용을 냈으니 별도 _dummy_verify는 불필요).
+        await session.rollback()
+        background_tasks.add_task(email_service.send_already_registered_email, email)
+        return
+
     background_tasks.add_task(email_service.send_verification_email, email, raw_token)
 
 

@@ -115,4 +115,4 @@ service가 commit을 소유한다(레이어 분리): `signup`(신규 경로)·`l
 - **E1 실제 발송**: 현재 `email_service`는 no-op 스텁(시그니처 고정). Resend 연동은 그룹 E(A4 DKIM 선행).
 - **Rate limit / 계정 lockout**: IP 5회/분은 ✅ I2 완료(signup/login/resend에 `RateLimit` 부착 - 비열거의 자동 열거 억제 강화). 계정 lockout은 후속 PR `be/feat/auth-account-lockout`. 상세 [IMPLEMENTATION_RATE_LIMIT.md](./IMPLEMENTATION_RATE_LIMIT.md).
 - **구글 OAuth**: 그룹 D.
-- **FYI (M1 규모 허용)**: signup 존재확인↔insert 사이 동시성(이메일 UNIQUE 위반 가능)은 저트래픽이라 수용, 다중 인스턴스 전환 시 재검토. (~~refresh 회전 row lock 부재~~ → ✅ M1 I1에서 조건부 UPDATE로 원자화, [IMPLEMENTATION_REFRESH_ROTATION_RACE.md](./IMPLEMENTATION_REFRESH_ROTATION_RACE.md))
+- **FYI (해소됨)**: ~~signup 존재확인↔insert 사이 동시성(이메일 UNIQUE 위반 가능)~~ → ✅ `try/except IntegrityError`로 닫음 - 패자는 `rollback` 후 중복 경로와 동일 수렴(비열거 유지), `be/fix/signup-duplicate-race`. (~~refresh 회전 row lock 부재~~ → ✅ M1 I1에서 조건부 UPDATE로 원자화, [IMPLEMENTATION_REFRESH_ROTATION_RACE.md](./IMPLEMENTATION_REFRESH_ROTATION_RACE.md))
