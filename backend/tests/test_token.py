@@ -24,6 +24,7 @@ from src.services.auth_service import (
     get_refresh_token,
     revoke_all_refresh_tokens,
     revoke_refresh_token,
+    rotate_refresh,
 )
 
 # ---------------------------------------------------------------------------
@@ -163,9 +164,18 @@ async def test_claim_refresh_token_single_winner(db_session, user):
 async def test_refresh_token_hash_unique(db_session, user):
     """token_hash UNIQUE 인덱스가 같은 해시 중복 INSERT를 차단(회전 불변식 방어선)."""
     expires = datetime.now(UTC) + timedelta(days=7)
-    db_session.add(RefreshToken(user_id=user.id, token_hash="dup-hash", expires_at=expires))
+    issued = datetime.now(UTC)
+    db_session.add(
+        RefreshToken(
+            user_id=user.id, token_hash="dup-hash", expires_at=expires, original_issued_at=issued
+        )
+    )
     await db_session.flush()
-    db_session.add(RefreshToken(user_id=user.id, token_hash="dup-hash", expires_at=expires))
+    db_session.add(
+        RefreshToken(
+            user_id=user.id, token_hash="dup-hash", expires_at=expires, original_issued_at=issued
+        )
+    )
     with pytest.raises(IntegrityError):
         await db_session.flush()
     await db_session.rollback()
@@ -212,3 +222,75 @@ async def test_concurrent_rotation_single_winner(db_session, user, session_facto
         rows = result.all()
     active = [r for r in rows if r.revoked_at is None]
     assert len(active) == 1
+
+
+# ---------------------------------------------------------------------------
+# 절대 수명 cap (M1 A)
+# ---------------------------------------------------------------------------
+
+
+async def test_create_sets_original_issued_at_to_now(db_session, user):
+    """최초 발급(original_issued_at 미지정)은 그 값을 now로 설정한다."""
+    before = datetime.now(UTC)
+    raw = await create_refresh_token(user.id, db_session)
+    record = await get_refresh_token(raw, db_session)
+    assert record is not None
+    assert before <= record.original_issued_at <= datetime.now(UTC)
+
+
+async def test_rotate_inherits_original_issued_at(db_session, user):
+    """회전된 새 토큰은 부모의 original_issued_at을 승계한다(회전해도 cap 기준점 불변)."""
+    raw = await create_refresh_token(user.id, db_session)
+    parent = await get_refresh_token(raw, db_session)
+    parent_issued = parent.original_issued_at
+    await db_session.commit()
+
+    _user, _access, new_raw = await rotate_refresh(raw, db_session)
+    new_record = await get_refresh_token(new_raw, db_session)
+    assert new_record is not None
+    assert new_record.original_issued_at == parent_issued
+
+
+async def test_rotate_rejected_past_absolute_cap(db_session, user):
+    """original_issued_at이 절대 수명 상한을 넘으면 회전을 거부(InvalidTokenError)한다.
+    만료 전이라도 cap이 우선이다.
+
+    토큰을 revoke하지 않는다(의도): cap이 회전을 영구 거부하므로 revoke는 불필요하고,
+    revoke하면 재제출이 stale-reuse로 오분류돼 다른 기기 세션까지 끊긴다. 거부만 하면
+    재제출도 일관되게 cap에서 막히고 다른 세션은 보존된다.
+
+    sabotage-proof: cap 분기가 없으면 회전이 성공해 InvalidTokenError가 안 나고 assert 실패.
+    """
+    old = datetime.now(UTC) - timedelta(days=settings.jwt_refresh_absolute_max_days + 1)
+    raw = await create_refresh_token(user.id, db_session, original_issued_at=old)
+    await db_session.commit()
+
+    with pytest.raises(InvalidTokenError):
+        await rotate_refresh(raw, db_session)
+
+    record = await get_refresh_token(raw, db_session)
+    assert record is not None
+    assert record.revoked_at is None  # cap 거부는 revoke하지 않음(다른 세션 보존)
+
+
+async def test_rotate_past_cap_does_not_revoke_other_sessions(db_session, user):
+    """cap 거부는 같은 토큰이 재제출돼도 stale-reuse(재사용 탐지)로 번지지 않아 다른 기기
+    세션을 보존한다. cap 분기가 토큰을 revoke하면 재제출이 revoke_all로 번져 이 테스트가 깨진다.
+    """
+    old = datetime.now(UTC) - timedelta(days=settings.jwt_refresh_absolute_max_days + 1)
+    capped = await create_refresh_token(user.id, db_session, original_issued_at=old)
+    other = await create_refresh_token(user.id, db_session)  # 다른 기기, cap 전(now)
+    await db_session.commit()
+
+    # cap 토큰 회전 거부 + 같은 토큰 재제출(모바일 재시도·두 탭) - 둘 다 InvalidTokenError.
+    # cap 분기가 revoke했다면 둘째 호출은 revoked 토큰을 stale-reuse로 보고 TokenReuseError를
+    # 던지므로(InvalidTokenError 서브클래스 아님) pytest.raises가 못 잡아 테스트가 깨진다.
+    with pytest.raises(InvalidTokenError):
+        await rotate_refresh(capped, db_session)
+    with pytest.raises(InvalidTokenError):
+        await rotate_refresh(capped, db_session)
+
+    # 다른 기기 세션은 revoke되지 않고 살아있어야 한다(cap 거부가 세션 전체로 번지지 않음).
+    other_record = await get_refresh_token(other, db_session)
+    assert other_record is not None
+    assert other_record.revoked_at is None

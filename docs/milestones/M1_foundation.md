@@ -274,15 +274,17 @@ git stash pop stash@{0}
 
 ## 그룹 H. M1 완료 검증 (DoD)
 
-- [ ] 이메일 가입 → 인증 메일 수신 → 링크 클릭 → `is_email_verified=True` 반영
-- [ ] 이메일 로그인 → access/refresh 쿠키 발급(HttpOnly, 플래그 정확) → `/auth/me` 200 → 마이페이지 진입
-- [ ] 구글 가입/로그인 → id_token 검증 통과 → 신규 `users`+`oauth_accounts` 생성, 기존 유저 로그인 동작
-- [ ] 토큰 갱신(`/auth/refresh`) 동작(회전), 로그아웃 후 갱신 거부됨, revoke된 refresh 재제출 시 세션 전체 무효화
+> 수동 검증 완료 (2026-06-27): 아래 e2e DoD를 로컬에서 직접 확인. pytest/CI는 객관 그린. `v0.1.0` 태그는 A PR(`be/feat/refresh-absolute-lifetime-cap`) main 머지 후 머지 커밋에 단다.
+
+- [x] 이메일 가입 → 인증 메일 수신 → 링크 클릭 → `is_email_verified=True` 반영
+- [x] 이메일 로그인 → access/refresh 쿠키 발급(HttpOnly, 플래그 정확) → `/auth/me` 200 → 마이페이지 진입
+- [x] 구글 가입/로그인 → id_token 검증 통과 → 신규 `users`+`oauth_accounts` 생성, 기존 유저 로그인 동작
+- [x] 토큰 갱신(`/auth/refresh`) 동작(회전), 로그아웃 후 갱신 거부됨, revoke된 refresh 재제출 시 세션 전체 무효화
 - [x] 로그인 5회/분 초과 시 429 (I2: IP rate limit, 계정 lockout은 council 2026-06-14 보류·로그인 관측 로그 `auth.login`으로 대체)
 - [x] `require_verified_email` 의존성이 미인증 403 반환(단위 테스트, 부착은 아직 안 함) - E3 완료
-- [ ] 동일 이메일 소셜 시도 시 자동 병합 없이 안내 노출 (Q6)
-- [ ] 비열거 검증: 신규/중복 이메일 가입의 HTTP 응답·응답시간이 동일, 중복 시 안내 메일은 수신함 주인에게만 발송
-- [ ] `uv run pytest` 통과 (auth_service + 엔드포인트 테스트), CI(F1, M0) 그린
+- [x] 동일 이메일 소셜 시도 시 자동 병합 없이 안내 노출 (Q6)
+- [x] 비열거 검증: 신규/중복 이메일 가입의 HTTP 응답·응답시간이 동일, 중복 시 안내 메일은 수신함 주인에게만 발송
+- [x] `uv run pytest` 통과 (auth_service + 엔드포인트 테스트), CI(F1, M0) 그린
 
 ---
 
@@ -361,7 +363,7 @@ git stash pop stash@{0}
 - **순서**: 계획(Opus) → 코딩(Sonnet) → 검증(Opus, `@docs/reviews/GUIDE_REVIEW.md` + `CODE_REVIEW_BE.md`/`CODE_REVIEW_FE.md`) → 커밋. 인증·토큰·쿠키는 보안 로직이라 **Opus 검증 생략 금지**.
 - 백엔드 실행은 항상 `uv run` 접두사 (`uv run uvicorn`, `uv run pytest`, `uv run alembic`).
 - 패키지/라이브러리(bcrypt, JWT, rate limit 등)는 설치 직전 WebSearch로 최신 안정 버전 확인 (GUIDE_WORKFLOW "검색 규칙").
-- 결정 필요 항목(OAuth state/nonce 저장 방식, rate limit 라이브러리, `__Host-` 프리픽스 적용 범위, 회전 시 refresh 절대 수명 cap)은 해당 작업 직전 짧게 합의 후 진행.
+- 결정 필요 항목(OAuth state/nonce 저장 방식, rate limit 라이브러리, `__Host-` 프리픽스 적용 범위, 회전 시 refresh 절대 수명 cap)은 해당 작업 직전 짧게 합의 후 진행. → 모두 해소(refresh 절대 수명 cap = ✅ M1 A, 최초 발급 30일 상한 `original_issued_at`+cap 거부, `be/feat/refresh-absolute-lifetime-cap`, 2026-06-27).
 - **확정된 보안 결정**(M1 착수 시 DECISIONS.md "보안 결정"에 한 번에 기록):
   - refresh = opaque 랜덤 + HMAC-SHA256(+`TOKEN_PEPPER`) 해시, `token_hash` 직접 조회로 대조
   - 리프레시 회전 + 재사용 탐지

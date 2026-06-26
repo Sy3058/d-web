@@ -98,18 +98,27 @@ def _hash_token(raw: str) -> str:
     ).hexdigest()
 
 
-async def create_refresh_token(user_id: uuid.UUID, session: AsyncSession) -> str:
+async def create_refresh_token(
+    user_id: uuid.UUID,
+    session: AsyncSession,
+    original_issued_at: datetime | None = None,
+) -> str:
     """refresh 토큰을 발급하고 hash를 DB에 저장(flush)한다. 원문을 반환(쿠키용).
 
     commit은 하지 않는다 - 호출자(C2 로그인, C4 회전)가 트랜잭션 경계를 잡는다.
     flush로 INSERT를 보내 FK 위반 등을 이 시점에 노출시킨다.
+
+    original_issued_at: 토큰 체인의 최초 발급 시각. None이면 now(최초 로그인/OAuth 발급),
+    회전 시 부모 토큰 값을 넘겨 절대 수명 cap의 기준점을 유지한다 (M1 A).
     """
     raw = secrets.token_urlsafe(32)
-    expires_at = datetime.now(UTC) + timedelta(days=settings.jwt_refresh_token_expire_days)
+    now = datetime.now(UTC)
+    expires_at = now + timedelta(days=settings.jwt_refresh_token_expire_days)
     record = RefreshToken(
         user_id=user_id,
         token_hash=_hash_token(raw),
         expires_at=expires_at,
+        original_issued_at=original_issued_at if original_issued_at is not None else now,
     )
     session.add(record)
     await session.flush()
@@ -428,13 +437,30 @@ async def rotate_refresh(raw: str, session: AsyncSession) -> tuple[User, str, st
     if record.expires_at <= datetime.now(UTC):
         raise InvalidTokenError
 
+    # 절대 수명 cap (A): 회전은 매번 +7일 연장이라, 탈취 토큰이 재사용 탐지에 안 걸리면
+    # 노출창이 무한정 길어진다. 최초 발급(original_issued_at)으로부터 상한을 넘으면 회전을
+    # 거부하고 재로그인을 강제한다. 회전 race(_claim)보다 결정적이라 그 앞에서 막는다.
+    #
+    # 토큰을 revoke하지 않는다(의도적): cap이 이미 이 토큰의 회전을 영구 거부하므로 revoke는
+    # 불필요한데, revoke하면 동일 토큰 재제출(모바일 재시도·두 탭)이 위 stale-reuse 분기로 빠져
+    # revoke_all로 번진다 - cap(만료)을 탈취로 오분류해 아직 cap 전인 다른 기기 세션까지 끊는다.
+    # 거부만 하면 재제출도 매번 cap에서 일관되게 막히고 다른 세션은 보존된다. 죽은 토큰 정리는
+    # cleanup 잡(M1.5)이 담당한다.
+    if datetime.now(UTC) - record.original_issued_at >= timedelta(
+        days=settings.jwt_refresh_absolute_max_days
+    ):
+        raise InvalidTokenError
+
     # _claim 패자(rowcount=0): SELECT 땐 유효였는데 그 사이 동시 회전/로그아웃이 끼어든
     # 정상 케이스(탈취 아님) → 세션 유지하고 단순 401. 진짜 stale 재사용은 위 분기가 잡는다.
     if not await _claim_refresh_token(record, session):
         await session.rollback()
         raise InvalidTokenError
 
-    new_refresh = await create_refresh_token(record.user_id, session)
+    # 새 토큰은 부모의 original_issued_at을 승계 - 회전해도 절대 수명 기준점이 갱신되지 않는다.
+    new_refresh = await create_refresh_token(
+        record.user_id, session, original_issued_at=record.original_issued_at
+    )
     user = await session.get(User, record.user_id)
     assert user is not None  # FK 무결성상 항상 존재
     access = create_access_token(str(record.user_id))
