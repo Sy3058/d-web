@@ -23,6 +23,10 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_access_token_expire_minutes: int = 15
     jwt_refresh_token_expire_days: int = 7
+    # refresh 회전은 매번 +7일 연장이라, 탈취 토큰이 재사용 탐지에 안 걸리면 노출창이 무한정
+    # 늘어난다. 최초 발급(original_issued_at)으로부터 이 상한을 넘으면 회전을 거부하고
+    # 재로그인을 강제해 노출창을 상한선으로 막는다 (M1 A).
+    jwt_refresh_absolute_max_days: int = 30
 
     # 비밀번호 해싱 (B1 - 비번 pre-hash pepper. jwt_secret/token_pepper와 별개 키)
     # 시크릿이라 default 없음(미설정 시 기동 실패). SecretStr로 로그 마스킹.
