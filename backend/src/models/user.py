@@ -123,6 +123,10 @@ class RefreshToken(SQLModel, table=True):
     # 원문 토큰 저장 금지 - HMAC-SHA256(+TOKEN_PEPPER) 해시만 (DB_SCHEMA §1, M1 B2)
     token_hash: str = Field(sa_column=Column(String(255), nullable=False))
     expires_at: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False))
+    # 토큰 체인의 최초 발급 시각. 회전돼도 부모 값을 승계(불변)해 절대 수명 cap의
+    # 기준점이 된다 (M1 A). 앱이 create_refresh_token에서 항상 명시 설정하므로
+    # server_default 없음(회전 토큰의 발급 시각은 now가 아니라 부모값이라 DB 기본값은 부적절).
+    original_issued_at: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False))
     created_at: datetime | None = Field(default=None, sa_column=_created_at_column())
     revoked_at: datetime | None = Field(
         default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
