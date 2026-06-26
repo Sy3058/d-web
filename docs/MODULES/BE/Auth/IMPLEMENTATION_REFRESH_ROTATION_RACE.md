@@ -93,7 +93,7 @@ study: `db-atomic-claim`, `refresh-token-rotation`.
 
 ## 6. 제약 / 후속
 
-- **절대 수명 cap 미구현**: 회전이 무한 연장되지 않게 하는 상한(예: 30일)은 별도. [IMPLEMENTATION_TOKEN.md](./IMPLEMENTATION_TOKEN.md) §후속, I1 범위 밖.
+- **절대 수명 cap ✅ (M1 A, 2026-06-27)**: 회전이 무한 연장되지 않게 하는 30일 상한을 `original_issued_at` 컬럼 + `rotate_refresh` cap 분기로 구현(`be/feat/refresh-absolute-lifetime-cap`). [IMPLEMENTATION_TOKEN.md](./IMPLEMENTATION_TOKEN.md) §6.
 - **rate limit (I2 ✅)**: 인증 표면 rate limit(login/signup/resend, IP 5회/분)은 I2에서 완료([IMPLEMENTATION_RATE_LIMIT.md](./IMPLEMENTATION_RATE_LIMIT.md)). 단 `/auth/refresh` 자체엔 미부착 - refresh 토큰은 256bit 랜덤이라 추측 brute-force가 불가 + 재사용 탐지가 별도로 남용을 처리(의도된 제외).
 - 이 fix로 [IMPLEMENTATION_TOKEN.md](./IMPLEMENTATION_TOKEN.md) §후속·[IMPLEMENTATION_EMAIL_VERIFY.md](./IMPLEMENTATION_EMAIL_VERIFY.md) §5의 "token_hash 인덱스 누락", [IMPLEMENTATION_AUTH_ENDPOINTS.md](./IMPLEMENTATION_AUTH_ENDPOINTS.md)의 "refresh 회전 row lock 부재" FYI가 해소됨.
 
@@ -101,6 +101,6 @@ study: `db-atomic-claim`, `refresh-token-rotation`.
 
 ## 7. 알려진 한계 (council 리뷰 2026-06-11)
 
-- **reuse-detection의 동시성 한계**: `_claim`은 *발급* race(한 토큰 → 새 토큰 2개)는 닫지만 *탐지* race는 아니다. 탈취 토큰과 정상 토큰이 **동시** 제출되면 둘 다 SELECT에서 `revoked_at IS NULL`을 봐 재사용 탐지 분기(전체 revoke)를 우회하고, 한쪽이 패자(401)가 된다. 다음 회전에서 stale-reuse로 잡히지만 동시 윈도에선 즉시 탐지되지 않는다(OAuth 2.0 BCP의 알려진 한계). 노출창을 줄이려면 절대 수명 cap이 함께 필요.
+- **reuse-detection의 동시성 한계**: `_claim`은 *발급* race(한 토큰 → 새 토큰 2개)는 닫지만 *탐지* race는 아니다. 탈취 토큰과 정상 토큰이 **동시** 제출되면 둘 다 SELECT에서 `revoked_at IS NULL`을 봐 재사용 탐지 분기(전체 revoke)를 우회하고, 한쪽이 패자(401)가 된다. 다음 회전에서 stale-reuse로 잡히지만 동시 윈도에선 즉시 탐지되지 않는다(OAuth 2.0 BCP의 알려진 한계). 노출창을 줄이려면 절대 수명 cap이 함께 필요(✅ M1 A에서 구현됨, 2026-06-27 - 노출창을 최초 발급 30일로 상한).
 - **동시성 실측 검증 ✅ (I4, 2026-06-14)**: 독립 커넥션 2개로 실제 동시 `rotate_refresh`를 거는 `asyncio.gather` 통합 테스트(`test_concurrent_rotation_single_winner`)를 추가해 단일 세션 프록시(`_claim` 1→0)가 못 메운 실측을 채웠다. `asyncio.Barrier(2)`로 두 코루틴이 SELECT를 마친 뒤 `_claim` UPDATE를 동시 발사하도록 강제(둘 다 `revoked_at IS NULL`을 본 진짜 race) → 정확히 1개만 새 토큰 발급, 패자는 세션 유지 `InvalidTokenError`(stale-reuse 아님), active 토큰 1개 불변식 확인. 2세션 헬퍼(`session_factory`)는 conftest에 둬 M3 결제 멱등에 재사용. 상세 [M1_foundation.md](../../../milestones/M1_foundation.md) I4.
-- **백로그 (I1 범위 밖)**: refresh 절대 수명 cap(예정 `be/feat/refresh-absolute-lifetime-cap`), 만료/revoked 토큰 cleanup 잡(UNIQUE 인덱스 비대 예방 - M1.5 스케줄러 도입 시 부착), ~~signup 동시 중복가입 IntegrityError→비열거 응답 처리~~ → ✅ 일반 이메일 가입도 `try/except IntegrityError`로 닫음(`be/fix/signup-duplicate-race`). 메모리 `project_m1_council_fix_backlog` 트래킹.
+- **백로그 (I1 범위 밖)**: ~~refresh 절대 수명 cap(`be/feat/refresh-absolute-lifetime-cap`)~~ → ✅ **M1 A 구현(2026-06-27)**: `original_issued_at` + cap 거부, 만료/revoked 토큰 cleanup 잡(UNIQUE 인덱스 비대 예방 - M1.5 스케줄러 도입 시 부착), ~~signup 동시 중복가입 IntegrityError→비열거 응답 처리~~ → ✅ 일반 이메일 가입도 `try/except IntegrityError`로 닫음(`be/fix/signup-duplicate-race`). 메모리 `project_m1_council_fix_backlog` 트래킹.

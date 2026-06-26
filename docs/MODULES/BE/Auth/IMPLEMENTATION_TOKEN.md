@@ -89,7 +89,7 @@
 ## 6. 한계 / 후속
 
 - **CI env**: `TOKEN_PEPPER`는 default 없는 필수값이라, 향후 CI pytest 환경에 반드시 주입(없으면 import 크래시). `PASSWORD_PEPPER`와 동일.
-- **절대 수명 cap**: refresh 회전이 무한 연장되지 않도록 상한(예: 30일)을 둘지 C4 회전 구현 시 결정.
+- **절대 수명 cap ✅ (M1 A, 2026-06-27)**: refresh 회전이 무한 연장되지 않도록 최초 발급 30일 상한을 `original_issued_at`(NOT NULL) 컬럼 + `rotate_refresh` cap 분기로 구현. 회전 시 새 토큰이 부모 `original_issued_at`을 승계해 기준점이 갱신되지 않고, `now - original_issued_at >= jwt_refresh_absolute_max_days(30)`면 회전 거부(`InvalidTokenError`→재로그인). **토큰을 revoke하지 않음**(의도): cap이 이미 회전을 영구 거부하므로 불필요한데, revoke하면 동일 토큰 재제출이 stale-reuse로 오분류돼 `revoke_all`로 번져 아직 cap 전인 다른 기기 세션까지 끊긴다. 마이그레이션 `5a55bab9de3d`(forward-only, backfill=created_at). `be/feat/refresh-absolute-lifetime-cap`.
 - **후속**: B3(HttpOnly 쿠키 발급 유틸), C2(로그인 시 refresh insert), C4(`/auth/refresh` 회전 + 재사용 탐지). `M1_foundation.md` 참조.
 
 ### 6.1 코드 리뷰 FYI - 나중에 처리 (2026-06-03 Opus 리뷰)

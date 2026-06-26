@@ -361,7 +361,7 @@ git stash pop stash@{0}
 - **순서**: 계획(Opus) → 코딩(Sonnet) → 검증(Opus, `@docs/reviews/GUIDE_REVIEW.md` + `CODE_REVIEW_BE.md`/`CODE_REVIEW_FE.md`) → 커밋. 인증·토큰·쿠키는 보안 로직이라 **Opus 검증 생략 금지**.
 - 백엔드 실행은 항상 `uv run` 접두사 (`uv run uvicorn`, `uv run pytest`, `uv run alembic`).
 - 패키지/라이브러리(bcrypt, JWT, rate limit 등)는 설치 직전 WebSearch로 최신 안정 버전 확인 (GUIDE_WORKFLOW "검색 규칙").
-- 결정 필요 항목(OAuth state/nonce 저장 방식, rate limit 라이브러리, `__Host-` 프리픽스 적용 범위, 회전 시 refresh 절대 수명 cap)은 해당 작업 직전 짧게 합의 후 진행.
+- 결정 필요 항목(OAuth state/nonce 저장 방식, rate limit 라이브러리, `__Host-` 프리픽스 적용 범위, 회전 시 refresh 절대 수명 cap)은 해당 작업 직전 짧게 합의 후 진행. → 모두 해소(refresh 절대 수명 cap = ✅ M1 A, 최초 발급 30일 상한 `original_issued_at`+cap 거부, `be/feat/refresh-absolute-lifetime-cap`, 2026-06-27).
 - **확정된 보안 결정**(M1 착수 시 DECISIONS.md "보안 결정"에 한 번에 기록):
   - refresh = opaque 랜덤 + HMAC-SHA256(+`TOKEN_PEPPER`) 해시, `token_hash` 직접 조회로 대조
   - 리프레시 회전 + 재사용 탐지

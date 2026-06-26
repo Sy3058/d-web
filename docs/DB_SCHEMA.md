@@ -58,6 +58,7 @@ refresh_tokens
 ├── user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE
 ├── token_hash VARCHAR(255) NOT NULL  -- HMAC-SHA256(+TOKEN_PEPPER) 해시
 ├── expires_at TIMESTAMPTZ NOT NULL
+├── original_issued_at TIMESTAMPTZ NOT NULL  -- 토큰 체인 최초 발급 시각(회전 시 승계), 절대 수명 cap 기준점 (M1 A)
 ├── created_at TIMESTAMPTZ DEFAULT now()
 └── revoked_at TIMESTAMPTZ            -- NULL = 유효
 ```
