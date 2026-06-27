@@ -110,7 +110,7 @@ M1 (인증) ──┐
 - [x] 이메일 인증 안내 페이지 + 재발송 버튼 (G4, `verify-email.astro` + VerifyEmail 아일랜드, 429 표시)
 - [x] 마이페이지 골격 (G5, SSR, `/auth/me`로 로그인 판정·미로그인 리다이렉트. 구매 목록 M3·알림 M6은 placeholder)
 
-> 프론트 인증 UI(그룹 G)는 **구현·커밋 완료, 브랜치 `fe/feat/auth-pages` PR·Opus 리뷰 전** (BE 항목 `[x]`=구현+리뷰 완료와 구분).
+> 프론트 인증 UI(그룹 G)는 **#38로 main 머지 완료(`v0.1.0` 포함). 사후 Opus 리뷰 완료(2026-06-28, Critical/Major 0)** - BE 그룹과 동일하게 구현+Opus 리뷰 완료.
 > ✅ 네비 로그인 깜빡임 **해소**(2026-06-21): 비-HttpOnly `login_hint` 힌트 쿠키(BE #39) + 네비 라벨을 pre-paint `is:inline` 스크립트로 전환(React 섬 `NavUser.tsx` 제거)해 0프레임 달성. 상세 DECISIONS "네비 로그인 표시".
 
 > ⚠️ JWT는 HttpOnly 쿠키만 사용. localStorage 저장 절대 금지.
