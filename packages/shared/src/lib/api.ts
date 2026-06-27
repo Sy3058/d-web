@@ -21,8 +21,8 @@ async function request<T>(baseUrl: string, path: string, options: RequestOptions
   }
 
   const res = await fetch(`${baseUrl}${path}`, {
-    credentials: 'include',
     ...init,
+    credentials: 'include',
     headers,
     body,
   });
