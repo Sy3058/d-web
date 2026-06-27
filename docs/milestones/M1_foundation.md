@@ -274,7 +274,7 @@ git stash pop stash@{0}
 
 ## 그룹 H. M1 완료 검증 (DoD)
 
-> 수동 검증 완료 (2026-06-27): 아래 e2e DoD를 로컬에서 직접 확인. pytest/CI는 객관 그린. `v0.1.0` 태그는 A PR(`be/feat/refresh-absolute-lifetime-cap`) main 머지 후 머지 커밋에 단다.
+> 수동 검증 완료 (2026-06-27): 아래 e2e DoD를 로컬에서 직접 확인. pytest/CI는 객관 그린. ✅ `v0.1.0` annotated 태그를 A PR(`be/feat/refresh-absolute-lifetime-cap`, #45) main 머지 커밋 `b5c0353`에 부착·origin push 완료(2026-06-28). M1 인증 마일스톤 종료.
 
 - [x] 이메일 가입 → 인증 메일 수신 → 링크 클릭 → `is_email_verified=True` 반영
 - [x] 이메일 로그인 → access/refresh 쿠키 발급(HttpOnly, 플래그 정확) → `/auth/me` 200 → 마이페이지 진입
