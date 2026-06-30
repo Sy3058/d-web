@@ -131,24 +131,26 @@ M1 (인증) ──┐
 > **DoD**: 관리자가 2FA로 로그인 → 작품 등록 → 에피소드 이미지 업로드(50장, WebP 변환) → 회차 공개까지 작동.
 
 ### 백엔드
-- [ ] `is_admin` 플래그 기반 관리자 권한 미들웨어
-- [ ] TOTP 시크릿 발급 + 검증 (이메일·비번 → TOTP → JWT 순서, DECISIONS "2FA" 결정)
+- [ ] **`users.role`(VARCHAR, reader/owner/moderator) RBAC** + `require_role`/`require_owner` 가드 (authz=DB user.role, JWT 미포함; **M1.5는 owner만 빌드** - moderator=M4; DECISIONS "관리자 권한 분리")
+- [ ] TOTP 시크릿 발급 + 검증 (이메일·비번 → TOTP → JWT 순서; **owner 필수**; 시크릿 Fernet 암호화 at-rest, DECISIONS "2FA"·"관리자 권한 분리")
   - 백업 코드는 1차 구현 제외, 시크릿 분실 시 DB 직접 조작 복구
+  - 부트스트랩: `scripts/promote_admin.py`로 owner 승격 (공개 관리자 가입 없음; moderator는 M4에서 owner가 부여)
 - [ ] `works` + `tags` + `works_tags` + `episodes` 모델 + 마이그레이션
-- [ ] 작품 등록/수정 API (`is_admin` 필수)
-- [ ] R2 presigned PUT 발급 API (회차당 최대 50장)
-- [ ] **이미지 가로 800px WebP 자동 변환** (Q23 결정 필요 - 동기 vs Arq 워커. 1차는 동기, 응답 1초 초과 시 워커 분리)
+- [ ] 작품 등록/수정 API (`require_owner` 필수)
+- [ ] **R2 업로드 = 백엔드 경유 변환** (클라→백엔드 multipart→Pillow 800px WebP→R2; presigned PUT 미사용, M1.5_foundation 결정 1) (회차당 최대 50장)
+- [ ] **이미지 가로 800px WebP 자동 변환** (Q23 확정: 1차 동기 `anyio.to_thread`, 실측 초과 시 Arq+Redis 분리 - 결정 2)
 - [ ] 에피소드 페이지 순서 저장 (`image_keys` JSONB)
-- [ ] 에피소드 공개 예약 (스케줄러: APScheduler 또는 cron + `published_at` 도달 시 `is_published=true`)
+- [ ] 에피소드 공개 예약 (APScheduler in-process 폴링 잡 + 원자 UPDATE, `published_at` 도달 시 `is_published=true`)
 
 ### 프론트엔드 (Vite React SPA)
-- [ ] 관리자 로그인 화면 (TOTP 입력 단계 포함)
+- [ ] 관리자 로그인 화면 (TOTP 입력 단계 + role 가드: `/auth/me` role≠owner이면 차단; M1.5 관리자 화면은 owner 전용)
 - [ ] 작품 목록 / 등록 / 수정 화면
 - [ ] 에피소드 업로드 화면 (드래그앤드롭, 페이지 순서 조정, 임시저장)
 - [ ] 에피소드 공개 예약 UI
 
 > ⚠️ TOTP 시크릿은 DB 저장 + 클라이언트 절대 노출 금지.
-> ⚠️ 미인증/일반 유저가 관리자 API 호출 시 403, 라우터 단에서 권한 미들웨어 적용 일관성 점검.
+> ⚠️ 비권한(일반 유저·role 미달) 관리자 API 호출 시 403, 라우터 단 `require_role` 일관 적용 점검.
+> ⚠️ **개발자 매출 차단은 product 역할이 아님**: 개발자는 product 역할로 만들지 않는다(관측은 외부 도구 Sentry 등). "개발자가 매출을 못 본다"는 라우트 가드가 아니라 인프라/자격증명 소유권 - 진짜 장벽은 M7 인프라 분리 시(DECISIONS "관리자 권한 분리").
 
 ---
 
@@ -238,9 +240,10 @@ M1 (인증) ──┐
 - [ ] 댓글 작성 가입 **7일 제한** (Q13 결정) + 본인 글 7일 미만 차단 미들웨어
 - [ ] 하트 토글 (1유저 1좋아요, `target_type` = 'episode'|'post'|'comment')
 - [ ] 신고 API + **5회 누적 시 자동 숨김** (Q14 결정)
-- [ ] 댓글 삭제 (본인/작가/관리자, soft delete)
+- [ ] 댓글 삭제 (본인/owner/moderator, soft delete; 운영 삭제는 `require_role(OWNER, MODERATOR)`)
 - [ ] 후원 결제 (토스페이먼츠 재사용, `donations` insert)
-- [ ] 작가 게시판 - 근황 CRUD (작성은 `is_admin`만)
+- [ ] 작가 게시판 - 근황 CRUD (작성은 `require_owner`만)
+- [ ] **moderator 역할 도입**: owner가 부여/회수(`PATCH /admin/users/{id}/role`, owner 전용) + 모더레이션 가드 `require_role(OWNER, MODERATOR)`(댓글·게시글 삭제·신고 처리). 2FA 적용 여부 결정 (3-역할 RBAC, DECISIONS "관리자 권한 분리")
 - [ ] 댓글 작성 rate limit (10회/분)
 
 ### 프론트엔드 (Astro + React 아일랜드)
@@ -284,7 +287,7 @@ M1 (인증) ──┐
 ### 독자용 사이트 (Astro)
 - [ ] 커미션 페이지 `/commission` (작가 가격·일정·예시 + 신청 폼)
 
-> 💡 작품/에피소드 관리(ADM-02/03/04)는 **M1.5에서 이미 구현**됨. M5에서는 운영 기능에 집중.
+> 💡 작품/에피소드 관리(ADM-02/03/04)는 **M1.5에서 이미 구현**됨. M5에서는 운영 기능에 집중. **수익·통계·환불(ADM-05/06/08)은 `require_owner` 전용**(매출 차단; moderator·일반 유저 403, DECISIONS "관리자 권한 분리").
 
 ---
 
