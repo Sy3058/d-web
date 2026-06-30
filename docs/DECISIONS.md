@@ -17,7 +17,7 @@
 
 **이 플랫폼은 특정 1인 작가의 개인 홈이다. 다작가 플랫폼으로의 확장은 목표가 아니다.**
 
-- `is_admin` 플래그, R2 버킷, 작가 프로필 등 모든 설계가 1인 기준
+- `users.role`(owner/moderator 등 관리자 권한), R2 버킷, 작가 프로필 등 모든 설계가 1인 기준
 - 여러 작가를 지원하려면 `작가` 엔티티 분리, 권한 모델 재설계, 콘텐츠 격리 등 아키텍처 전면 재설계가 필요 - 단순 확장이 아님
 - 따라서 다작가 지원을 위한 추상화나 유연성을 미리 넣지 않는다
 
@@ -342,6 +342,30 @@ bcrypt( base64( hmac_sha384(password, key=PASSWORD_PEPPER) ), gensalt(cost=12) )
 - **표시 방식 = pre-paint 인라인 스크립트(React 섬 제거)**: 쿠키+useEffect(React 섬)는 네트워크 왕복은 없애도 첫 페인트가 빈 칸이고 하이드레이션 1틱 뒤에야 닉네임이 채워져 "빈 칸→이름" 레이아웃 시프트가 남는다. 그래서 라벨을 React 섬에서 빼 순수 `<a id="nav-user">`로 두고, 바로 뒤 `<script is:inline>`(동기·파서 차단)가 **첫 페인트 전에** 쿠키를 읽어 보정한다 → 0프레임. (study no-flash-inline-script: 인라인 스크립트는 순수 HTML 대상일 때 빛난다.) **네비 SSR화는 탈락** - SSG/CDN 캐시를 포기해야 해 과함.
 - **제약(stale)**: 닉네임 변경 시 다음 refresh/login 전까지 옛 닉네임 표시(표시용이라 허용. 닉네임 변경 기능 자체 미구현).
 - 구현: BE는 `set_auth_cookies`(로그인/갱신/OAuth)·`clear_auth_cookies`(로그아웃/refresh 재사용)에서 발급/제거. FE는 `Navbar.astro`의 정적 `<a id="nav-user">` + pre-paint `is:inline` 스크립트가 쿠키를 읽어 보정(React 섬 `NavUser.tsx`는 제거). study `astro-auth-ui-state`, `no-flash-inline-script`.
+
+### 관리자 권한 분리: 3-역할 RBAC (reader/owner/moderator) - M1.5 owner 단독 빌드 (2026-07-01 확정)
+
+**결정: `users.role`(VARCHAR(16), default `reader`)로 권한을 나눈다. 값은 `reader`(일반)·`owner`(작가)·`moderator`(커뮤니티 운영) 셋. authz 진실 소스는 JWT claim이 아니라 DB `user.role`. 모델은 3-역할로 열어두되, M1.5에서 실제 빌드·프로비저닝하는 역할은 `owner` 하나뿐이다(moderator는 M4 커뮤니티에서 도입). 빈 껍데기 계정은 만들지 않는다.**
+
+배경: 사이트를 운영(돈 받고 작품 판매)하는 작가와 게시글·문의를 관리하는 운영자가 다른 사람일 수 있다. 권한을 처음부터 역할로 설계하되 각 역할은 그 역할의 in-product 엔드포인트가 생길 때 프로비저닝한다.
+
+**역할별 권한·도입 시점**
+
+| 역할 | 권한 | 도입 | product 계정 |
+|------|------|------|------|
+| `reader` | 일반 열람·구매(기본값) | 지금(전 유저) | 모든 유저 |
+| `owner` | 콘텐츠·매출·정산·환불 + 모더레이션 | **M1.5**(콘텐츠+2FA) | 부트스트랩 스크립트 |
+| `moderator` | 게시글 삭제·문의 답변만(매출·콘텐츠 차단) | **M4**(커뮤니티) | owner가 런타임 부여 |
+
+- **모델 = `role` VARCHAR(16)** (네이티브 PG enum 아님, `is_admin` boolean 폐기). VARCHAR이라 **후속 역할 추가(moderator M4 등)는 Python enum 값 + 가드만 추가, DB 마이그레이션 0**. M1.5 B1 마이그레이션은 기존 `is_admin=true`→`owner` 매핑 후 컬럼 제거(기존 `users` ALTER, 새 테이블 아님).
+- **authz = DB `user.role` (JWT claim 아님)**: `get_current_user`가 이미 매 요청 `User` row를 DB 로드하므로(`lib/auth.py`) `user.role` 읽기는 추가 쿼리 0이고 항상 최신(강등/권한 회수 즉시 반영, 토큰 만료 대기 없음). JWT는 `sub`만 담는 최소 설계 유지(`create_access_token` "PII payload 포함 금지"와 일관). FE 가드용으로 `/auth/me`가 `role`을 노출(인가가 아니라 표시·라우팅용 - `login_hint` 철학과 동형).
+- **가드 = `require_role(*roles)` 팩토리**. M1.5는 `require_owner`만 사용(콘텐츠·매출·정산·환불). 모더레이션 엔드포인트는 M4에서 `require_role(OWNER, MODERATOR)`(owner ⊇ moderator). 일반 열람·구매는 role이 아니라 "인증됨"으로 게이팅하므로 moderator도 정상 유저로 동작.
+- **moderator는 owner가 런타임 부여**(owner 전용 엔드포인트, 예: `PATCH /admin/users/{id}/role`). 부트스트랩 스크립트로 박는 owner와 달리 관리자가 부여하는 첫 역할 = 진짜 RBAC. M4 소관.
+- **개발자는 product 역할이 아니다 (developer 역할 미도입)**: 개발자 ≠ 운영자(작가)는 실재하는 분리지만, 개발자 일(에러·로그·헬스)은 전부 외부 도구(Sentry·UptimeRobot·Hetzner, 모니터링 결정) + 인프라 계층이라 product 계정·엔드포인트가 없다. product 안에 자체 관측 대시보드를 두는 건 전문 도구 재발명이라 미채택 → `developer`를 역할로 만들지 않는다. 정말 in-product 개발자 엔드포인트가 필요해지면 그때 값을 추가(VARCHAR라 DB 변경 없음).
+- **2FA**: owner는 TOTP 필수(M1.5). moderator 2FA 여부는 M4 결정(권한이 좁아 blast radius 작음). 부트스트랩 `scripts/promote_admin.py`로 owner 승격(공개 관리자 가입 경로 없음).
+- **⚠️ "개발자 매출 차단"의 실체 = 인프라 계층, product 역할 아님 (정직성)**: 운영 인프라(VPS·DB 자격증명)를 **개발자가 통제하는 현 구조**에서 라우트 가드는 *앱 경로*만 막는다 - DB 직접 `SELECT`는 못 막는다. 그래서 "개발자가 매출을 못 본다"는 product 역할이 아니라 **자격증명/도구 소유권**으로 친다(owner가 결제도구·DB 로그인을 쥐고 개발자는 발급받지 않음). **진짜 정보 장벽**(개발자조차 매출 불가)은 작가가 DB 자격증명을 쥐고 개발자가 prod DB 접근이 없을 때 성립 → **M7 배포 인프라 결정으로 보류**.
+- **다중 계정 / 단수 정산**: `role`은 N명이 같은 역할을 가질 수 있다(owner 여러 명 가능, singleton 제약 없음). 단 **정산/지급 대상은 owner 계정 수에서 파생되지 않는다** - 돈 받는 주체는 단수 "작가" 정체성(1인 작가 결정)에 묶고, owner 역할은 관리 권한으로만(M5 정산 시 적용).
+- 적용 범위: 역할 모델·`require_owner`는 M1.5 그룹 B, moderator·부여 UI는 M4, 매출 엔드포인트 가드는 M5. 상세 `docs/milestones/M1.5_foundation.md` 그룹 B + 결정 4.
 
 ---
 

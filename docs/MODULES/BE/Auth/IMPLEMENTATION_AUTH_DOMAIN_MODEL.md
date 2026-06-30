@@ -28,7 +28,7 @@
 `DB_SCHEMA.md §1`을 그대로 따른다. 핵심만:
 
 - **공통**: PK는 전 테이블 `UUID` + `gen_random_uuid()` 서버 기본값 (DB_SCHEMA 설계 원칙). 시각은 전부 `TIMESTAMPTZ`.
-- **`users`**: `email` UNIQUE NOT NULL, `hashed_password` **nullable**(소셜 전용 가입은 NULL), `profile_image`, `is_admin`/`is_email_verified` 기본 false, soft delete용 `deleted_at`.
+- **`users`**: `email` UNIQUE NOT NULL, `hashed_password` **nullable**(소셜 전용 가입은 NULL), `profile_image`, `is_admin`/`is_email_verified` 기본 false, soft delete용 `deleted_at`. (⚠️ M1.5에서 `is_admin`→`role`(VARCHAR, reader/owner/moderator)로 교체 예정. M1.5는 owner만 빌드 - DECISIONS "관리자 권한 분리")
 - **`oauth_accounts`**: `UNIQUE(provider, provider_id)`, `user_id` FK CASCADE.
 - **`refresh_tokens`**: `token_hash`(원문 저장 금지), `expires_at`, `revoked_at`(회전/재사용 탐지용).
 - **`email_verifications`**: `token`(저장값은 해시), `expires_at`(발급+1시간), `used_at`(1회용).

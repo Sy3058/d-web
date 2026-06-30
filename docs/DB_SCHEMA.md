@@ -2,7 +2,7 @@
 
 | 항목 | 내용 |
 |------|------|
-| 문서 버전 | v1.2 (2026-05-26) |
+| 문서 버전 | v1.3 (2026-07-01, users `is_admin`→`role` 3-역할 RBAC) · v1.2 (2026-05-26) |
 | DB | PostgreSQL |
 | ORM | SQLModel |
 | 작성 기준 | PRD v1.0 + 미결 사항 확정 답변 |
@@ -29,7 +29,7 @@ users
 ├── hashed_password VARCHAR(255)          -- 소셜 전용 가입이면 NULL
 ├── nickname        VARCHAR(50) NOT NULL
 ├── profile_image   TEXT                  -- URL
-├── is_admin        BOOLEAN DEFAULT FALSE
+├── role            VARCHAR(16) NOT NULL DEFAULT 'reader'  -- reader | owner | moderator (RBAC)
 ├── is_email_verified BOOLEAN DEFAULT FALSE
 ├── email_verified_at TIMESTAMPTZ
 ├── created_at      TIMESTAMPTZ DEFAULT now()
@@ -38,6 +38,7 @@ users
 ```
 > - 탈퇴 시 `deleted_at` 기록, `nickname` → "알 수 없음" 익명화
 > - 결제 내역은 user 삭제 후에도 5년 보관 (전자상거래법)
+> - `role`: 권한(RBAC). `reader`(일반)/`owner`(작가-매출·정산·환불·콘텐츠+모더레이션)/`moderator`(게시글 삭제·문의 답변만, M4 owner가 부여). VARCHAR이라 후속 역할 추가는 앱 코드만(DB 마이그레이션 0). authz는 DB `user.role` 기준(JWT 미포함). M1.5는 `owner`만 빌드, B1 마이그레이션에서 `is_admin`→`role` 이관(true→owner). 개발자는 product 역할이 아님(매출 차단은 인프라/자격증명 계층 - M7). 상세 DECISIONS "관리자 권한 분리"
 
 ### oauth_accounts
 ```sql
@@ -272,7 +273,7 @@ comments
 └── deleted_at  TIMESTAMPTZ
 ```
 > - 댓글 작성 조건 없음 (가입 직후 바로 가능)
-> - 작가 댓글은 프론트에서 `is_admin` 확인 후 배지 표시
+> - 작가 댓글은 프론트에서 `role=owner` 확인 후 배지 표시
 > - `parent_id IS NOT NULL`인 댓글의 자식 댓글은 허용하지 않음 (1depth 강제)
 
 ### likes

@@ -154,7 +154,7 @@ git stash pop stash@{0}
 ### C5. 현재 유저 조회 (`GET /auth/me`) ✅ 구현 완료 (2026-06-05)
 - 선행: B2, C2
 - 산출물: access 쿠키 → 현재 유저 반환 엔드포인트
-- DoD: 유효 access 시 200 + `nickname`/`email`/`is_email_verified`/`is_admin`, 무효·만료 시 401
+- DoD: 유효 access 시 200 + `nickname`/`email`/`is_email_verified`/`is_admin`, 무효·만료 시 401 (⚠️ M1.5에서 `is_admin`→`role`로 교체 예정, DECISIONS "관리자 권한 분리")
 - 메모: G5 마이페이지·Navbar 로그인 상태 판정의 **단일 소스**. 응답은 민감 필드(`hashed_password` 등) 제외한 `UserRead` 스키마. SSR 페이지가 쿠키를 그대로 전달(`credentials: 'include'`)해 호출.
 
 > **구현 요약 (2026-06-05)**: C1~C5 구현 + Opus 리뷰 완료. 상세 [IMPLEMENTATION_AUTH_ENDPOINTS.md](../MODULES/BE/Auth/IMPLEMENTATION_AUTH_ENDPOINTS.md).
