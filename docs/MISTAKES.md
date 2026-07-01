@@ -26,6 +26,10 @@
   → 훅 허용 타입: `feat|fix|refactor|test|docs|style|chore|perf` 만
   → CI/인프라 변경은 `[INFRA] chore:`로 (실제 사고: `[INFRA] ci:`가 훅에 막혀 커밋 실패)
 
+- commit-msg 훅은 제목(`type: ` 뒤 부분)이 **50자를 넘어도 거부**한다
+  → 한글 제목에 괄호로 상세를 달면 금방 넘음. 짧게 쓰고 상세는 PR 본문/커밋 본문으로
+  → 실제 사고: `[COMMON] docs: A1 후속(bundle_discount_rate C1 설정·idx_tags_name UNIQUE 대체)`(50자 초과) 거부 → `[COMMON] docs: A1 후속(할인율 C1 설정·idx_tags_name 정리)`로 줄여 재커밋
+
 ---
 
 ## FastAPI
@@ -143,6 +147,11 @@
 
 - 마이그레이션 작업 후엔 반드시 `alembic check`로 모델↔DB 동기화 확인
   → "No new upgrade operations detected"가 나와야 정상. 떠 있는 diff가 있으면 모델/마이그레이션 불일치
+
+- VARCHAR 컬럼에 enum을 담을 땐 **StrEnum + 명시적 `sa_column=Column(String(n))`** 로 정의할 것
+  → 필드 타입만 Python `Enum`으로 두고 sa_column을 안 주면 SQLModel/SA가 **네이티브 PG ENUM 타입**을 생성한다 → 프로젝트 결정("VARCHAR + 앱 enum, 네이티브 PG enum 아님") 위반 + 새 값마다 DB 마이그레이션 강제
+  → `class X(StrEnum)`(ruff UP042: `(str, Enum)`→`StrEnum` 권장) + `sa_column=Column(String(20), server_default=text("'ongoing'"))`. StrEnum은 str 서브클래스라 멤버 값이 컬럼에 그대로 저장됨
+  → M1.5 A1 `works.status`에 적용, B1 `users.role`도 동일 패턴
 
 ## pytest / 비동기 DB 테스트
 
