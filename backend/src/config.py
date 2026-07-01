@@ -77,6 +77,10 @@ class Settings(BaseSettings):
 
     # 2FA / TOTP
     totp_issuer: str = "dweb-admin"
+    # TOTP 시크릿 Fernet 암호화 키 (M1.5 B). jwt_secret/password_pepper/token_pepper와 별개 키.
+    # TOTP는 검증마다 원본이 필요해 단방향 해시 불가 -> 되돌릴 수 있는 대칭 암호화(Fernet).
+    # 반드시 유효한 Fernet 키(32B url-safe base64). 시크릿이라 default 없음(미설정 시 기동 실패).
+    totp_encryption_key: SecretStr
 
     # ── 조립 필드 ──────────────────────────────────────────────────────────────
 
