@@ -52,6 +52,9 @@ jobs:
       JWT_SECRET: ci-test-secret
       PASSWORD_PEPPER: ci-test-password-pepper
       TOKEN_PEPPER: ci-test-token-pepper
+      # TOTP_ENCRYPTION_KEY만은 임의 문자열이 아니라 유효한 Fernet 키(32B url-safe base64)여야
+      # 한다 - 아니면 lib/totp의 Fernet() 생성이 import 시 raise한다. 테스트 전용 던져버릴 키.
+      TOTP_ENCRYPTION_KEY: DPoSsxZaQsTn01cvXRYfFHGgk-VDTwqIpia3lVn41Ew=
       APP_BASE_URL: http://localhost:4321
       ADMIN_BASE_URL: http://localhost:5173
       API_BASE_URL: http://localhost:8000
