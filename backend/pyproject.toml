@@ -19,6 +19,8 @@ dependencies = [
     "limits>=5.8.0",
     "google-auth>=2.54.0",
     "urllib3>=2.7.0",
+    "pyotp>=2.10.0",
+    "cryptography>=49.0.0",
 ]
 
 [dependency-groups]
