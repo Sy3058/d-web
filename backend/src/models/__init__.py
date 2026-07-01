@@ -8,6 +8,7 @@ from .user import (
     EmailVerification,
     OAuthAccount,
     RefreshToken,
+    RoleEnum,
     User,
     UserRead,
 )
@@ -25,6 +26,7 @@ __all__ = [
     "RefreshToken",
     "EmailVerification",
     "UserRead",
+    "RoleEnum",
     "Work",
     "Tag",
     "WorkTag",

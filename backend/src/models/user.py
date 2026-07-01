@@ -8,6 +8,7 @@ PK는 DB_SCHEMA "설계 원칙"대로 전 테이블 UUID(`gen_random_uuid()`).
 
 import uuid
 from datetime import datetime
+from enum import StrEnum
 
 from sqlalchemy import (
     Boolean,
@@ -23,6 +24,20 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlmodel import Field, SQLModel
+
+
+class RoleEnum(StrEnum):
+    """유저 권한 (DECISIONS "관리자 권한 분리" = 3-역할 RBAC).
+
+    VARCHAR(16)에 멤버 값을 그대로 저장(네이티브 PG enum 아님) - 후속 역할 추가는
+    앱 enum 값만 늘리면 되고 DB 마이그레이션이 필요 없다(MISTAKES StrEnum 패턴).
+    authz 진실 소스는 JWT claim이 아니라 DB user.role(get_current_user가 매 요청 User 로드).
+    M1.5는 owner만 프로비저닝(moderator=M4, reader=전 유저 기본값).
+    """
+
+    READER = "reader"
+    OWNER = "owner"
+    MODERATOR = "moderator"
 
 
 def _pk_column() -> Column:
@@ -64,15 +79,22 @@ class User(SQLModel, table=True):
     hashed_password: str | None = Field(default=None, sa_column=Column(String(255), nullable=True))
     nickname: str = Field(sa_column=Column(String(50), nullable=False))
     profile_image: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
-    is_admin: bool = Field(
-        default=False,
-        sa_column=Column(Boolean, nullable=False, server_default=text("false")),
+    role: RoleEnum = Field(
+        default=RoleEnum.READER,
+        sa_column=Column(String(16), nullable=False, server_default=text("'reader'")),
     )
     is_email_verified: bool = Field(
         default=False,
         sa_column=Column(Boolean, nullable=False, server_default=text("false")),
     )
     email_verified_at: datetime | None = Field(
+        default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
+    )
+    # TOTP 2FA (M1.5 B). totp_secret IS NULL = 미등록. 등록 시 Fernet 암호문 저장(원문 아님,
+    # lib/totp.py). totp_confirmed_at IS NULL = 미확인(첫 코드 검증 전), 값 존재 = 활성 ->
+    # 관리자 로그인 2단계(TOTP)를 요구한다.
+    totp_secret: str | None = Field(default=None, sa_column=Column(String(255), nullable=True))
+    totp_confirmed_at: datetime | None = Field(
         default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
     )
     created_at: datetime | None = Field(default=None, sa_column=_created_at_column())
@@ -163,5 +185,5 @@ class UserRead(SQLModel):
     nickname: str
     profile_image: str | None
     is_email_verified: bool
-    is_admin: bool
+    role: RoleEnum
     created_at: datetime
