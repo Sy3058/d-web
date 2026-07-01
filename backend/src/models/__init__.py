@@ -11,6 +11,13 @@ from .user import (
     User,
     UserRead,
 )
+from .work import (
+    Episode,
+    Tag,
+    Work,
+    WorkStatus,
+    WorkTag,
+)
 
 __all__ = [
     "User",
@@ -18,4 +25,9 @@ __all__ = [
     "RefreshToken",
     "EmailVerification",
     "UserRead",
+    "Work",
+    "Tag",
+    "WorkTag",
+    "Episode",
+    "WorkStatus",
 ]
