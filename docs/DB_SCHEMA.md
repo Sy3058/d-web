@@ -370,8 +370,8 @@ CREATE INDEX idx_likes_target           ON likes(target_type, target_id);
 CREATE INDEX idx_notifications_user_id  ON notifications(user_id, is_read);
 CREATE INDEX idx_posts_created_at       ON posts(created_at DESC) WHERE deleted_at IS NULL;
 
--- 태그 검색
-CREATE INDEX idx_tags_name              ON tags(name);
+-- 태그 검색: tags.name UNIQUE(§2)가 만드는 유니크 인덱스가 WHERE name=? 조회를 겸하므로
+-- 별도 idx_tags_name은 중복이라 두지 않는다 (M1.5 A1, 2026-07-01). 역방향 tag_id 조회는 M2/M5 시 추가.
 
 -- soft delete 필터링
 CREATE INDEX idx_users_deleted_at       ON users(deleted_at) WHERE deleted_at IS NULL;
