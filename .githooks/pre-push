@@ -1,0 +1,24 @@
+#!/bin/sh
+# main 브랜치로의 직접 push를 거부한다.
+#
+# 무료 private repo라 GitHub 브랜치 보호(Settings > Branches)를 못 쓴다(Pro 필요).
+# 그래서 "main은 PR을 squash-merge한 뒤에만 갱신"이라는 규칙을 클라이언트 훅으로 강제한다.
+# 정상 흐름: 브랜치 push -> GitHub PR -> squash-merge -> 로컬에서 'git pull'로 main 갱신.
+# main 로컬 갱신은 pull(fast-forward)이라 push가 아니므로 이 훅에 걸리지 않는다.
+#
+# 의도적으로 우회해야 하면: git push --no-verify
+# (새 클론에서는 'git config core.hooksPath .githooks' 가 설정돼 있어야 이 훅이 동작한다.)
+
+protected="refs/heads/main"
+
+# pre-push는 stdin으로 "<local ref> <local sha> <remote ref> <remote sha>" 줄들을 받는다.
+while read -r local_ref local_sha remote_ref remote_sha; do
+  if [ "$remote_ref" = "$protected" ]; then
+    printf '%s\n' "push 거부: main 브랜치로 직접 push할 수 없습니다." >&2
+    printf '%s\n' "  main은 PR을 squash-merge한 뒤 'git pull'로만 갱신하세요." >&2
+    printf '%s\n' "  의도적 우회가 필요하면: git push --no-verify" >&2
+    exit 1
+  fi
+done
+
+exit 0
