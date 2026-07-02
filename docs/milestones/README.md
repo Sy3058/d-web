@@ -131,8 +131,8 @@ M1 (인증) ──┐
 > **DoD**: 관리자가 2FA로 로그인 → 작품 등록 → 에피소드 이미지 업로드(50장, WebP 변환) → 회차 공개까지 작동.
 
 ### 백엔드
-- [ ] **`users.role`(VARCHAR, reader/owner/moderator) RBAC** + `require_role`/`require_owner` 가드 (authz=DB user.role, JWT 미포함; **M1.5는 owner만 빌드** - moderator=M4; DECISIONS "관리자 권한 분리")
-- [ ] TOTP 시크릿 발급 + 검증 (이메일·비번 → TOTP → JWT 순서; **owner 필수**; 시크릿 Fernet 암호화 at-rest, DECISIONS "2FA"·"관리자 권한 분리")
+- [ ] **`users.role`(VARCHAR, reader/owner/moderator) RBAC** + `require_role`/`require_owner` 가드 (authz=DB user.role, JWT 미포함; **M1.5는 owner만 빌드** - moderator=M4; DECISIONS "관리자 권한 분리") *(B1 완료: role 모델 + `is_admin`→owner 이관 마이그레이션. `require_owner` 가드는 B3)*
+- [ ] TOTP 시크릿 발급 + 검증 (이메일·비번 → TOTP → JWT 순서; **owner 필수**; 시크릿 Fernet 암호화 at-rest, DECISIONS "2FA"·"관리자 권한 분리") *(B1 완료: Fernet at-rest 저장 + 컬럼 + 부트스트랩 스크립트. 발급/검증 엔드포인트·2단계 로그인은 B2/B3)*
   - 백업 코드는 1차 구현 제외, 시크릿 분실 시 DB 직접 조작 복구
   - 부트스트랩: `scripts/promote_admin.py`로 owner 승격 (공개 관리자 가입 없음; moderator는 M4에서 owner가 부여)
 - [x] `works` + `tags` + `works_tags` + `episodes` 모델 + 마이그레이션 (#51, schemas 요청/응답 분리·로컬 DB 검증 완료; `bundle_discount_rate` 컬럼 포함/적용 M3, `idx_tags_name`은 name UNIQUE로 대체)
