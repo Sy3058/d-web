@@ -1,15 +1,30 @@
 #!/bin/sh
-# Reject commits that ADD an em dash (U+2014). Project rule: always use hyphen (-).
-# Only newly added lines in the staged diff are scanned, so pre-existing
-# em dashes in untouched parts of a file do not block the commit.
+# Pre-commit content guards. Only newly ADDED lines in the staged diff are
+# scanned, so pre-existing content in untouched parts of a file never blocks
+# a commit.
 
-hits=$(git diff --cached --no-color -U0 --diff-filter=ACM \
-  | grep -P '^\+' | grep -vP '^\+\+\+ ' | grep -P '\x{2014}')
+added=$(git diff --cached --no-color -U0 --diff-filter=ACM \
+  | grep -P '^\+' | grep -vP '^\+\+\+ ')
 
-if [ -n "$hits" ]; then
+# 1) Reject em dash (U+2014). Project rule: always use hyphen (-).
+em=$(printf '%s\n' "$added" | grep -P '\x{2014}')
+if [ -n "$em" ]; then
   printf '%s\n' "커밋 거부: em dash(U+2014) 추가가 감지되었습니다. hyphen(-)으로 교체하세요." >&2
   printf '%s\n' "위반 라인:" >&2
-  printf '%s\n' "$hits" >&2
+  printf '%s\n' "$em" >&2
   exit 1
 fi
+
+# 2) Reject the study scaffold token (the 'LEARN:' fill-in comment marker in
+# either '#' or '//' comments). These are ephemeral learning notes and must
+# never be committed; after the learning check they are all removed
+# (grep -rn for the token, then delete).
+learn=$(printf '%s\n' "$added" | grep -P '(#|//)\s*LEARN:')
+if [ -n "$learn" ]; then
+  printf '%s\n' "커밋 거부: 학습용 'LEARN:' 주석 마커가 남아 있습니다. 확인 후 전부 삭제하세요 (grep -rn 'LEARN:')." >&2
+  printf '%s\n' "위반 라인:" >&2
+  printf '%s\n' "$learn" >&2
+  exit 1
+fi
+
 exit 0
