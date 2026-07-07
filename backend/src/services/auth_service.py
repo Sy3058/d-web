@@ -26,6 +26,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 import bcrypt
+import structlog
 from anyio import to_thread
 from fastapi import BackgroundTasks
 from sqlalchemy import update
@@ -42,8 +43,10 @@ from src.lib.exceptions import (
     PwnedPasswordError,
     TokenReuseError,
 )
-from src.models.user import EmailVerification, RefreshToken, User
+from src.models.user import EmailVerification, RefreshToken, RoleEnum, User
 from src.services import email_service, hibp
+
+logger = structlog.get_logger(__name__)
 
 # OWASP work factor >= 10. 소형 VPS 기준 cost=12 (배포 후 ~250~350ms 되도록 보정).
 _BCRYPT_ROUNDS = 12
@@ -384,6 +387,16 @@ async def resend_verification(
     background_tasks.add_task(email_service.send_verification_email, user.email, raw_token)
 
 
+def requires_totp_login(user: User) -> bool:
+    """이 유저의 세션이 TOTP 2단계 로그인(/admin/login)으로만 열려야 하는가 (M1.5 B3).
+
+    owner 세션 발급 지점 봉쇄의 단일 판정. 세션(인증 쿠키)을 여는 모든 경로 - 비번 로그인,
+    구글 OAuth, 미래의 새 로그인 경로(카카오 등) - 는 발급 전에 반드시 이 판정을 거쳐야
+    "owner의 유효 세션 = 전부 TOTP 통과" 불변식이 유지된다(DECISIONS 관리자 2FA).
+    """
+    return user.role == RoleEnum.OWNER
+
+
 async def login(email: str, password: str, session: AsyncSession) -> tuple[User, str, str]:
     """이메일/비번 검증 후 (user, access_token, refresh_token) 반환. 실패 시 401 매핑.
 
@@ -395,6 +408,13 @@ async def login(email: str, password: str, session: AsyncSession) -> tuple[User,
         await _dummy_verify()
         raise InvalidCredentialsError
     if not await verify_password(password, user.hashed_password):
+        raise InvalidCredentialsError
+
+    if requires_totp_login(user):
+        # owner가 일반 로그인으로 세션을 열면 2FA가 우회된다 -> /admin/login 전용.
+        # 응답은 다른 실패와 동일한 401(비열거 연장 - 올바른 비번 소지자에게도 '이 계정이
+        # 관리자'라는 성공 신호를 주지 않는다). 서버 로그로만 구분해 운영자 혼선을 줄인다.
+        logger.info("auth.login", outcome="owner_blocked", user_id=str(user.id))
         raise InvalidCredentialsError
 
     access = create_access_token(str(user.id))

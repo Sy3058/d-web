@@ -39,6 +39,7 @@ from src.services.auth_service import (
     _normalize_email,
     create_refresh_token,
     get_user_by_email,
+    requires_totp_login,
 )
 
 logger = structlog.get_logger(__name__)
@@ -176,7 +177,15 @@ def _nickname_from(claims: GoogleClaims, email: str) -> str:
 
 
 async def _issue_session(user: User, session: AsyncSession, outcome: str) -> tuple[User, str, str]:
-    """확정된 유저에게 access·refresh 발급 + commit + 관측 로그. (login/signup/경합회복 공통)"""
+    """확정된 유저에게 access·refresh 발급 + commit + 관측 로그. (login/signup/경합회복 공통)
+
+    owner 봉쇄(M1.5 B3): OAuth의 모든 세션 발급이 이 관문을 지나므로 여기 한 곳의 판정이
+    로그인·가입·경합회복 세 경로를 전부 덮는다. 신규 가입은 role=reader 기본값이라 실제로는
+    기존 owner의 소셜 로그인만 걸린다(promote 스크립트의 비번 보유 검사와 방어심도 이중).
+    """
+    if requires_totp_login(user):
+        logger.info("auth.oauth", provider=_PROVIDER, outcome="owner_blocked", user_id=str(user.id))
+        raise OAuthExchangeError
     access = create_access_token(str(user.id))
     refresh = await create_refresh_token(user.id, session)
     await session.commit()
