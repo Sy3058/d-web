@@ -177,6 +177,36 @@ class EmailVerification(SQLModel, table=True):
     )
 
 
+class TrustedDevice(SQLModel, table=True):
+    """관리자 신뢰 기기 - "이 기기에서 30일간 2단계 인증 생략" (M1.5 B3).
+
+    TOTP 검증 성공 시 opt-in(remember_device)으로 발급. /admin/login 1단계가 유효한 행을
+    확인하면 TOTP 단계를 건너뛴다. 비밀번호는 여전히 필수 - 2FA의 완화이지 대체가 아니다.
+    절대 만료(슬라이딩 갱신 없음): 접속해도 수명이 연장되지 않아 탈취 시 노출창이
+    expires_at에서 캡된다(refresh 절대수명 cap과 같은 철학).
+    """
+
+    __tablename__ = "trusted_devices"
+    __table_args__ = (
+        # /admin/login의 WHERE token_hash=? 직접 조회 + 한 토큰 중복 방지 (refresh_tokens 동형)
+        Index("uq_trusted_devices_token_hash", "token_hash", unique=True),
+        # 승격/재등록 시 user 단위 일괄 revoke 조회용. FK 인덱스 명시 (DB_SCHEMA §6)
+        Index("idx_trusted_devices_user_id", "user_id"),
+    )
+
+    id: uuid.UUID | None = Field(default=None, sa_column=_pk_column())
+    user_id: uuid.UUID = Field(sa_column=_fk_user_column())
+    # 원문 토큰 저장 금지 - HMAC-SHA256(+TOKEN_PEPPER) 해시만 (refresh_tokens와 동일 원칙)
+    token_hash: str = Field(sa_column=Column(String(255), nullable=False))
+    expires_at: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False))
+    # 보안 판정에 사용: created_at >= user.totp_confirmed_at인 행만 유효로 인정해
+    # TOTP 재등록(분실 복구) 시 옛 등록 시절의 기기 신뢰가 전부 자동 실효된다 (B3).
+    created_at: datetime | None = Field(default=None, sa_column=_created_at_column())
+    revoked_at: datetime | None = Field(
+        default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
+    )
+
+
 class UserRead(SQLModel):
     """외부 응답 전용 스키마. 민감 필드(hashed_password 등) 제외 (M1 C5 /auth/me)."""
 
