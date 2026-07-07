@@ -262,6 +262,9 @@
 - 흐름: 이메일/비번 검증 → TOTP 코드 검증 → JWT 발급
 - 시크릿은 DB에 저장, 클라이언트에 절대 노출 금지
 - 백업 코드는 1차 구현에서는 제외 (시크릿 분실 시 DB 직접 조작으로 복구)
+- ⚠️ 2026-07-06(M1.5 B2) 구현 확정: `/admin/2fa/confirm`(TOTP 등록 후 첫 코드 검증) 성공 시 **재로그인 없이 즉시 인증쿠키 발급**. 그 시점엔 비번(1단계 pending 쿠키로 증명)과 TOTP 코드가 모두 검증된 상태라 2단계 로그인과 동등하기 때문. 상세: `docs/milestones/M1.5_foundation.md` B2.
+- ⚠️ 2026-07-08(M1.5 B3) 구현 확정: **owner 세션 발급 지점 봉쇄** - owner의 세션(인증 쿠키)은 TOTP 경로(`/admin/login`→`/admin/login/totp`, `/admin/2fa/confirm`)로만 열린다. 일반 `/auth/login`·구글 OAuth는 owner면 generic 거부 → "owner의 유효 세션 = 전부 TOTP 통과" 불변식. 판정은 `auth_service.requires_totp_login` **단일 헬퍼** - **새 로그인 경로(카카오 등)를 추가하면 세션 발급 전 반드시 이 헬퍼를 통과시킬 것**. 승격 스크립트는 기존 세션 전부 revoke + 비번 없는(소셜 전용) 계정 승격 거부(락아웃 방지). `require_role`은 owner인데 TOTP 미활성이면 403(승격 직후 잔존 access 차단). 승격 표식(JWT 클레임/refresh 컬럼) 대안은 마이그레이션·JWT 최소설계 위반·FE 표면 확대로 탈락.
+- **신뢰 기기**("이 기기에서 30일간 2단계 인증 생략", 2026-07-08 사용자 요청): TOTP 검증 성공 시 `remember_device` 옵트인으로 발급. DB `trusted_devices`(opaque 토큰의 HMAC 해시, revoke 가능) + HttpOnly 쿠키(Path=/admin, SameSite=Strict), **절대 만료 30일**(슬라이딩 없음). 비밀번호는 여전히 필수 - 쿠키는 TOTP(2차 요소)만 대체. `created_at >= totp_confirmed_at`인 행만 유효 → TOTP 재등록(분실 복구) 시 옛 기기 신뢰 자동 실효. stateless 서명 쿠키는 30일 크리덴셜인데 revoke 불가라 탈락(장수명 크리덴셜 = DB+해시 패턴 일관). ⚠️ 비밀번호 변경 기능(P1) 도입 시 신뢰 기기 일괄 revoke 규칙을 함께 구현할 것.
 
 **탈락한 후보들**
 - SMS 2FA: SIM 스와핑 위험 + 발송 비용

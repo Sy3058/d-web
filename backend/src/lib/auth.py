@@ -20,7 +20,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.config import settings
 from src.lib.db import get_session
-from src.models.user import User
+from src.models.user import RoleEnum, User
 
 
 class TokenError(Exception):
@@ -243,6 +243,130 @@ def clear_oauth_tx_cookie(response: Response) -> None:
 
 
 # ---------------------------------------------------------------------------
+# 관리자 2FA pending 쿠키 (M1.5 B2/B3 - 로그인 1단계와 TOTP 단계 사이 단명 운반)
+# ---------------------------------------------------------------------------
+#
+# /admin/login 1단계(B3)가 발급하고 /admin/2fa/*(B2 등록)·/admin/login/totp(B3)가 소비한다.
+# oauth_tx처럼 서버 저장 없는 jwt_secret 서명 JWT. typ 클레임이 두 흐름을 구분한다:
+#   totp_setup_pending - TOTP 미등록 owner. /admin/2fa/setup·confirm만 통과
+#   totp_pending       - TOTP 활성 owner. /admin/login/totp만 통과
+# SameSite=Strict: oauth_tx가 Lax인 사유(구글발 cross-site top-level GET 콜백)가 여기엔
+# 없다 - 이 쿠키는 admin SPA의 same-site fetch POST에만 실리면 된다. Path=/admin으로
+# 로그인/2FA 외 요청 노출을 줄인다.
+
+ADMIN_PENDING_COOKIE_NAME = "admin_totp_pending"
+ADMIN_PENDING_MAX_AGE = 600  # 10분 - 1단계 통과~코드 입력엔 충분, 그 이상은 만료로 재사용 차단
+ADMIN_PENDING_PATH = "/admin"
+TOTP_SETUP_PENDING = "totp_setup_pending"
+TOTP_PENDING = "totp_pending"
+
+
+def create_admin_pending_token(user_id: str, typ: str) -> str:
+    """pending 단계 운반용 서명 JWT. typ은 TOTP_SETUP_PENDING 또는 TOTP_PENDING."""
+    now = datetime.now(UTC)
+    return jwt.encode(
+        {
+            "sub": user_id,
+            "typ": typ,
+            "iat": now,
+            "exp": now + timedelta(seconds=ADMIN_PENDING_MAX_AGE),
+        },
+        settings.jwt_secret,
+        algorithm=settings.jwt_algorithm,
+    )
+
+
+def set_admin_pending_cookie(response: Response, user_id: str, typ: str) -> None:
+    """1단계(이메일/비번) 통과 직후 pending 쿠키를 set. B3 /admin/login이 호출한다."""
+    response.set_cookie(
+        key=ADMIN_PENDING_COOKIE_NAME,
+        value=create_admin_pending_token(user_id, typ),
+        max_age=ADMIN_PENDING_MAX_AGE,
+        path=ADMIN_PENDING_PATH,
+        httponly=True,
+        secure=settings.cookie_secure,
+        samesite="strict",
+    )
+
+
+def read_admin_pending(request: Request, expected_typ: str) -> str | None:
+    """pending 쿠키를 검증·디코드해 user_id(sub)를 반환. 누락/만료/위조/typ 불일치면 None.
+
+    setup 흐름과 로그인 흐름의 쿠키를 서로 오용할 수 없도록 typ을 정확히 대조한다
+    (setup_pending으로 /admin/login/totp 통과 금지, 역방향 동일). 이 쿠키는 신원 운반만
+    담당한다 - role·활성화 상태는 발급 후 바뀔 수 있으므로 소비자가 DB에서 재확인한다.
+    """
+    raw = request.cookies.get(ADMIN_PENDING_COOKIE_NAME)
+    if not raw:
+        return None
+    try:
+        payload = jwt.decode(raw, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+    except jwt.InvalidTokenError:
+        return None
+    if payload.get("typ") != expected_typ:
+        return None
+    sub = payload.get("sub")
+    if not isinstance(sub, str):
+        return None
+    return sub
+
+
+def clear_admin_pending_cookie(response: Response) -> None:
+    """pending 쿠키를 만료시킨다. TOTP 단계 성공 시 일회용으로 소비한다."""
+    response.delete_cookie(
+        key=ADMIN_PENDING_COOKIE_NAME,
+        path=ADMIN_PENDING_PATH,
+        httponly=True,
+        secure=settings.cookie_secure,
+        samesite="strict",
+    )
+
+
+# ---------------------------------------------------------------------------
+# 신뢰 기기 쿠키 (M1.5 B3 - "이 기기에서 2단계 인증 생략")
+# ---------------------------------------------------------------------------
+#
+# TOTP 검증 성공 + remember_device 옵트인 시 발급. /admin/login 1단계가 유효한
+# 신뢰 기기(DB trusted_devices 행)를 확인하면 TOTP 단계를 건너뛴다.
+# 발급·검증 로직은 admin_auth_service 소관 - 여기는 쿠키 운반만.
+#
+# 서명 JWT가 아니라 opaque 원문인 이유: pending/oauth_tx는 stateless라 쿠키가 스스로
+# 진위를 증명해야 하지만(서명 필수), 이 토큰은 진위 권위가 DB 행(trusted_devices)에
+# 있어 조회 키 역할의 랜덤이면 충분하다. DB 행이 있어야 revoke·재등록 실효도 가능.
+#
+# Path=/admin: 이 쿠키를 읽는 곳은 /admin/login 하나뿐이라 노출을 최소화한다.
+# SameSite=Strict: pending 쿠키와 동일 사유(admin SPA의 same-site fetch만 견디면 됨).
+# 절대 만료: 발급 후 Max-Age를 갱신하는 경로를 두지 않는다(탈취 노출창 상한 고정).
+
+TRUSTED_DEVICE_COOKIE_NAME = "admin_trusted_device"
+TRUSTED_DEVICE_PATH = "/admin"
+
+
+def set_trusted_device_cookie(response: Response, raw_token: str) -> None:
+    """신뢰 기기 opaque 토큰 원문을 쿠키에 set. DB엔 해시만(admin_auth_service)."""
+    response.set_cookie(
+        key=TRUSTED_DEVICE_COOKIE_NAME,
+        value=raw_token,
+        max_age=settings.totp_trusted_device_days * 86400,
+        path=TRUSTED_DEVICE_PATH,
+        httponly=True,
+        secure=settings.cookie_secure,
+        samesite="strict",
+    )
+
+
+def clear_trusted_device_cookie(response: Response) -> None:
+    """신뢰 기기 쿠키를 만료시킨다. 무효/만료 토큰 감지 시 위생 정리용."""
+    response.delete_cookie(
+        key=TRUSTED_DEVICE_COOKIE_NAME,
+        path=TRUSTED_DEVICE_PATH,
+        httponly=True,
+        secure=settings.cookie_secure,
+        samesite="strict",
+    )
+
+
+# ---------------------------------------------------------------------------
 # 현재 유저 의존성 (M1 C5 /auth/me, 후속 보호 라우트 공용)
 # ---------------------------------------------------------------------------
 
@@ -291,3 +415,38 @@ async def require_verified_email(
     if not current_user.is_email_verified:
         raise _FORBIDDEN_UNVERIFIED
     return current_user
+
+
+# ---------------------------------------------------------------------------
+# role 가드 (M1.5 B3 - RBAC)
+# ---------------------------------------------------------------------------
+
+_FORBIDDEN_ROLE = HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="권한이 없습니다")
+
+
+def require_role(*roles: RoleEnum):
+    """role 기반 접근 가드 팩토리. get_current_user 위에 합성된다.
+
+    authz 진실 소스는 DB user.role(JWT claim 아님) - get_current_user가 이미 매 요청
+    User를 로드하므로 추가 쿼리 0으로 항상 최신 role을 본다(강등 즉시 반영).
+    M1.5는 require_owner만 부착, M4에서 require_role(OWNER, MODERATOR) 등으로 확장.
+    """
+
+    async def _require(
+        current_user: Annotated[User, Depends(get_current_user)],
+    ) -> User:
+        if current_user.role not in roles:
+            raise _FORBIDDEN_ROLE
+        # owner는 TOTP 활성이 권한의 전제. owner 세션은 발급 지점 봉쇄(B3)로 전부 TOTP
+        # 통과가 보장되지만, 봉쇄가 못 덮는 잔존 세션 창 하나를 이 검사가 마저 닫는다.
+        # (moderator 2FA 정책은 M4 소관 - 이 검사는 owner에만 적용되므로 영향 없음)
+        # 잔존 세션 창: reader로 로그인 중 승격되면 기존 access(≤15분, stateless라 회수
+        # 불가)가 owner 권한을 얻는다 - 그 시점 totp_confirmed_at은 NULL이라 여기서 막힌다.
+        if current_user.role == RoleEnum.OWNER and current_user.totp_confirmed_at is None:
+            raise _FORBIDDEN_ROLE
+        return current_user
+
+    return _require
+
+
+require_owner = require_role(RoleEnum.OWNER)

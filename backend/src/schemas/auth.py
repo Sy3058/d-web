@@ -6,6 +6,7 @@ CPU DoS와 bcrypt 72바이트 truncate 우회를 함께 막는다(AUTH-01).
 """
 
 import re
+from typing import Literal
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
@@ -55,3 +56,23 @@ class ResendVerificationRequest(BaseModel):
 
 class MessageResponse(BaseModel):
     message: str
+
+
+class TotpConfirmRequest(BaseModel):
+    # 6자리 고정. 앞자리 0 보존을 위해 str로 받는다 (M1.5 B2).
+    code: str = Field(pattern=r"^[0-9]{6}$")
+    # "이 기기에서 2단계 인증 생략" 옵트인(기본 꺼짐). TOTP 검증 성공 시에만 신뢰 기기
+    # 쿠키가 발급된다 (M1.5 B3). /admin/2fa/confirm·/admin/login/totp 공용.
+    remember_device: bool = False
+
+
+class TotpSetupResponse(BaseModel):
+    # 시크릿 원문은 이 URI(QR 인코딩용 1회 표시) 안에만 존재 - 별도 필드 노출 금지 (M1.5 B2).
+    otpauth_uri: str
+
+
+class AdminLoginResponse(BaseModel):
+    # 관리자 로그인 1단계 결과로 F1 화면을 분기한다: totp=코드 입력, totp_setup=QR 등록 강제,
+    # complete=신뢰 기기로 TOTP 생략(인증 쿠키 발급 완료). 올바른 owner 비번을 통과해야만
+    # 받는 응답이라 등록 여부 노출은 비열거 정책과 충돌하지 않는다 (M1.5 B3).
+    stage: Literal["totp", "totp_setup", "complete"]

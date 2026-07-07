@@ -74,6 +74,20 @@ email_verifications
 └── used_at    TIMESTAMPTZ            -- NULL = 미사용
 ```
 
+### trusted_devices
+관리자 신뢰 기기 - "이 기기에서 30일간 2단계 인증 생략" (M1.5 B3). TOTP 검증 성공 시
+옵트인 발급, `/admin/login` 1단계가 유효 행을 확인하면 TOTP 생략(비번은 여전히 필수).
+유효 조건에 `created_at >= users.totp_confirmed_at` 포함 - TOTP 재등록 시 옛 신뢰 자동 실효.
+```sql
+trusted_devices
+├── id         UUID PRIMARY KEY DEFAULT gen_random_uuid()
+├── user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE
+├── token_hash VARCHAR(255) NOT NULL  -- HMAC-SHA256(+TOKEN_PEPPER) 해시, UNIQUE (원문은 쿠키에만)
+├── expires_at TIMESTAMPTZ NOT NULL   -- 발급 + 30일, 절대 만료(슬라이딩 갱신 없음)
+├── created_at TIMESTAMPTZ DEFAULT now()  -- 앱이 명시 세팅(totp_confirmed_at과 같은 시계로 비교)
+└── revoked_at TIMESTAMPTZ            -- NULL = 유효
+```
+
 ---
 
 ## 2. 작품/에피소드 도메인
@@ -385,6 +399,11 @@ CREATE UNIQUE INDEX uq_refresh_tokens_token_hash ON refresh_tokens(token_hash);
 CREATE UNIQUE INDEX uq_email_verifications_token ON email_verifications(token);
 -- 재발송/무효화(M1 E3)의 WHERE user_id=? 조회 (M1 I2, forward-only 마이그레이션)
 CREATE INDEX idx_email_verifications_user_id ON email_verifications(user_id);
+
+-- 신뢰 기기 토큰 해시 직접 조회(/admin/login) + 중복 방지 (M1.5 B3)
+CREATE UNIQUE INDEX uq_trusted_devices_token_hash ON trusted_devices(token_hash);
+-- 승격/재등록 시 user 단위 일괄 revoke 조회 (M1.5 B3)
+CREATE INDEX idx_trusted_devices_user_id ON trusted_devices(user_id);
 
 -- 공개된 에피소드만 조회 (idx_episodes_work_id와 별개의 partial index)
 CREATE INDEX idx_episodes_published     ON episodes(work_id) WHERE is_published = TRUE;

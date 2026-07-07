@@ -14,7 +14,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.config import settings
 from src.lib.exceptions import OAuthExchangeError
-from src.models.user import OAuthAccount, User
+from src.models.user import OAuthAccount, RoleEnum, User
 from src.services import oauth_service
 from src.services.oauth_service import GoogleClaims
 
@@ -245,3 +245,30 @@ async def test_resolve_race_recovers_to_login(db_session: AsyncSession):
         await db_session.exec(select(OAuthAccount).where(OAuthAccount.provider_id == "race-sub"))
     ).all()
     assert len(accounts) == 1
+
+
+async def test_callback_owner_blocked(async_client: AsyncClient, db_session: AsyncSession):
+    # owner의 소셜 로그인은 세션 발급 관문(_issue_session)에서 봉쇄된다(M1.5 B3 -
+    # owner 세션은 TOTP 경로로만). 응답은 다른 실패와 같은 generic oauth_failed.
+    owner = User(
+        email="owner-social@example.com",
+        nickname="작가",
+        is_email_verified=True,
+        role=RoleEnum.OWNER,
+    )
+    db_session.add(owner)
+    await db_session.flush()
+    db_session.add(OAuthAccount(user_id=owner.id, provider="google", provider_id="owner-sub"))
+    await db_session.commit()
+
+    state = await _login_get_state(async_client)
+    claims = GoogleClaims(sub="owner-sub", email="owner-social@example.com", email_verified=True)
+    exchange, verify = _mock_google(claims)
+    with exchange, verify:
+        resp = await async_client.get(
+            f"/auth/callback/google?code=abc&state={state}", follow_redirects=False
+        )
+
+    assert resp.status_code == 302
+    assert "error=oauth_failed" in resp.headers["location"]
+    assert resp.cookies.get("access_token") is None
