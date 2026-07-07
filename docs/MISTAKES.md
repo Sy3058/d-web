@@ -44,6 +44,12 @@
 - 포트원 webhook 금액 검증 누락 → 서버에서 금액 재검증
 -->
 
+## JWT / PyJWT
+
+- 위조(forged) 토큰 테스트용 "틀린 시크릿"을 짧은 문자열로 쓰면 `InsecureKeyLengthWarning` 노이즈 발생
+  → PyJWT는 HS256 서명 키가 32바이트 미만이면 경고를 낸다. `"wrong-secret"`(12자) 같은 값은 테스트 의도(서명 불일치 → 401)엔 문제없지만 경고가 낀다
+  → 32바이트 이상의 임의 문자열(예: `"wrong-secret-0123456789abcdef0123456789abcdef"`)로 늘려서 해결. 실제 사고: M1.5 B2 `test_setup_forged_cookie_401`. B3의 `/admin/login/totp` pending 쿠키 위조 테스트에서도 동일 패턴 재발 가능성 높음
+
 ## Astro / React
 
 <!-- 실수 발생 시 여기에 추가 -->
