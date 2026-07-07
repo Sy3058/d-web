@@ -243,6 +243,86 @@ def clear_oauth_tx_cookie(response: Response) -> None:
 
 
 # ---------------------------------------------------------------------------
+# 관리자 2FA pending 쿠키 (M1.5 B2/B3 - 로그인 1단계와 TOTP 단계 사이 단명 운반)
+# ---------------------------------------------------------------------------
+#
+# /admin/login 1단계(B3)가 발급하고 /admin/2fa/*(B2 등록)·/admin/login/totp(B3)가 소비한다.
+# oauth_tx처럼 서버 저장 없는 jwt_secret 서명 JWT. typ 클레임이 두 흐름을 구분한다:
+#   totp_setup_pending - TOTP 미등록 owner. /admin/2fa/setup·confirm만 통과
+#   totp_pending       - TOTP 활성 owner. /admin/login/totp만 통과
+# SameSite=Strict: oauth_tx가 Lax인 사유(구글발 cross-site top-level GET 콜백)가 여기엔
+# 없다 - 이 쿠키는 admin SPA의 same-site fetch POST에만 실리면 된다. Path=/admin으로
+# 로그인/2FA 외 요청 노출을 줄인다.
+
+ADMIN_PENDING_COOKIE_NAME = "admin_totp_pending"
+ADMIN_PENDING_MAX_AGE = 600  # 10분 - 1단계 통과~코드 입력엔 충분, 그 이상은 만료로 재사용 차단
+ADMIN_PENDING_PATH = "/admin"
+TOTP_SETUP_PENDING = "totp_setup_pending"
+TOTP_PENDING = "totp_pending"
+
+
+def create_admin_pending_token(user_id: str, typ: str) -> str:
+    """pending 단계 운반용 서명 JWT. typ은 TOTP_SETUP_PENDING 또는 TOTP_PENDING."""
+    now = datetime.now(UTC)
+    return jwt.encode(
+        {
+            "sub": user_id,
+            "typ": typ,
+            "iat": now,
+            "exp": now + timedelta(seconds=ADMIN_PENDING_MAX_AGE),
+        },
+        settings.jwt_secret,
+        algorithm=settings.jwt_algorithm,
+    )
+
+
+def set_admin_pending_cookie(response: Response, user_id: str, typ: str) -> None:
+    """1단계(이메일/비번) 통과 직후 pending 쿠키를 set. B3 /admin/login이 호출한다."""
+    response.set_cookie(
+        key=ADMIN_PENDING_COOKIE_NAME,
+        value=create_admin_pending_token(user_id, typ),
+        max_age=ADMIN_PENDING_MAX_AGE,
+        path=ADMIN_PENDING_PATH,
+        httponly=True,
+        secure=settings.cookie_secure,
+        samesite="strict",
+    )
+
+
+def read_admin_pending(request: Request, expected_typ: str) -> str | None:
+    """pending 쿠키를 검증·디코드해 user_id(sub)를 반환. 누락/만료/위조/typ 불일치면 None.
+
+    setup 흐름과 로그인 흐름의 쿠키를 서로 오용할 수 없도록 typ을 정확히 대조한다
+    (setup_pending으로 /admin/login/totp 통과 금지, 역방향 동일). 이 쿠키는 신원 운반만
+    담당한다 - role·활성화 상태는 발급 후 바뀔 수 있으므로 소비자가 DB에서 재확인한다.
+    """
+    raw = request.cookies.get(ADMIN_PENDING_COOKIE_NAME)
+    if not raw:
+        return None
+    try:
+        payload = jwt.decode(raw, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+    except jwt.InvalidTokenError:
+        return None
+    if payload.get("typ") != expected_typ:
+        return None
+    sub = payload.get("sub")
+    if not isinstance(sub, str):
+        return None
+    return sub
+
+
+def clear_admin_pending_cookie(response: Response) -> None:
+    """pending 쿠키를 만료시킨다. TOTP 단계 성공 시 일회용으로 소비한다."""
+    response.delete_cookie(
+        key=ADMIN_PENDING_COOKIE_NAME,
+        path=ADMIN_PENDING_PATH,
+        httponly=True,
+        secure=settings.cookie_secure,
+        samesite="strict",
+    )
+
+
+# ---------------------------------------------------------------------------
 # 현재 유저 의존성 (M1 C5 /auth/me, 후속 보호 라우트 공용)
 # ---------------------------------------------------------------------------
 
