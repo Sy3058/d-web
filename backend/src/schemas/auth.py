@@ -55,3 +55,13 @@ class ResendVerificationRequest(BaseModel):
 
 class MessageResponse(BaseModel):
     message: str
+
+
+class TotpConfirmRequest(BaseModel):
+    # 6자리 고정. 앞자리 0 보존을 위해 str로 받는다 (M1.5 B2).
+    code: str = Field(pattern=r"^[0-9]{6}$")
+
+
+class TotpSetupResponse(BaseModel):
+    # 시크릿 원문은 이 URI(QR 인코딩용 1회 표시) 안에만 존재 - 별도 필드 노출 금지 (M1.5 B2).
+    otpauth_uri: str
