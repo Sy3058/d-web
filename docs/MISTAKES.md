@@ -141,6 +141,31 @@
   → 원인: `_UNAUTHORIZED`가 두 모듈에 동명 존재(`routers/auth.py:52`=문자열 메시지, `lib/auth.py:145`=HTTPException 객체). diff 두 조각을 모듈 맥락 없이 한 화면에서 보다 한 바인딩으로 뭉침
   → 교훈: cross-module 동명 심볼은 같은 게 아님. grep/Read로 각 모듈의 실제 정의를 확인한 뒤에야 버그 단정. squash-merge repo라 허위 이슈는 노이즈만
 
+- 본문 답변과 AskUserQuestion(퀴즈 등)을 같은 턴에 섞지 말 것
+  → 도구 호출 **앞에** 쓴 텍스트는 사용자 화면에서 가려질 수 있음.
+  → 답변이 턴의 최종 메시지가 되게 하고, 퀴즈/질문 도구는 다음 턴에. 또는 도구를 먼저 호출하고 결과 받은 뒤 최종 메시지에 본문을 담기
+
+- 세션 시작 시 브랜치·PR 상태를 메모리/ledger 기록만으로 단정하지 말 것 (세션 밖에서 진행됐을 수 있음)
+  → 실제 사고: 메모리에 "미푸시·PR 대기"로 남아 있었지만 실제로는 사용자가 세션 밖에서 push·PR 머지까지 완료 → 이미 머지된 잔재 브랜치 위에서 새 세션 시작
+  → `git status -sb` + `gh pr list --head <브랜치> --state all`로 원격 상태를 확정. 머지된 잔재면 main 복귀 + 로컬 삭제부터. "PR 푸시 후 main 복귀" 규칙은 세션 밖 머지를 커버 못 하니 세션 시작 점검으로 보완
+
+## SQLAlchemy / AsyncSession
+
+- `session.rollback()`은 `expire_on_commit=False`여도 **세션의 모든 객체를 만료**시킨다 (그 설정은 이름대로 commit 전용)
+  → 만료 객체의 속성 접근·관계 대입은 AsyncSession에서 동기 lazy load를 트리거해 `MissingGreenlet` 500
+  → 부분 실패 복구(get-or-create UNIQUE 충돌 등)는 전체 rollback 말고 `async with session.begin_nested()`(SAVEPOINT)로 격리할 것 - **되돌리는 범위 = 만료시키는 범위**
+  → 실제 사고: C1 태그 경합 폴백의 rollback이 로드된 work를 만료시켜 `work.tags` 대입에서 크래시(리뷰 발견, 테스트 미커버 경로)
+
+- 서버 계산 컬럼(`onupdate=func.now()`)은 UPDATE 후 만료로 남는다 - `eager_defaults` 기본 `"auto"`는 **INSERT만** RETURNING(PK를 어차피 받아야 해서)
+  → update 경로가 있는 모델은 `__mapper_args__ = {"eager_defaults": True}`로 UPDATE도 RETURNING. 콜사이트별 `session.refresh(obj, attribute_names=[...])` 열거는 다음 함수에서 하나 빠뜨리면 재발하는 땜질
+  → 실제 사고: C1 PUT 응답 직렬화가 만료된 updated_at을 읽다 MissingGreenlet (처음엔 refresh 땜질 → 리뷰에서 매퍼 정책으로 일반화)
+
+- 다대다 **연결만** 바뀌면 부모 행 UPDATE 자체가 안 나가 onupdate가 발화하지 않는다
+  → 부모 updated_at을 갱신하려면 `obj.updated_at = func.now()` 명시 대입으로 행을 일부러 dirty로 만들 것 (대입의 목적은 값이 아니라 UPDATE 유발 - func.now()는 SQL 표현식이라 항상 변경으로 기록)
+
+- Pydantic 부분 업데이트 스키마(`X | None = None`)는 **명시적 JSON null**이 검증을 통과하고 `exclude_unset` dump에도 살아남는다
+  → NOT NULL 컬럼이면 setattr → commit에서 미처리 500. `model_fields_set`(요청에 실제 등장한 필드 집합)으로 명시적 null을 422 거부할 것 (실제 사고: C1 WorkUpdate, 리뷰 발견)
+
 ## Alembic 마이그레이션
 
 - 이미 DB에 적용(upgrade)된 마이그레이션 파일을 직접 편집하지 말 것
