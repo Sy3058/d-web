@@ -29,7 +29,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
-from sqlmodel import Field, SQLModel
+from sqlmodel import Field, Relationship, SQLModel
 
 
 class WorkStatus(StrEnum):
@@ -66,8 +66,34 @@ def _updated_at_column() -> Column:
     )
 
 
+class WorkTag(SQLModel, table=True):
+    __tablename__ = "works_tags"
+
+    work_id: uuid.UUID = Field(
+        sa_column=Column(
+            PgUUID(as_uuid=True),
+            ForeignKey("works.id", ondelete="CASCADE"),
+            primary_key=True,
+            nullable=False,
+        )
+    )
+    tag_id: uuid.UUID = Field(
+        sa_column=Column(
+            PgUUID(as_uuid=True),
+            ForeignKey("tags.id", ondelete="CASCADE"),
+            primary_key=True,
+            nullable=False,
+        )
+    )
+
+
 class Work(SQLModel, table=True):
     __tablename__ = "works"
+    # UPDATE에도 RETURNING으로 서버 계산 컬럼(onupdate updated_at 등)을 즉시 받아온다.
+    # 기본값 "auto"는 INSERT만 커버해서, UPDATE 후 만료된 updated_at을 응답 직렬화가
+    # 동기 접근하다 MissingGreenlet으로 죽는 함정이 있었다(2026-07-09 리뷰 - 콜사이트별
+    # session.refresh 수동 열거 대신 매퍼 정책으로 일반화).
+    __mapper_args__ = {"eager_defaults": True}
 
     id: uuid.UUID | None = Field(default=None, sa_column=_pk_column())
     # 1인 작가라 값은 role=owner 유저 id. 확장 대비 FK는 유지(CASCADE 없음 - soft delete 기본).
@@ -100,6 +126,9 @@ class Work(SQLModel, table=True):
     deleted_at: datetime | None = Field(
         default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
     )
+    # 그룹 C1 응답용(WorkRead.tags). works_tags 경유 다대다. 조회 시 selectinload 필수
+    # (lazy load 금지 - backend/CLAUDE.md N+1 규칙).
+    tags: list["Tag"] = Relationship(link_model=WorkTag)
 
 
 class Tag(SQLModel, table=True):
@@ -112,29 +141,10 @@ class Tag(SQLModel, table=True):
     created_at: datetime | None = Field(default=None, sa_column=_created_at_column())
 
 
-class WorkTag(SQLModel, table=True):
-    __tablename__ = "works_tags"
-
-    work_id: uuid.UUID = Field(
-        sa_column=Column(
-            PgUUID(as_uuid=True),
-            ForeignKey("works.id", ondelete="CASCADE"),
-            primary_key=True,
-            nullable=False,
-        )
-    )
-    tag_id: uuid.UUID = Field(
-        sa_column=Column(
-            PgUUID(as_uuid=True),
-            ForeignKey("tags.id", ondelete="CASCADE"),
-            primary_key=True,
-            nullable=False,
-        )
-    )
-
-
 class Episode(SQLModel, table=True):
     __tablename__ = "episodes"
+    # Work와 동일 - updated_at onupdate 컬럼이 있어 update 경로(D3)에서 같은 함정 방지.
+    __mapper_args__ = {"eager_defaults": True}
     __table_args__ = (
         # 한 작품 안에서 회차 번호 유일 (DB_SCHEMA §2)
         UniqueConstraint("work_id", "episode_no", name="uq_episodes_work_id_episode_no"),

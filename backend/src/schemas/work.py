@@ -9,7 +9,7 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from src.models.work import WorkStatus
 
@@ -18,10 +18,17 @@ TAG_NAME_MAX = 50
 
 
 def _validate_tag_names(names: list[str]) -> list[str]:
-    for name in names:
+    # strip 후 검증 + 순서 유지 중복 제거(같은 이름 두 번 보내도 get-or-create가 한 번만 연결).
+    seen: set[str] = set()
+    result: list[str] = []
+    for raw in names:
+        name = raw.strip()
         if not 1 <= len(name) <= TAG_NAME_MAX:
             raise ValueError(f"태그 이름은 1~{TAG_NAME_MAX}자여야 합니다")
-    return names
+        if name not in seen:
+            seen.add(name)
+            result.append(name)
+    return result
 
 
 class TagRead(BaseModel):
@@ -48,6 +55,8 @@ class WorkCreate(BaseModel):
 
 
 class WorkUpdate(BaseModel):
+    """부분 수정. 필드 생략 = 미변경(exclude_unset). None 허용은 컬럼 nullability를 따른다."""
+
     title: str | None = Field(default=None, min_length=1, max_length=TITLE_MAX)
     synopsis: str | None = None
     cover_image: str | None = None
@@ -55,6 +64,18 @@ class WorkUpdate(BaseModel):
     bundle_discount_rate: Decimal | None = Field(default=None, ge=0, le=1)
     status: WorkStatus | None = None
     tag_names: list[str] | None = None
+
+    # DB에서 NOT NULL인 필드들. `X | None`의 None은 "생략(미변경)"을 표현하기 위한 것이지
+    # null 대입 허용이 아니다 - 명시적 null은 여기서 422로 거부한다(안 막으면 exclude_unset
+    # dump에 None이 살아남아 NOT NULL 컬럼 UPDATE에서 500 - 2026-07-09 리뷰).
+    _NON_NULLABLE = frozenset({"title", "episode_base_price", "bundle_discount_rate", "status"})
+
+    @model_validator(mode="after")
+    def _reject_explicit_null(self) -> "WorkUpdate":
+        for name in self.model_fields_set & self._NON_NULLABLE:
+            if getattr(self, name) is None:
+                raise ValueError(f"{name}에는 null을 지정할 수 없습니다 (생략 = 미변경)")
+        return self
 
     @field_validator("tag_names")
     @classmethod
@@ -73,6 +94,9 @@ class WorkRead(BaseModel):
     episode_base_price: int
     bundle_discount_rate: Decimal
     status: WorkStatus
+    # models/work.py Work.tags Relationship 직렬화. service가 selectinload(Work.tags)로
+    # 미리 로드해둬야 함 - 여기서 접근 시 lazy load 트리거되면 비동기 세션 에러(N+1 규칙).
+    tags: list[TagRead]
     created_at: datetime
     updated_at: datetime
 

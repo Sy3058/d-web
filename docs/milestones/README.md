@@ -135,7 +135,7 @@ M4 (커뮤니티 - 후원 제외)
   - 백업 코드는 1차 구현 제외, 시크릿 분실 시 DB 직접 조작 복구
   - 부트스트랩: `scripts/promote_admin.py`로 owner 승격 (공개 관리자 가입 없음; moderator는 M4에서 owner가 부여)
 - [x] `works` + `tags` + `works_tags` + `episodes` 모델 + 마이그레이션 (#51, schemas 요청/응답 분리·로컬 DB 검증 완료; `bundle_discount_rate` 컬럼 포함/적용 M3, `idx_tags_name`은 name UNIQUE로 대체)
-- [ ] 작품 등록/수정 API (`require_owner` 필수)
+- [x] 작품 등록/수정 API (`require_owner` 필수) *(C1 완료 2026-07-09: DELETE(soft) 포함 5개 엔드포인트 + 태그 get-or-create - 미머지)*
 - [ ] **R2 업로드 = 백엔드 경유 변환** (클라→백엔드 multipart→Pillow 800px WebP→R2; presigned PUT 미사용, M1.5_foundation 결정 1) (회차당 최대 50장)
 - [ ] **이미지 가로 800px WebP 자동 변환** (Q23 확정: 1차 동기 `anyio.to_thread`, 실측 초과 시 Arq+Redis 분리 - 결정 2)
 - [ ] 에피소드 페이지 순서 저장 (`image_keys` JSONB)
