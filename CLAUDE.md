@@ -65,12 +65,18 @@ Opus로 전환한 뒤에는 국면에 맞는 스킬을 먼저 호출할 것: 계
 
 ## 상세 규칙 참조
 
-- 프론트엔드: @frontend/CLAUDE.md
-- 백엔드: @backend/CLAUDE.md
-- 기획 결정: @docs/DECISIONS.md
 - 워크플로우 (브랜치/커밋/PR/블로그/세션종료/검색): @docs/guides/GUIDE_WORKFLOW.md
-- 작업 진행 프레임워크 (goal 입력판 + 고정 루프): @docs/guides/GUIDE_TASK_HARNESS.md
-- 커밋 메시지 형식: @docs/guides/GUIDE_COMMIT.md
-- 코드 리뷰 원칙: @docs/reviews/GUIDE_REVIEW.md
-- 반복 실수: @docs/MISTAKES.md (필요할 때만 호출)
-- study 작성 규칙: @docs/guides/GUIDE_STUDY.md
+
+아래 문서는 **자동 로드되지 않는다** (토큰 절감을 위해 @-참조 제거, 2026-07-08).
+해당 시점이 오면 **Read로 먼저 읽고** 작업할 것:
+
+| 문서 | 읽는 시점 |
+|------|----------|
+| `frontend/CLAUDE.md` | frontend/ 작업 시작 시 |
+| `backend/CLAUDE.md` | backend/ 작업 시작 시 |
+| `docs/DECISIONS.md` | 계획·설계 착수, 기존 결정 확인·변경 시 (스택 선택 이유, 2FA·신뢰 기기, OAuth BFF, 비번 해싱, RBAC, 결제 순서 등 결정 전문) |
+| `docs/guides/GUIDE_TASK_HARNESS.md` | goal 입력판·ledger(`task_harness.local`) 작업 착수 시 |
+| `docs/guides/GUIDE_COMMIT.md` | 커밋 메시지 작성 시 |
+| `docs/reviews/GUIDE_REVIEW.md` | 코드 리뷰·검증 시 |
+| `docs/MISTAKES.md` | 구현·마이그레이션·테스트·CI 착수 시 해당 영역 섹션 확인 |
+| `docs/guides/GUIDE_STUDY.md` | study/ 작성·학습 퀴즈 시 |
