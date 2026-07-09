@@ -119,6 +119,12 @@
   → 실제 사고: 이미 PR로 squash-merge된 브랜치를 "작업 안 끝남"이라 잘못 보고함
   → 확인법: `git fetch` 후 `git log origin/main --oneline`에 squash 커밋(`... (#PR번호)`) 있는지, 또는 PR 상태 직접 확인
 
+- PR 머지 확인 시 "머지됨"만 보지 말고 **로컬 마지막 커밋이 머지분에 포함됐는지**까지 대조할 것
+  → push와 추가 커밋이 엇갈리면(커밋 → 사용자 push → 추가 커밋 → 머지) 마지막 커밋이 빠진 채 머지될 수 있음
+  → 확인법: pull 시 머지 diff 파일 목록에 마지막 커밋 산출물이 있는지, 또는 `git log origin/<브랜치> -1` tip == 로컬 tip 대조. 브랜치 삭제는 그 뒤에
+  → 복구: 빠진 커밋은 main 워킹트리에 `git cherry-pick -n <sha>`(+`git reset`)로 미커밋 복원 후 다음 브랜치 편승 (main 직접 커밋/push 금지)
+  → 실제 사고: C1 마지막 docs 커밋(6464e06)이 PR #60에서 빠짐 - 머지 diff 파일 목록 대조로 발견, cherry-pick -n으로 복구
+
 - `gh` CLI는 이제 설치·인증돼 있음 (`/usr/bin/gh`, 2026-06-14 확인. 과거 "미설치"는 옛 환경)
   → `gh issue view`, `gh pr view/list`로 이슈·PR 상태 직접 조회 가능. 이슈 닫기/코멘트는 외부 동작이라 사용자 확인 후
   → 단 빈/에러 출력을 "없음"으로 단정하는 일반 함정은 여전히 주의. 머지는 `gh`로도 `git log origin/main`(squash 커밋 `... (#PR)`)으로도 교차 확인
