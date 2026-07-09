@@ -91,6 +91,10 @@
 
 ## Claude 작업 효율 (셸/검증 패턴)
 
+- env 값 존재 확인에 `sed 's/=.*/=<값 있음>/'` 식 마스킹을 쓰지 말 것 - **빈 값(`KEY=`)도 `=<값 있음>`으로 치환**돼 "채워짐"으로 오판
+  → 실제 사고: M1.5 D 착수 시 R2 자격증명이 비어 있는데 "전부 채워져 있다"고 보고(블로커 해소 오판)
+  → 값 자체를 노출하지 않고 확인하려면 길이/형식 검사로: `awk -F= '{print $1, length($2)}'` 또는 파이썬으로 `len(v)` 출력
+
 - 셸 출력이 지연되면 빈 결과를 "사실"로 오판하지 말 것 (이번 세션 최악의 실수 원인)
   → 한 명령의 결과가 비어 있거나 늦게 와도, 그걸 근거로 "파일 없음 / 깨끗함 / 성공"이라 단정 금지
   → 특히 파괴적 작업(rm, 삭제, downgrade) 전엔 상태를 한 번 더 확정 후 진행
@@ -155,6 +159,33 @@
   → 실제 사고: 메모리에 "미푸시·PR 대기"로 남아 있었지만 실제로는 사용자가 세션 밖에서 push·PR 머지까지 완료 → 이미 머지된 잔재 브랜치 위에서 새 세션 시작
   → `git status -sb` + `gh pr list --head <브랜치> --state all`로 원격 상태를 확정. 머지된 잔재면 main 복귀 + 로컬 삭제부터. "PR 푸시 후 main 복귀" 규칙은 세션 밖 머지를 커버 못 하니 세션 시작 점검으로 보완
 
+## Pillow / 이미지 처리
+
+- P(팔레트) 모드 이미지의 resize는 **LANCZOS를 지정해도 조용히 NEAREST로 강제**된다
+  → 픽셀값이 색이 아니라 팔레트 인덱스라 보간 산술이 무의미하기 때문(Pillow resize 소스에 명시)
+  → 모드 정규화(convert RGB/RGBA)를 **리사이즈 앞에** 둘 것. 뒤에 두면 팔레트 원고가 계단 현상으로 뭉개짐
+  → 실제 사고: M1.5 D2 초안이 정규화를 리사이즈 뒤에 둠(리뷰 발견, 체커보드 실측으로 확인)
+
+- 16비트 그레이스케일(mode I/I;16*)에 `convert("RGB")` 직행하면 **0~65535가 스케일링 없이 255로 클리핑**돼 백지가 된다
+  → `point(lambda v: v * (255 / 65535))`로 선형 스케일 후 `convert("L")` (스캔 원고 PNG/TIFF 경로)
+  → 실제 사고: M1.5 D2 초안 - 중간 회색(32768)이 순백(255)으로 저장돼 검증 통과(리뷰 실측)
+
+- `img.draft()`(JPEG DCT 축소 디코드, 장당 ~2.8배 가속)는 **EXIF 회전(5~8)과 2배 여유**를 같이 처리해야 한다
+  → 회전 이미지는 transpose 후 축이 바뀌므로 '유효 가로'를 회전 후 기준으로 계산(안 하면 결과 폭이 목표 미달)
+  → 목표의 2배를 요청해야 마지막 LANCZOS가 항상 실제로 일어남(딱 맞게 요청하면 draft의 거친 축소가 최종 품질이 됨 - thumbnail의 reducing_gap=2와 같은 관행)
+
+- 애니메이션 이미지(GIF/APNG/animated WebP)는 일반 변환 경로에서 **에러 없이 첫 프레임만 남는다**
+  → 조용한 콘텐츠 손실 - `getattr(img, "is_animated", False)`로 명시 거부(또는 의도적 처리)할 것
+
+## R2 / boto3
+
+- R2_ENDPOINT에 버킷 경로가 붙으면(`https://acct.r2...com/dweb`) **에러 없이 성공하면서 모든 키가 어긋난다**
+  → S3 호환 path-style: boto3가 endpoint 경로 뒤에 `/<버킷>/<키>`를 또 붙임 → R2가 첫 세그먼트를 버킷으로 해석, 나머지 전부가 키(`dweb/works/...`)로 정상 저장됨 - 서버 입장에선 유효한 요청이라 에러 불가
+  → 대시보드 '버킷 Settings > S3 API' 주소는 끝의 `/버킷명`을 빼고 넣을 것. 코드는 `urlparse(endpoint).path` 검사로 첫 사용 시 거부(M1.5 D1)
+
+- boto3 클라이언트 첫 생성은 콜드 ~60ms(botocore 서비스 정의 JSON 파싱) - **async 경로에서 루프 위 직접 호출 금지**
+  → lazy 싱글턴이라도 획득 호출 자체를 to_thread 안으로(M1.5 D1 `_put_object_sync` 패턴)
+
 ## SQLAlchemy / AsyncSession
 
 - `session.rollback()`은 `expire_on_commit=False`여도 **세션의 모든 객체를 만료**시킨다 (그 설정은 이름대로 commit 전용)
@@ -209,6 +240,10 @@
 - 서비스가 `session.commit()`을 직접 호출하면 rollback-격리 픽스처와 충돌
   → conftest의 "트랜잭션 begin → 끝에 rollback" 격리 방식은 service가 commit하면 `InterfaceError: another operation is in progress`
   → 해결: `async_sessionmaker`로 세션 주고, 테스트 후 `metadata.sorted_tables`를 reversed 순으로 DELETE해 정리
+
+- autouse 픽스처의 **teardown은 테스트의 monkeypatch 원복보다 먼저 돌 수 있다** (finalizer LIFO - autouse가 먼저 setup되면 나중에 teardown)
+  → teardown에서 monkeypatch로 바뀐 객체를 원형이라 가정하면 AttributeError (실제 사고: M1.5 D1 - lambda로 교체된 lru_cache 함수에 cache_clear() 호출)
+  → 애초에 teardown 정리가 필요한지부터 의심할 것 - setup 쪽 정리만으로 격리가 충분하면 teardown은 죽은 코드(리뷰에서 setup-only로 단순화)
 
 - 엔드포인트+DB 통합 테스트는 `TestClient` 대신 httpx `ASGITransport`를 쓸 것
   → `TestClient`(동기, 자체 루프)는 session-scope async `db_session`(asyncpg)과 루프가 어긋나 `got Future ... different loop`
