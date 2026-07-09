@@ -11,6 +11,7 @@ from sentry_sdk.integrations.starlette import StarletteIntegration
 from src.config import settings
 from src.lib.logging import configure_logging
 from src.routers import admin_auth, admin_works, auth, oauth
+from src.services import r2_service
 
 
 @asynccontextmanager
@@ -19,6 +20,10 @@ async def lifespan(app: FastAPI):
     log = structlog.get_logger(__name__)
     if settings.env == "production" and not settings.resend_api_key.get_secret_value():
         log.warning("resend_api_key_missing_in_production")
+    # R2는 lazy-fail(첫 업로드 시 에러)이라 미설정 배포가 부팅·헬스체크를 조용히
+    # 통과한다 - 여기서 경고를 남겨 배포 직후 로그로 발견되게 한다(M1.5 D1 리뷰).
+    if settings.env == "production" and not r2_service.is_configured():
+        log.warning("r2_not_configured_in_production")
     if settings.sentry_dsn:
         sentry_sdk.init(
             dsn=settings.sentry_dsn,
