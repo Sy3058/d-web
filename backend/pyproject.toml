@@ -21,6 +21,8 @@ dependencies = [
     "urllib3>=2.7.0",
     "pyotp>=2.10.0",
     "cryptography>=49.0.0",
+    "boto3>=1.43.44",
+    "pillow>=12.3.0",
 ]
 
 [dependency-groups]

@@ -57,11 +57,14 @@ class Settings(BaseSettings):
     portone_channel_key_kakaopay: str = ""
     portone_channel_key_tosspay: str = ""
 
-    # 스토리지 - Cloudflare R2
+    # 스토리지 - Cloudflare R2 (S3 호환, M1.5 D1)
+    # 자격증명은 R2 전용 API 토큰(Object Read & Write, 버킷 한정)에서 발급.
+    # 기본값 빈 값 = CI/무자격 로컬에서도 부팅은 허용하고, 업로드 호출 시점에
+    # R2NotConfiguredError로 실패시킨다(r2_service). SecretStr로 로그 마스킹.
     r2_account_id: str = ""
     r2_access_key_id: str = ""
-    r2_secret_access_key: str = ""
-    r2_bucket: str = "dweb-content"
+    r2_secret_access_key: SecretStr = SecretStr("")
+    r2_bucket: str = "dweb"
     r2_endpoint: str = ""
     r2_signed_url_ttl_seconds: int = 300
 

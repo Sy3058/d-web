@@ -54,7 +54,7 @@ M4 (커뮤니티 - 후원 제외)
 - [ ] Hetzner VPS 초기화 + SSH 키 + 방화벽 (22/80/443만 개방)
 - [x] Docker Compose 구성 (FastAPI + PostgreSQL + Caddy) (C1, 로컬 검증 완료)
 - [ ] Caddy 리버스 프록시 + 자동 HTTPS 동작 확인 (로컬 라우팅은 C2 완료, 자동 HTTPS는 D4에서 / 그룹 D 보류)
-- [ ] Cloudflare R2 버킷 생성 + 액세스 키 + 커스텀 도메인 연결
+- [ ] Cloudflare R2 버킷 생성 + 액세스 키 + 커스텀 도메인 연결 (버킷 `dweb`+Object R/W 키 완료 2026-07-10, 실버킷 스모크 검증. **커스텀 도메인만 미연결** - 서빙 시점(M2~M3)까지 미룰 수 있음)
 - [ ] PostgreSQL **일 1회 풀 덤프 → R2 30일 보관** 스크립트 + cron 등록 (Q18)
 
 ### 백엔드 기반
