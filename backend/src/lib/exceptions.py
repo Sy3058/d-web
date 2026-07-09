@@ -42,3 +42,11 @@ class OAuthEmailExistsError(OAuthError):
 
     router → email_exists. 자동 병합은 계정 탈취 벡터라 의도적으로 거부한다.
     """
+
+
+class ImageValidationError(ValueError):
+    """업로드 이미지 검증 실패 - 비이미지/크기·해상도 초과 등 클라 귀책 (router → 4xx).
+
+    ValueError 서브클래스: 값 검증 실패 시맨틱 + 스크립트 호출자도 자연스럽게 처리.
+    (M1.5 D2. 운영자 설정 문제인 R2NotConfiguredError는 r2_service에 별도 - 5xx 귀책)
+    """
