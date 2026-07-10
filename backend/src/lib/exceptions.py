@@ -50,3 +50,19 @@ class ImageValidationError(ValueError):
     ValueError 서브클래스: 값 검증 실패 시맨틱 + 스크립트 호출자도 자연스럽게 처리.
     (M1.5 D2. 운영자 설정 문제인 R2NotConfiguredError는 r2_service에 별도 - 5xx 귀책)
     """
+
+
+class EpisodeConflictError(Exception):
+    """에피소드 상태 충돌 (router → 409) - M1.5 D3.
+
+    episode_no UNIQUE 중복, 이미지 append 경합(조건부 UPDATE rowcount=0),
+    회차당 장수 상한 도달. 재시도하거나 값을 바꾸면 해소되는 충돌.
+    """
+
+
+class EpisodeValidationError(ValueError):
+    """에피소드 요청 값이 현재 상태와 안 맞음 (router → 422) - M1.5 D3.
+
+    image_keys 재배열에 이 회차의 키가 아닌 값/중복 키, thumbnail이 회차에
+    없는 키 등. Pydantic 단독으론 못 잡는 DB 상태 의존 검증.
+    """

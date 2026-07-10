@@ -9,7 +9,14 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    AwareDatetime,
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
 
 from src.models.work import WorkStatus
 
@@ -105,25 +112,56 @@ class WorkRead(BaseModel):
 
 
 class EpisodeCreate(BaseModel):
-    # image_keys(페이지 이미지)는 그룹 D 멀티파트 업로드 소관 - 요청 바디에 없다.
+    """draft 생성(is_published=false). 이미지는 별도 단건 업로드(D3 구조 A) - 바디에 없다.
+
+    thumbnail도 없다 - 생성 시점엔 검증할 image_keys가 없어 임의 키 주입 통로가 된다.
+    업로드 후 PUT으로 선택한다. published_at은 예약 공개 시각 - **과거 시각도 허용**되며
+    "스케줄러 다음 틱에 공개"를 뜻한다(E1 계약 선확정). AwareDatetime이라 오프셋 없는
+    naive 시각은 422 - KST 로컬 시각이 UTC로 오해석돼 9시간 밀리는 조용한 오동작 차단.
+    """
+
     episode_no: int = Field(ge=1)
     title: str = Field(min_length=1, max_length=TITLE_MAX)
-    price: int | None = Field(default=None, ge=0)
+    price: int | None = Field(default=None, ge=0)  # NULL = works.episode_base_price 참조
     is_free: bool = False
-    thumbnail: str | None = None  # R2 key
+    published_at: AwareDatetime | None = None
 
 
 class EpisodeUpdate(BaseModel):
+    """부분 수정. 생략 = 미변경, 명시적 null은 nullable 컬럼(price·thumbnail·published_at)만.
+
+    - image_keys: 페이지 재배열/삭제. 기존 키의 중복 없는 부분집합만(service 검증 -
+      임의 키 주입 금지). 배열 순서 = 표시 순서(키 파일명은 uuid, 순서 의미 없음).
+    - thumbnail: 회차 대표 컷. 이 회차 image_keys 중 하나여야 하며(작가가 표지 일러스트
+      페이지를 직접 선택 - 첫 페이지가 표지가 아닌 웹툰 관행), null = 해제.
+    - is_published=true: 즉시 공개 - published_at이 없으면(NULL·미래) 서버가 now로 스탬프,
+      최소 1페이지 필요. false 전환 시 published_at 미지정이면 NULL 초기화(E1 부활 차단).
+      published_at 과거값 = 다음 틱 공개(E1). naive 시각은 422(AwareDatetime).
+    """
+
     episode_no: int | None = Field(default=None, ge=1)
     title: str | None = Field(default=None, min_length=1, max_length=TITLE_MAX)
     price: int | None = Field(default=None, ge=0)
     is_free: bool | None = None
+    is_published: bool | None = None
     thumbnail: str | None = None
-    published_at: datetime | None = None
+    published_at: AwareDatetime | None = None
+    image_keys: list[str] | None = None
+
+    # WorkUpdate와 같은 규칙: `X | None`의 None은 "생략" 표현이지 null 대입 허용이 아니다.
+    _NON_NULLABLE = frozenset({"episode_no", "title", "is_free", "is_published", "image_keys"})
+
+    @model_validator(mode="after")
+    def _reject_explicit_null(self) -> "EpisodeUpdate":
+        for name in self.model_fields_set & self._NON_NULLABLE:
+            if getattr(self, name) is None:
+                raise ValueError(f"{name}에는 null을 지정할 수 없습니다 (생략 = 미변경)")
+        return self
 
 
-class EpisodeRead(BaseModel):
-    """관리자(owner) 응답 전용. image_keys(R2 키)를 노출하므로 독자용으로 재사용 금지 -
+class AdminEpisodeRead(BaseModel):
+    """관리자(owner) 응답 **전용** - 이름부터 Admin: image_keys(R2 키)를 노출하므로
+    독자용 라우터(M2)가 무심코 재사용하면 미결제 유저에게 키가 새는 경로가 된다.
     독자 뷰어 응답은 M2에서 image_keys를 제외한 별도 DTO(Signed URL만)로 만든다.
     """
 
