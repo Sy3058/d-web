@@ -20,31 +20,21 @@ def _clear_client_cache():
     r2_service._get_client.cache_clear()
 
 
-def test_episode_page_key_format():
+def test_episode_page_key_format_and_uniqueness():
+    # 파일명은 uuid - 같은 인자로 불러도 호출마다 새 키(D3 리뷰: 순번 파일명은
+    # 동시 업로드가 같은 키를 계산해 살아있는 객체를 덮어쓰는 구멍이라 폐기).
     work_id, episode_id = uuid.uuid4(), uuid.uuid4()
-    assert (
-        r2_service.episode_page_key(work_id, episode_id, 0)
-        == f"works/{work_id}/episodes/{episode_id}/000.webp"
-    )
-
-
-def test_episode_page_key_pads_to_three_digits():
-    work_id, episode_id = uuid.uuid4(), uuid.uuid4()
-    assert r2_service.episode_page_key(work_id, episode_id, 49).endswith("/049.webp")
+    key1 = r2_service.episode_page_key(work_id, episode_id)
+    key2 = r2_service.episode_page_key(work_id, episode_id)
+    prefix = f"works/{work_id}/episodes/{episode_id}/"
+    assert key1.startswith(prefix)
+    assert key1.endswith(".webp")
+    assert key1 != key2
 
 
 def test_cover_key_format():
     work_id = uuid.uuid4()
     assert r2_service.cover_key(work_id) == f"works/{work_id}/cover.webp"
-
-
-def test_episode_page_key_rejects_out_of_range():
-    # 3자리 zero-pad 계약 보호: 1000은 4자리, 음수는 "-01"이 되므로 거부.
-    work_id, episode_id = uuid.uuid4(), uuid.uuid4()
-    with pytest.raises(ValueError, match="0~999"):
-        r2_service.episode_page_key(work_id, episode_id, 1000)
-    with pytest.raises(ValueError, match="0~999"):
-        r2_service.episode_page_key(work_id, episode_id, -1)
 
 
 async def test_upload_bytes_calls_put_object_and_returns_key(monkeypatch):
