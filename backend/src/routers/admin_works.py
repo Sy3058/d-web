@@ -6,15 +6,19 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.lib.auth import require_owner
 from src.lib.db import get_session
+from src.lib.exceptions import ImageValidationError
+from src.lib.uploads import R2_UNAVAILABLE, read_image_upload
 from src.models.user import User
 from src.models.work import Work
 from src.schemas.work import WorkCreate, WorkRead, WorkUpdate
 from src.services import work_service
+from src.services.image_service import convert_to_webp
+from src.services.r2_service import R2NotConfiguredError
 
 router = APIRouter(prefix="/admin/works", tags=["admin-works"])
 
@@ -64,3 +68,24 @@ async def delete_work(work_id: uuid.UUID, owner: OwnerDep, session: SessionDep) 
     # 204 응답은 태그를 읽지 않으므로 with_tags=False로 불필요한 조인 로드를 생략.
     work = await _get_or_404(work_id, session, with_tags=False)
     await work_service.soft_delete_work(work, session)
+
+
+@router.post("/{work_id}/cover", response_model=WorkRead)
+async def upload_cover(
+    work_id: uuid.UUID, image: UploadFile, owner: OwnerDep, session: SessionDep
+) -> Work:
+    """표지 단건 업로드(M1.5 D3, C1 이연분): 변환 → works/{id}/cover.webp 덮어쓰기.
+
+    표지는 에피소드 페이지와 별개 파일이다(회차 썸네일 선택은 에피소드 PUT의
+    thumbnail - 그쪽은 업로드된 페이지 중 선택, 여기는 독립 일러스트 업로드).
+    """
+    work = await _get_or_404(work_id, session)
+    try:
+        data = await read_image_upload(image)
+        webp = await convert_to_webp(data)
+    except ImageValidationError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+    try:
+        return await work_service.set_cover_image(work, webp, session)
+    except R2NotConfiguredError as exc:
+        raise R2_UNAVAILABLE from exc
