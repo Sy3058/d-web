@@ -36,16 +36,16 @@ class R2NotConfiguredError(RuntimeError):
     """
 
 
-def episode_page_key(work_id: uuid.UUID, episode_id: uuid.UUID, page: int) -> str:
-    """에피소드 페이지 키. page는 0부터 시작(image_keys 배열 인덱스와 동일).
+def episode_page_key(work_id: uuid.UUID, episode_id: uuid.UUID) -> str:
+    """에피소드 페이지 키 신규 발급. 파일명은 uuid4 hex - 호출마다 유일하다.
 
-    범위 가드는 3자리 zero-pad 계약 보호: 1000은 4자리("1000.webp")로 패딩이
-    조용히 깨지고 음수는 "-01.webp"가 된다. 회차당 상한(50)보다 훨씬 넉넉하므로
-    정상 경로에선 닿지 않는다(리뷰 하드닝).
+    순번 파일명({page:03d})을 폐기한 이유(2026-07-10 D3 리뷰): 페이지 순서의
+    진실은 episodes.image_keys 배열이라 파일명은 순수 식별자인데, 앱이 stale
+    스냅샷으로 다음 번호를 계산하면 동시 업로드 두 건이 같은 키에 PUT해
+    살아있는 객체를 에러 없이 덮어쓴다(S3 PUT 시맨틱). uuid 파일명은 조정
+    없이 충돌이 불가능하고, 순번 방식의 999 상한(bare ValueError 500)도 없다.
     """
-    if not 0 <= page <= 999:
-        raise ValueError(f"page는 0~999 범위여야 한다: {page}")
-    return f"works/{work_id}/episodes/{episode_id}/{page:03d}.webp"
+    return f"works/{work_id}/episodes/{episode_id}/{uuid.uuid4().hex}.webp"
 
 
 def cover_key(work_id: uuid.UUID) -> str:

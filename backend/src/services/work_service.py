@@ -16,6 +16,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.models.work import Tag, Work
 from src.schemas.work import WorkCreate, WorkUpdate
+from src.services import r2_service
 
 
 async def _select_tags_by_name(names: list[str], session: AsyncSession) -> dict[str, Tag]:
@@ -127,3 +128,17 @@ async def soft_delete_work(work: Work, session: AsyncSession) -> None:
     work.deleted_at = datetime.now(UTC)
     session.add(work)
     await session.commit()
+
+
+async def set_cover_image(work: Work, webp: bytes, session: AsyncSession) -> Work:
+    """변환 완료된 표지 WebP를 R2에 올리고 cover_image 키를 갱신한다 (M1.5 D3).
+
+    표지는 작품당 1장 고정 키(works/{id}/cover.webp) - 재업로드는 같은 키를
+    덮어쓰므로 미참조 파일(orphan)이 생기지 않고 DB 값도 사실상 불변이다. C1의 "키 문자열
+    직접 수용"(WorkCreate/Update.cover_image)은 하위호환으로 유지된다.
+    """
+    key = await r2_service.upload_bytes(r2_service.cover_key(work.id), webp)
+    work.cover_image = key
+    session.add(work)
+    await session.commit()
+    return work
