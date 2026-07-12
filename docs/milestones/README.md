@@ -136,10 +136,10 @@ M4 (커뮤니티 - 후원 제외)
   - 부트스트랩: `scripts/promote_admin.py`로 owner 승격 (공개 관리자 가입 없음; moderator는 M4에서 owner가 부여)
 - [x] `works` + `tags` + `works_tags` + `episodes` 모델 + 마이그레이션 (#51, schemas 요청/응답 분리·로컬 DB 검증 완료; `bundle_discount_rate` 컬럼 포함/적용 M3, `idx_tags_name`은 name UNIQUE로 대체)
 - [x] 작품 등록/수정 API (`require_owner` 필수) *(C1 완료 2026-07-09: DELETE(soft) 포함 5개 엔드포인트 + 태그 get-or-create - 미머지)*
-- [ ] **R2 업로드 = 백엔드 경유 변환** (클라→백엔드 multipart→Pillow 800px WebP→R2; presigned PUT 미사용, M1.5_foundation 결정 1) (회차당 최대 50장)
-- [ ] **이미지 가로 800px WebP 자동 변환** (Q23 확정: 1차 동기 `anyio.to_thread`, 실측 초과 시 Arq+Redis 분리 - 결정 2)
-- [ ] 에피소드 페이지 순서 저장 (`image_keys` JSONB)
-- [ ] 에피소드 공개 예약 (APScheduler in-process 폴링 잡 + 원자 UPDATE, `published_at` 도달 시 `is_published=true`)
+- [x] **R2 업로드 = 백엔드 경유 변환** (클라→백엔드 multipart→Pillow 800px WebP→R2; presigned PUT 미사용, M1.5_foundation 결정 1) (회차당 최대 50장) *(D1 #62 + D3 #64 머지 - 장당 업로드 구조 A)*
+- [x] **이미지 가로 800px WebP 자동 변환** (Q23 확정: 1차 동기 `anyio.to_thread`, 실측 초과 시 Arq+Redis 분리 - 결정 2) *(D2 #62 머지)*
+- [x] 에피소드 페이지 순서 저장 (`image_keys` JSONB) *(D3 #64 머지 - 배열 순서=표시 순서, 재배열 PUT)*
+- [x] 에피소드 공개 예약 (APScheduler in-process 폴링 잡 + 원자 UPDATE, `published_at` 도달 시 `is_published=true`) *(E1 완료 2026-07-13 + #57 토큰 cleanup 잡 - 미머지)*
 
 ### 프론트엔드 (Vite React SPA)
 - [ ] 관리자 로그인 화면 (TOTP 입력 단계 + role 가드: `/auth/me` role≠owner이면 차단; M1.5 관리자 화면은 owner 전용)

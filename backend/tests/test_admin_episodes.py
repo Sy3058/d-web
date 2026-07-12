@@ -485,6 +485,23 @@ async def test_unpublish_clears_published_at(owner_client: AsyncClient, uploaded
     assert body["published_at"] is None
 
 
+async def test_unpublish_ignores_stale_published_at_echo(
+    owner_client: AsyncClient, uploaded_keys: list[str]
+):
+    # E1 계획 리뷰 Critical: 전필드 PUT 폼이 직전 published_at(과거 시각)을 에코해도
+    # false 전환은 항상 예약 해제여야 한다 - 안 지우면 E1 폴링이 60초 안에 재공개.
+    work_id, episode_id, keys = await _episode_with_pages(owner_client, count=1)
+    resp = await _put(owner_client, work_id, episode_id, is_published=True)
+    stale_echo = resp.json()["published_at"]
+    resp = await _put(
+        owner_client, work_id, episode_id, is_published=False, published_at=stale_echo
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["is_published"] is False
+    assert body["published_at"] is None
+
+
 async def test_schedule_publish_keeps_draft(owner_client: AsyncClient):
     # 예약: published_at만 세팅, is_published 전환은 E1 스케줄러 소관.
     # 이미지 0장 draft에도 예약은 허용(메타 먼저 워크플로) - 공개 전환 시점에 E1이 재검사.

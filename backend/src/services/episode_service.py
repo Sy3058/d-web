@@ -147,9 +147,10 @@ async def update_episode(episode: Episode, data: EpisodeUpdate, session: AsyncSe
 
     공개 시맨틱(리뷰 ③): true 전환 시 published_at이 요청에 없고 NULL·미래면
     now 스탬프(공개 회차는 항상 유효한 공개 시각 보유 - M2 정렬·partial 인덱스
-    계약). false 전환 시 요청에 published_at이 없으면 NULL 초기화. 공개 결과
-    상태는 최소 1페이지 필요(빈 draft 공개·공개 회차 전체 삭제 차단 - 리뷰 ④.
-    예약만 걸린 draft는 허용, E1이 공개 전환 시점에 재검사).
+    계약). false 전환 시 published_at은 페이로드와 무관하게 항상 NULL 초기화
+    (E1 재공개 차단 - 재예약은 별도 요청). 공개 결과 상태는 최소 1페이지
+    필요(빈 draft 공개·공개 회차 전체 삭제 차단 - 리뷰 ④. 예약만 걸린
+    draft는 허용, E1이 공개 전환 시점에 재검사).
     """
     changes = data.model_dump(exclude_unset=True)
     new_keys: list[str] | None = changes.pop("image_keys", None)
@@ -173,7 +174,12 @@ async def update_episode(episode: Episode, data: EpisodeUpdate, session: AsyncSe
             planned = changes.get("published_at", episode.published_at)
             if planned is None or planned > datetime.now(UTC):
                 changes["published_at"] = datetime.now(UTC)
-        elif "published_at" not in changes:
+        else:
+            # 페이로드에 published_at이 동봉돼도 무시하고 항상 예약 해제. 동봉 값은
+            # 대부분 관리자 폼의 stale 에코인데, 과거 시각이 남으면 E1 폴링이 내린
+            # 회차를 다음 틱(60초)에 재공개한다(E1 계획 리뷰 Critical). 잡은 DB
+            # 상태만으로 "예약"과 "수동 하차"를 구분할 수 없어 방어는 쓰기 경로
+            # 몫이다. "내리면서 재예약"은 별도 요청으로.
             changes["published_at"] = None
 
     if new_keys is not None:

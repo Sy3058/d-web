@@ -135,8 +135,9 @@ class EpisodeUpdate(BaseModel):
     - thumbnail: 회차 대표 컷. 이 회차 image_keys 중 하나여야 하며(작가가 표지 일러스트
       페이지를 직접 선택 - 첫 페이지가 표지가 아닌 웹툰 관행), null = 해제.
     - is_published=true: 즉시 공개 - published_at이 없으면(NULL·미래) 서버가 now로 스탬프,
-      최소 1페이지 필요. false 전환 시 published_at 미지정이면 NULL 초기화(E1 부활 차단).
-      published_at 과거값 = 다음 틱 공개(E1). naive 시각은 422(AwareDatetime).
+      최소 1페이지 필요. false 전환 시 published_at은 **페이로드와 무관하게 항상 NULL
+      초기화**(E1 부활 차단 - stale 에코 방어. 재예약은 is_published 없이 published_at만
+      별도 요청). published_at 과거값 = 다음 틱 공개(E1). naive 시각은 422(AwareDatetime).
     """
 
     episode_no: int | None = Field(default=None, ge=1)
