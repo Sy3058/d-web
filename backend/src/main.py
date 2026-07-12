@@ -10,6 +10,7 @@ from sentry_sdk.integrations.starlette import StarletteIntegration
 
 from src.config import settings
 from src.lib.logging import configure_logging
+from src.lib.scheduler import create_scheduler
 from src.routers import admin_auth, admin_episodes, admin_works, auth, oauth
 from src.services import r2_service
 
@@ -35,7 +36,13 @@ async def lifespan(app: FastAPI):
             traces_sample_rate=0.1,
             send_default_pii=False,
         )
+    # 이벤트 루프가 도는 여기서 start (import 시점 금지 - E1). ASGITransport 테스트는
+    # lifespan을 안 타므로 스케줄러가 테스트 중 뜨지 않는다.
+    scheduler = create_scheduler()
+    scheduler.start()
     yield
+    # 실행 중 잡을 기다리지 않고 종료(잡은 멱등이라 중단돼도 다음 기동이 흡수)
+    scheduler.shutdown(wait=False)
 
 
 app = FastAPI(
