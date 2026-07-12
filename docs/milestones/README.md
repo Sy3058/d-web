@@ -130,16 +130,16 @@ M4 (커뮤니티 - 후원 제외)
 > **DoD**: 관리자가 2FA로 로그인 → 작품 등록 → 에피소드 이미지 업로드(50장, WebP 변환) → 회차 공개까지 작동.
 
 ### 백엔드
-- [x] **`users.role`(VARCHAR, reader/owner/moderator) RBAC** + `require_role`/`require_owner` 가드 (authz=DB user.role, JWT 미포함; **M1.5는 owner만 빌드** - moderator=M4; DECISIONS "관리자 권한 분리") *(B1 완료: role 모델 + `is_admin`→owner 이관 마이그레이션. B3 완료: `require_role`/`require_owner` + owner-TOTP 보조 규칙 - 미머지, B2·B3 한 PR)*
-- [x] TOTP 시크릿 발급 + 검증 (이메일·비번 → TOTP → JWT 순서; **owner 필수**; 시크릿 Fernet 암호화 at-rest, DECISIONS "2FA"·"관리자 권한 분리") *(B1 완료: Fernet at-rest 저장 + 컬럼 + 부트스트랩 스크립트. B2 완료: `/admin/2fa/setup`·`/admin/2fa/confirm`. B3 완료: 2단계 로그인 `/admin/login`·`/admin/login/totp` + owner 발급 지점 봉쇄 + 신뢰 기기 30일 - 미머지, B2·B3 한 PR)*
+- [x] **`users.role`(VARCHAR, reader/owner/moderator) RBAC** + `require_role`/`require_owner` 가드 (authz=DB user.role, JWT 미포함; **M1.5는 owner만 빌드** - moderator=M4; DECISIONS "관리자 권한 분리") *(B1 완료: role 모델 + `is_admin`→owner 이관 마이그레이션. B3 완료: `require_role`/`require_owner` + owner-TOTP 보조 규칙 - B2·B3 한 PR #58)*
+- [x] TOTP 시크릿 발급 + 검증 (이메일·비번 → TOTP → JWT 순서; **owner 필수**; 시크릿 Fernet 암호화 at-rest, DECISIONS "2FA"·"관리자 권한 분리") *(B1 완료: Fernet at-rest 저장 + 컬럼 + 부트스트랩 스크립트. B2 완료: `/admin/2fa/setup`·`/admin/2fa/confirm`. B3 완료: 2단계 로그인 `/admin/login`·`/admin/login/totp` + owner 발급 지점 봉쇄 + 신뢰 기기 30일 - B2·B3 한 PR #58)*
   - 백업 코드는 1차 구현 제외, 시크릿 분실 시 DB 직접 조작 복구
   - 부트스트랩: `scripts/promote_admin.py`로 owner 승격 (공개 관리자 가입 없음; moderator는 M4에서 owner가 부여)
 - [x] `works` + `tags` + `works_tags` + `episodes` 모델 + 마이그레이션 (#51, schemas 요청/응답 분리·로컬 DB 검증 완료; `bundle_discount_rate` 컬럼 포함/적용 M3, `idx_tags_name`은 name UNIQUE로 대체)
-- [x] 작품 등록/수정 API (`require_owner` 필수) *(C1 완료 2026-07-09: DELETE(soft) 포함 5개 엔드포인트 + 태그 get-or-create - 미머지)*
+- [x] 작품 등록/수정 API (`require_owner` 필수) *(C1 완료 2026-07-09: DELETE(soft) 포함 5개 엔드포인트 + 태그 get-or-create, #60)*
 - [x] **R2 업로드 = 백엔드 경유 변환** (클라→백엔드 multipart→Pillow 800px WebP→R2; presigned PUT 미사용, M1.5_foundation 결정 1) (회차당 최대 50장) *(D1 #62 + D3 #64 머지 - 장당 업로드 구조 A)*
 - [x] **이미지 가로 800px WebP 자동 변환** (Q23 확정: 1차 동기 `anyio.to_thread`, 실측 초과 시 Arq+Redis 분리 - 결정 2) *(D2 #62 머지)*
 - [x] 에피소드 페이지 순서 저장 (`image_keys` JSONB) *(D3 #64 머지 - 배열 순서=표시 순서, 재배열 PUT)*
-- [x] 에피소드 공개 예약 (APScheduler in-process 폴링 잡 + 원자 UPDATE, `published_at` 도달 시 `is_published=true`) *(E1 완료 2026-07-13 + #57 토큰 cleanup 잡 - 미머지)*
+- [x] 에피소드 공개 예약 (APScheduler in-process 폴링 잡 + 원자 UPDATE, `published_at` 도달 시 `is_published=true`) *(E1 #65 머지 + #57 토큰 cleanup 잡 close)*
 
 ### 프론트엔드 (Vite React SPA)
 - [ ] 관리자 로그인 화면 (TOTP 입력 단계 + role 가드: `/auth/me` role≠owner이면 차단; M1.5 관리자 화면은 owner 전용)
