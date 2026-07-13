@@ -65,6 +65,31 @@
   -> `.env` 생성 전에 `pnpm dev`를 먼저 띄우면 env가 undefined로 뜸
   -> 해결: `.env` 작성 후 dev 서버 재시작
 
+- **`import.meta.env.X`의 이름 오타는 에러 없이 폴백으로 조용히 떨어진다** (M1.5 F1, 2026-07-14)
+  -> admin 코드가 `VITE_API_BASE_URL`을 읽는데 `.env`가 정의한 이름은 `VITE_API_URL`이었다
+  -> dev에선 하드코딩 폴백(`?? 'http://localhost:8000'`)이 우연히 실제 주소와 같아 몇 달간 안 드러남
+  -> 프로덕션 빌드에서 관리자 SPA가 **사용자 브라우저의 localhost**를 호출하는 버그가 됐을 것
+  -> 예방: env를 읽는 줄과 `.env.example`을 **같이 열어 이름을 대조**. 폴백은 오타를 감춘다
+
+## TanStack Query (v5)
+
+- **`setQueryData(key, undefined)`는 캐시를 지우지 않는다 - no-op이다** (M1.5 F1, 2026-07-14)
+  -> query-core `queryClient.js`: `const data = functionalUpdate(...); if (data === void 0) return void 0;`
+  -> undefined를 "업데이트 안 함" 신호로 보고 bail-out한다. `null`은 타입 에러라 undefined로 바꾸기 쉬운데 그게 함정
+  -> 로그아웃에서 이걸 쓰면 유저가 캐시에 남아 **뒤로가기 시 라우트 가드가 통과**한다(실측 재현)
+  -> 캐시를 비우려면 `removeQueries({ queryKey })` 또는 `clear()`
+
+- **`ensureQueryData`는 staleTime을 무시하고 캐시를 무조건 반환한다** (M1.5 F1)
+  -> `if (cachedData !== undefined) return Promise.resolve(cachedData)` - `revalidateIfStale`을 주지 않으면 배경 재검증도 안 한다
+  -> 라우트 가드(`beforeLoad`)에서 쓰면 **만료·강등된 세션이 캐시만으로 영구 통과**한다
+  -> 세션을 실제로 재검증해야 하는 가드에는 `fetchQuery`(+`staleTime: 0`)를 쓴다. `isStaleByTime`을 확인해 실제로 재요청한다
+
+- **`useEffect`에서 `mutate()`를 호출하면 StrictMode에서 성공 알림이 유실된다** (M1.5 F1, TanStack/query#8512)
+  -> mount→cleanup→mount 과정에서 mutation observer가 분리돼, 요청은 200으로 성공하는데 컴포넌트는 `pending`에 영구히 멈춘다
+  -> 중복 방지용 `useRef` 가드를 달면 "두 번째 mutate가 우연히 상태를 풀어주는" 경로까지 막아 **멈춤을 고정**시킨다(F1에서 실제로 겪음)
+  -> "마운트 시 표시할 데이터를 가져온다"는 POST여도 **`useQuery`가 맞다**(재구독·dedupe 정상 처리, effect·ref 가드 불필요)
+  -> 진단 순서: 백엔드 curl 격리 → 콘솔 raw fetch → mutationFn 안에 로그(start/resolved) → resolved는 찍히는데 렌더 status가 안 바뀌면 이 함정
+
 ## 공통
 
 - pnpm workspace에서 `@tailwindcss/vite` peer dep 충돌
