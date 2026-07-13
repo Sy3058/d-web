@@ -176,6 +176,16 @@ staleTime 설정 → 일정 시간 후 자동 refetch
 
 ---
 
+## 테스트 (M1.5 F1 도입)
+
+```bash
+pnpm --filter admin test    # vitest run (jsdom + @testing-library/react)
+```
+
+- 설정은 `vitest.config.ts`(vite.config.ts와 분리 - 테스트에 tanstackRouter 플러그인이 불필요하고, 실행마다 `routeTree.gen.ts`를 다시 쓰는 부작용을 피한다)
+- 라우트 가드는 라우터를 띄우지 않고 `Route.options.beforeLoad`를 직접 호출해 검증한다 (`src/routes/_auth.test.tsx` 참조)
+- `api` 모듈을 `vi.mock`으로 갈아끼우고 `QueryClient`를 테스트마다 새로 만든다
+
 ## 코드 리뷰
 
 커밋 전 Opus 4.8 검증: `@docs/CODE_REVIEW_ADMIN.md` 참조

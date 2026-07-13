@@ -142,7 +142,7 @@ M4 (커뮤니티 - 후원 제외)
 - [x] 에피소드 공개 예약 (APScheduler in-process 폴링 잡 + 원자 UPDATE, `published_at` 도달 시 `is_published=true`) *(E1 #65 머지 + #57 토큰 cleanup 잡 close)*
 
 ### 프론트엔드 (Vite React SPA)
-- [ ] 관리자 로그인 화면 (TOTP 입력 단계 + role 가드: `/auth/me` role≠owner이면 차단; M1.5 관리자 화면은 owner 전용)
+- [x] 관리자 로그인 화면 (TOTP 입력 단계 + role 가드: `/auth/me` role≠owner이면 차단; M1.5 관리자 화면은 owner 전용) *(F1 완료 2026-07-14: stage 상태머신 + QR 등록 + pathless 레이아웃 가드 `_auth.tsx`, admin 최초 vitest 18개)*
 - [ ] 작품 목록 / 등록 / 수정 화면
 - [ ] 에피소드 업로드 화면 (드래그앤드롭, 페이지 순서 조정, 임시저장)
 - [ ] 에피소드 공개 예약 UI
