@@ -12,3 +12,9 @@ export type Role = components['schemas']['RoleEnum'];
 export type UserRead = components['schemas']['UserRead'];
 export type AdminLoginResponse = components['schemas']['AdminLoginResponse'];
 export type TotpSetupResponse = components['schemas']['TotpSetupResponse'];
+
+export type Tag = components['schemas']['TagRead'];
+export type WorkStatus = components['schemas']['WorkStatus'];
+export type Work = components['schemas']['WorkRead'];
+export type WorkCreate = components['schemas']['WorkCreate'];
+export type WorkUpdate = components['schemas']['WorkUpdate'];

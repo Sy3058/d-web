@@ -276,3 +276,32 @@ async def test_update_tag_race_recovered_without_session_crash(
     assert resp.status_code == 200
     assert {t["name"] for t in resp.json()["tags"]} == {"경합태그"}
     assert calls["count"] == 2  # 초회(빈 결과) + 충돌 후 재조회
+
+
+async def test_episode_count_reflects_episodes(owner_client: AsyncClient) -> None:
+    """episode_count(column_property)가 생성·상세·목록 세 경로 모두에서 채워지는지.
+
+    세 경로는 값을 얻는 방식이 다르다 - 생성/수정은 커밋 후 refresh, 상세/목록은 SELECT에
+    실려 오는 상관 서브쿼리. 하나라도 빠지면 그 응답만 MissingGreenlet으로 500이 난다.
+    """
+    resp = await owner_client.post(WORKS_URL, json={"title": "작품"})
+    assert resp.status_code == 201
+    work_id = resp.json()["id"]
+    assert resp.json()["episode_count"] == 0
+
+    for episode_no in (1, 2):
+        created = await owner_client.post(
+            f"{WORKS_URL}/{work_id}/episodes",
+            json={"episode_no": episode_no, "title": f"{episode_no}화"},
+        )
+        assert created.status_code == 201
+
+    detail = await owner_client.get(f"{WORKS_URL}/{work_id}")
+    assert detail.json()["episode_count"] == 2
+
+    listed = (await owner_client.get(WORKS_URL)).json()
+    assert next(w for w in listed if w["id"] == work_id)["episode_count"] == 2
+
+    # 수정 응답도 refresh 경로를 탄다(값 자체는 안 변한다).
+    updated = await owner_client.put(f"{WORKS_URL}/{work_id}", json={"title": "새 제목"})
+    assert updated.json()["episode_count"] == 2

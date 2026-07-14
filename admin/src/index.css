@@ -1,1 +1,9 @@
 @import "tailwindcss";
+
+@layer base {
+  /* Tailwind preflight는 button의 cursor를 건드리지 않아 기본 화살표로 보인다 -
+     클릭 가능한 모든 버튼에 일괄 적용(파일마다 cursor-pointer를 반복하지 않도록). */
+  button:not(:disabled) {
+    cursor: pointer;
+  }
+}

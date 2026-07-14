@@ -674,6 +674,8 @@ export interface components {
             status: components["schemas"]["WorkStatus"];
             /** Tags */
             tags: components["schemas"]["TagRead"][];
+            /** Episode Count */
+            episode_count: number;
             /**
              * Created At
              * Format: date-time

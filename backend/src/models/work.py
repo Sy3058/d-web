@@ -25,10 +25,12 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    select,
     text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
+from sqlalchemy.orm import column_property
 from sqlmodel import Field, Relationship, SQLModel
 
 
@@ -198,3 +200,18 @@ class Episode(SQLModel, table=True):
     )
     created_at: datetime | None = Field(default=None, sa_column=_created_at_column())
     updated_at: datetime | None = Field(default=None, sa_column=_updated_at_column())
+
+
+# 관리자 목록의 "총 N화". 새 컬럼이 아니라 Work SELECT에 얹히는 상관 서브쿼리라
+# 마이그레이션이 없다(idx_episodes_work_id를 탄다). 이게 없으면 프론트가 작품마다
+# 에피소드 목록 전체(image_keys 포함)를 받아 length를 세는 N+1이 된다.
+# Episode가 Work보다 뒤에 정의돼 클래스 본문에서는 참조할 수 없어 사후 부착한다.
+# ⚠️ INSERT RETURNING(eager_defaults)에는 실리지 않는다 - 갓 생성해 아직 SELECT된 적 없는
+# Work 인스턴스에서 이 속성을 읽으면 lazy load가 걸려 async 밖에서 MissingGreenlet으로 죽는다.
+# 그래서 create_work는 commit 후 이 속성만 명시적으로 refresh한다(work_service).
+Work.episode_count = column_property(  # type: ignore[attr-defined]
+    select(func.count(Episode.id))
+    .where(Episode.work_id == Work.id)
+    .correlate_except(Episode)
+    .scalar_subquery()
+)

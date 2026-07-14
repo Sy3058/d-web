@@ -58,6 +58,16 @@ async def _get_or_create_tags(names: list[str], session: AsyncSession) -> list[T
     return [found[name] for name in names]
 
 
+async def _load_episode_count(work: Work, session: AsyncSession) -> None:
+    """episode_count(column_property)를 커밋 후 다시 채운다.
+
+    column_property는 컬럼이 아니라 SQL 표현식이라 (a) INSERT/UPDATE RETURNING으로 받을 수
+    없고(eager_defaults 대상 아님), (b) flush 후에는 값이 달라졌을 수 있다고 보고 만료된다.
+    만료된 채로 응답 직렬화가 읽으면 lazy load가 async 밖에서 터진다(MissingGreenlet).
+    """
+    await session.refresh(work, attribute_names=["episode_count"])
+
+
 async def create_work(data: WorkCreate, author_id: uuid.UUID, session: AsyncSession) -> Work:
     """작품 생성. author_id는 라우터가 require_owner 결과로 넘긴다(클라 입력 무시).
 
@@ -70,6 +80,7 @@ async def create_work(data: WorkCreate, author_id: uuid.UUID, session: AsyncSess
     work = Work(**data.model_dump(exclude={"tag_names"}), author_id=author_id, tags=tags)
     session.add(work)
     await session.commit()
+    await _load_episode_count(work, session)
     return work
 
 
@@ -120,6 +131,7 @@ async def update_work(work: Work, data: WorkUpdate, session: AsyncSession) -> Wo
 
     session.add(work)
     await session.commit()
+    await _load_episode_count(work, session)
     return work
 
 
@@ -141,4 +153,5 @@ async def set_cover_image(work: Work, webp: bytes, session: AsyncSession) -> Wor
     work.cover_image = key
     session.add(work)
     await session.commit()
+    await _load_episode_count(work, session)
     return work
