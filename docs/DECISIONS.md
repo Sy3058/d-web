@@ -468,6 +468,20 @@ main (항상 배포 가능 상태)
 
 ---
 
+## 프론트엔드 도구 결정
+
+### admin API 타입: openapi-typescript codegen 도입 (M1.5 F2 선행, 2026-07-14 확정)
+
+**결정: `admin/src/types/index.ts`(수기 미러링)를 폐기하고, 백엔드 `app.openapi()` → `openapi-typescript` → `admin/src/types/api.gen.ts`(생성물, 커밋됨) 파이프라인으로 교체. `index.ts`는 그 위 얇은 별칭 레이어(`UserRead` 등 짧은 이름 재수출)만 남긴다.**
+
+- **왜 F1이 아니라 F2인가**: F1은 타입 표면이 작아(`UserRead`/`AdminLoginResponse`/`TotpSetupResponse` 4개) 수기로도 버틸 만해 의도적으로 미뤘다. F2(작품 CRUD)부터 Work/Tag/Episode 요청·응답 스키마가 한꺼번에 들어와 표면이 커지고, F3·F4도 이어 붙는 시점이라 지금이 도입 분기점.
+- **문제**: 수기 미러링은 백엔드 스키마가 바뀌어도 `tsc`가 못 잡는다(둘 다 독립된 텍스트라 컴파일러 관점에서 드리프트가 안 보임) - 런타임에 `undefined`로만 드러난다. F1에서 `types/index.ts` 주석에 이미 "RoleEnum 값이 바뀌면 role 가드가 조용히 오작동" 경고를 남겨둔 상태였다.
+- **채택**: `backend/scripts/export_openapi.py`(서버 기동 없이 `app.openapi()` 덤프) + `scripts/generate-api-types.sh`(루트, JSON 중간산출물 생성→`openapi-typescript`→삭제) + `admin package.json`의 `generate:types` 스크립트. 생성물(`api.gen.ts`)은 `routeTree.gen.ts`와 동일하게 **커밋**(FE/admin CI job이 아직 없어 빌드 시 재생성을 강제할 수 없음 - CI/CD 결정 "후속" 참조).
+- **탈락**: `@hey-api/openapi-ts`·`orval` 등 경쟁 도구도 검토했으나 openapi-typescript가 카테고리 다운로드 1위(주간 ~400만, 2026-07-14 npm 확인)이자 가장 얇음(타입만 생성, 런타임 클라이언트 강제 없음 - 기존 `packages/shared`의 `createApi` 래퍼를 그대로 유지).
+- **규칙**: `api.gen.ts`는 손으로 고치지 않는다. 스키마 변경 후 `pnpm --filter admin generate:types` 재실행 → `index.ts` 별칭이 여전히 유효한지 확인.
+
+---
+
 ## CI/CD 결정
 
 ### CI: GitHub Actions, 백엔드 우선 (2026-06-22)
