@@ -17,7 +17,8 @@
 > RETURNING에 실리지 않고 **flush 후 만료**되므로, 커밋을 수반하는 경로(create·update·set_cover_image)는
 > `work_service._load_episode_count`로 그 속성만 다시 로드해야 한다 - 안 하면 응답 직렬화가
 > lazy load를 걸어 `MissingGreenlet`으로 500이 난다(실측: update·cover 경로가 전부 깨졌다).
-> 상세: `../../ADMIN/Works/IMPLEMENTATION_WORK_CRUD_SCREENS.md` §4
+> 진단 경로 전문: `TROUBLESHOOTING_COLUMN_PROPERTY_MISSING_GREENLET.md`
+> 구현 맥락: `../../ADMIN/Works/IMPLEMENTATION_WORK_CRUD_SCREENS.md` §4
 
 ---
 

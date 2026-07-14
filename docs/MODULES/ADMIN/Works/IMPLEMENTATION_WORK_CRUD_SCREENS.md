@@ -6,7 +6,7 @@
 | 관련 마일스톤 | [M1.5](../../../milestones/M1.5_foundation.md) 그룹 F - F2 (ADM-02 프런트) |
 | 작성 시점 | M1.5 F2 (2026-07-15) |
 | 상태 | 구현 + 수동 e2e(등록·수정·삭제·표지 크롭 확인) + Opus 코드 리뷰(/code-review xhigh, **14건 발견 전부 수정**). admin `test` 24 passed, build·lint 클린. 백엔드 `pytest` 244 passed, `alembic check` 클린 |
-| 관련 문서 | C1 백엔드 계약(`../../BE/Works/IMPLEMENTATION_WORK_CRUD.md`), DECISIONS "표지 서빙", M1.5_foundation.md F2 |
+| 관련 문서 | C1 백엔드 계약(`../../BE/Works/IMPLEMENTATION_WORK_CRUD.md`), **`../../BE/Works/TROUBLESHOOTING_COLUMN_PROPERTY_MISSING_GREENLET.md`**(§4의 진단 경로 전문), DECISIONS "표지 서빙", M1.5_foundation.md F2 |
 
 C1(작품 CRUD API)을 소비하는 관리자 화면. **백엔드도 한 곳 바뀌었다**(§4 - 목록 N+1 제거).
 
