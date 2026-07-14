@@ -90,6 +90,21 @@
   -> "마운트 시 표시할 데이터를 가져온다"는 POST여도 **`useQuery`가 맞다**(재구독·dedupe 정상 처리, effect·ref 가드 불필요)
   -> 진단 순서: 백엔드 curl 격리 → 콘솔 raw fetch → mutationFn 안에 로그(start/resolved) → resolved는 찍히는데 렌더 status가 안 바뀌면 이 함정
 
+- **`invalidateQueries`/`removeQueries`는 기본이 prefix 매칭이다 - 목록 키를 다른 키의 앞부분으로 만들지 말 것** (M1.5 F2, 2026-07-15)
+  -> 목록 `['admin','works']` + 상세 `['admin','works',id]` 구조에서 목록 하나를 무효화하면 **상세·하위 쿼리가 전부 재요청**된다(작품 N개면 요청 N+1건)
+  -> `exact: true`로 막을 수는 있지만 구조가 남아 다음 사람이 같은 덫을 밟는다 → 키를 세그먼트로 분리(`['admin','works','list']` / `['admin','works','detail',id]`)
+  -> 회귀 테스트는 "무관한 쿼리의 `isInvalidated`가 false"로 고정. 옛 구조로 되돌려 **실제로 실패하는지 확인**할 것
+
+## 폼 / CSS
+
+- **Chrome은 native `<select>` 화살표에 `padding-right`를 적용하지 않는다** (M1.5 F2)
+  -> `pr-8`을 줘도 화살표가 테두리에 딱 붙어 있다(브라우저마다 다르게 렌더)
+  -> `appearance-none` + 직접 그린 SVG 화살표(`absolute right-3`, `pointer-events-none`)로 위치를 잡는다. 모양도 브라우저 간 통일되는 부수효과
+
+- **`register(name, { valueAsNumber: true })`는 빈 입력을 `NaN`으로 넘긴다** (M1.5 F2)
+  -> zod `z.number()`는 NaN을 타입 에러로 거부하는데, 메시지를 안 주면 **영문 기본 문구**("expected number, received NaN")가 한국어 UI에 그대로 뜬다
+  -> `z.number({ error: '숫자를 입력해 주세요.' })`로 타입 에러 문구를 지정할 것(zod 4는 `message`/`invalid_type_error`가 `error`로 통합)
+
 ## 공통
 
 - pnpm workspace에서 `@tailwindcss/vite` peer dep 충돌
