@@ -104,6 +104,9 @@ class WorkRead(BaseModel):
     # models/work.py Work.tags Relationship 직렬화. service가 selectinload(Work.tags)로
     # 미리 로드해둬야 함 - 여기서 접근 시 lazy load 트리거되면 비동기 세션 에러(N+1 규칙).
     tags: list[TagRead]
+    # Work.episode_count(column_property - 상관 서브쿼리). Work를 SELECT하면 함께 실려 오지만,
+    # 갓 INSERT한 인스턴스에는 없어 create 경로가 refresh로 채운다(models/work.py 주석).
+    episode_count: int
     created_at: datetime
     updated_at: datetime
 
