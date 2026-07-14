@@ -12,6 +12,9 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthRouteImport } from './routes/_auth'
 import { Route as AuthIndexRouteImport } from './routes/_auth/index'
+import { Route as AuthWorksIndexRouteImport } from './routes/_auth/works/index'
+import { Route as AuthWorksNewRouteImport } from './routes/_auth/works/new'
+import { Route as AuthWorksWorkIdRouteImport } from './routes/_auth/works/$workId'
 
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
@@ -27,27 +30,58 @@ const AuthIndexRoute = AuthIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AuthRoute,
 } as any)
+const AuthWorksIndexRoute = AuthWorksIndexRouteImport.update({
+  id: '/works/',
+  path: '/works/',
+  getParentRoute: () => AuthRoute,
+} as any)
+const AuthWorksNewRoute = AuthWorksNewRouteImport.update({
+  id: '/works/new',
+  path: '/works/new',
+  getParentRoute: () => AuthRoute,
+} as any)
+const AuthWorksWorkIdRoute = AuthWorksWorkIdRouteImport.update({
+  id: '/works/$workId',
+  path: '/works/$workId',
+  getParentRoute: () => AuthRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthIndexRoute
   '/login': typeof LoginRoute
+  '/works/$workId': typeof AuthWorksWorkIdRoute
+  '/works/new': typeof AuthWorksNewRoute
+  '/works/': typeof AuthWorksIndexRoute
 }
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/': typeof AuthIndexRoute
+  '/works/$workId': typeof AuthWorksWorkIdRoute
+  '/works/new': typeof AuthWorksNewRoute
+  '/works': typeof AuthWorksIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_auth': typeof AuthRouteWithChildren
   '/login': typeof LoginRoute
   '/_auth/': typeof AuthIndexRoute
+  '/_auth/works/$workId': typeof AuthWorksWorkIdRoute
+  '/_auth/works/new': typeof AuthWorksNewRoute
+  '/_auth/works/': typeof AuthWorksIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login'
+  fullPaths: '/' | '/login' | '/works/$workId' | '/works/new' | '/works/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/login' | '/'
-  id: '__root__' | '/_auth' | '/login' | '/_auth/'
+  to: '/login' | '/' | '/works/$workId' | '/works/new' | '/works'
+  id:
+    | '__root__'
+    | '/_auth'
+    | '/login'
+    | '/_auth/'
+    | '/_auth/works/$workId'
+    | '/_auth/works/new'
+    | '/_auth/works/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -78,15 +112,42 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthIndexRouteImport
       parentRoute: typeof AuthRoute
     }
+    '/_auth/works/': {
+      id: '/_auth/works/'
+      path: '/works'
+      fullPath: '/works/'
+      preLoaderRoute: typeof AuthWorksIndexRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/works/new': {
+      id: '/_auth/works/new'
+      path: '/works/new'
+      fullPath: '/works/new'
+      preLoaderRoute: typeof AuthWorksNewRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/works/$workId': {
+      id: '/_auth/works/$workId'
+      path: '/works/$workId'
+      fullPath: '/works/$workId'
+      preLoaderRoute: typeof AuthWorksWorkIdRouteImport
+      parentRoute: typeof AuthRoute
+    }
   }
 }
 
 interface AuthRouteChildren {
   AuthIndexRoute: typeof AuthIndexRoute
+  AuthWorksWorkIdRoute: typeof AuthWorksWorkIdRoute
+  AuthWorksNewRoute: typeof AuthWorksNewRoute
+  AuthWorksIndexRoute: typeof AuthWorksIndexRoute
 }
 
 const AuthRouteChildren: AuthRouteChildren = {
   AuthIndexRoute: AuthIndexRoute,
+  AuthWorksWorkIdRoute: AuthWorksWorkIdRoute,
+  AuthWorksNewRoute: AuthWorksNewRoute,
+  AuthWorksIndexRoute: AuthWorksIndexRoute,
 }
 
 const AuthRouteWithChildren = AuthRoute._addFileChildren(AuthRouteChildren)

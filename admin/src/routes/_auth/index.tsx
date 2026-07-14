@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { createFileRoute, useNavigate } from '@tanstack/react-router';
+import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { describeAuthError } from '../../lib/api';
 import { useLogout, useMe } from '../../hooks/useAuth';
 
@@ -31,6 +31,9 @@ function Dashboard() {
     <main className="flex min-h-screen flex-col items-center justify-center gap-4">
       <h1 className="text-2xl font-bold">관리자 페이지</h1>
       {user && <p className="text-gray-500">{user.nickname}님, 환영합니다.</p>}
+      <Link to="/works" className="text-blue-600 hover:underline">
+        작품 관리
+      </Link>
       <button
         onClick={handleLogout}
         disabled={logout.isPending}
