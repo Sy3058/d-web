@@ -162,6 +162,10 @@
   → backend 명령은 항상 `cd /home/ash99/project/d-web/backend && uv run ...` 형태로 경로를 명시
   → cwd 가정 시 `Failed to spawn: ruff`(루트엔 venv 없음)·`ModuleNotFoundError: No module named 'src'`로 깨짐. 실제 사고: 같은 `uv run`이 한 번은 되고 다음 호출엔 cwd가 루트로 돌아가 실패
 
+- 같은 턴에 병렬로 던진 Bash 호출들은 **직전 호출이 남긴 cwd를 그대로 이어받는다** - "매번 새 셸"로 가정하면 상대경로 `cd`가 깨진다
+  → 실제 사고: `cd admin && pnpm build` 실행 후 cwd가 `admin/`으로 남은 채, 같은 턴에 병렬로 `cd admin && pnpm lint` / `cd admin && pnpm test`를 또 보내 `cd: admin: No such file or directory`
+  → 병렬 호출에서 상대경로 `cd`를 반복하지 말 것. 절대경로로 고정하거나(`cd /repo/admin && ...`), `pnpm --filter admin <script>`처럼 cwd 무관 실행형을 우선 사용
+
 - `ruff check --fix`를 파일 인자 없이 돌리면 **프로젝트 전체**가 대상이라 범위 밖 파일까지 고친다
   → 실제 사고: E1 작업 중 `uv run ruff check --fix`가 이미 커밋·DB 적용된 마이그레이션 파일의 import까지 정렬 → 커밋 스코프 오염(무관 파일 11건 중 9건이 그 마이그레이션)
   → 변경한 파일만 지정(`ruff check --fix <path...>`)하거나, 전체로 돌렸으면 직후 `git status`로 범위 밖 변경을 확인하고 `git checkout -- <파일>`로 되돌릴 것
@@ -235,6 +239,11 @@
 - 서버 계산 컬럼(`onupdate=func.now()`)은 UPDATE 후 만료로 남는다 - `eager_defaults` 기본 `"auto"`는 **INSERT만** RETURNING(PK를 어차피 받아야 해서)
   → update 경로가 있는 모델은 `__mapper_args__ = {"eager_defaults": True}`로 UPDATE도 RETURNING. 콜사이트별 `session.refresh(obj, attribute_names=[...])` 열거는 다음 함수에서 하나 빠뜨리면 재발하는 땜질
   → 실제 사고: C1 PUT 응답 직렬화가 만료된 updated_at을 읽다 MissingGreenlet (처음엔 refresh 땜질 → 리뷰에서 매퍼 정책으로 일반화)
+
+- ⚠️ **`eager_defaults=True`는 `column_property`를 커버하지 않는다** (위 항목을 "이제 다 해결됐다"로 읽으면 당한다)
+  → column_property는 컬럼이 아니라 **SQL 표현식**이라 (a) INSERT/UPDATE RETURNING에 실리지 않고 (b) flush 후 값이 달라졌을 수 있다고 보고 **만료**된다 → 응답 직렬화가 읽는 순간 또 MissingGreenlet
+  → 커밋을 수반하는 **모든** 경로에서 `session.refresh(obj, attribute_names=["그_속성"])`로 다시 로드할 것. 여기선 콜사이트 열거가 땜질이 아니라 유일한 수단이다(매퍼 정책으로 못 덮는다)
+  → 실제 사고: F2 `Work.episode_count`(에피소드 개수 상관 서브쿼리) 도입 시 생성 경로만 refresh했다가 **수정·표지 업로드 응답이 전부 500**(테스트 8개 실패로 검출)
 
 - 다대다 **연결만** 바뀌면 부모 행 UPDATE 자체가 안 나가 onupdate가 발화하지 않는다
   → 부모 updated_at을 갱신하려면 `obj.updated_at = func.now()` 명시 대입으로 행을 일부러 dirty로 만들 것 (대입의 목적은 값이 아니라 UPDATE 유발 - func.now()는 SQL 표현식이라 항상 변경으로 기록)

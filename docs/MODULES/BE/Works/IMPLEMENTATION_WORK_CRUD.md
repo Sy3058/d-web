@@ -10,6 +10,15 @@
 
 관리자(owner)가 작품 데이터를 넣을 수 있는 최소 골격. M2 콘텐츠 마일스톤의 전제. 표지/에피소드 이미지 업로드는 그룹 D 소관 - 여기선 R2 키 문자열만 수용한다.
 
+> **후속 변경 (2026-07-15, F2)**: `WorkRead`에 **`episode_count`** 추가. `Work.episode_count`는
+> 상관 서브쿼리 `column_property`(마이그레이션 0)로, 관리자 목록이 작품마다 에피소드 목록을
+> 통째로 받아 세던 N+1을 없앤다.
+> ⚠️ **`column_property`는 `eager_defaults`가 커버하지 않는다.** SQL 표현식이라 INSERT/UPDATE
+> RETURNING에 실리지 않고 **flush 후 만료**되므로, 커밋을 수반하는 경로(create·update·set_cover_image)는
+> `work_service._load_episode_count`로 그 속성만 다시 로드해야 한다 - 안 하면 응답 직렬화가
+> lazy load를 걸어 `MissingGreenlet`으로 500이 난다(실측: update·cover 경로가 전부 깨졌다).
+> 상세: `../../ADMIN/Works/IMPLEMENTATION_WORK_CRUD_SCREENS.md` §4
+
 ---
 
 ## 1. 산출물
