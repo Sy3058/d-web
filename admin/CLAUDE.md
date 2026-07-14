@@ -63,7 +63,9 @@ admin/src/
 │   ├── validation.ts           # Zod 스키마 (폼)
 │   └── auth.ts                 # HttpOnly 쿠키 유효성 확인 (⚠️ TOTP 저장 금지, 메모리만)
 ├── types/
-│   └── index.ts                # API 응답 타입 (openapi-typescript)
+│   ├── api.gen.ts               # openapi-typescript 생성물 - 손으로 고치지 말 것.
+│   │                            #   백엔드 스키마 변경 후 `pnpm --filter admin generate:types`로 재생성
+│   └── index.ts                 # api.gen.ts 위 별칭 레이어 (UserRead 등 짧은 이름 재수출)
 ├── main.tsx
 └── index.css                   # Tailwind
 ```
@@ -101,13 +103,19 @@ TanStack Router beforeLoad에서
 - ImageUploader는 별도 컴포넌트 (drag-drop)
 - 이미지는 섹션별로 관리
 
-**파일 업로드 흐름**
+**파일 업로드 흐름** (D3 확정 계약 - presigned PUT 미사용, 백엔드 경유 변환)
 ```
-1. 이미지 드래그 → FormData에 추가
-2. 각 이미지 → presigned PUT 요청 (R2)
-3. 메타데이터 + 이미지 순서 → POST /episodes (백엔드)
-4. 성공 → 목록으로 리다이렉트
+1. 이미지 드래그 → 클라이언트에서 미리보기·순서 조정 (아직 전송 안 함)
+2. POST /admin/works/{workId}/episodes          (JSON 메타 → draft 생성, is_published=false)
+   → 회차번호 중복(409)이 업로드 전에 즉시 걸린다
+3. 각 이미지 → POST .../episodes/{id}/images    (multipart 단건, 장당 1요청)
+   → 백엔드가 800px WebP 변환 후 R2 업로드 + image_keys에 원자 append
+4. PUT .../episodes/{id}                        (순서 재배열 · 썸네일 선택 · 공개/예약 전환)
+5. 성공 → 목록으로 리다이렉트
 ```
+⚠️ **클라이언트가 R2로 직접 올리지 않는다** (M1.5 결정 1: 서버가 바이트를 봐야 변환·규격 보장 가능).
+⚠️ **순수 메타 수정 PUT에 `is_published`를 에코하지 말 것** - `false`가 실리면 서버가 `published_at`을
+무조건 NULL로 밀어 미래 예약이 조용히 풀린다. 예약 설정은 `published_at`만 전송(E1 인계 계약).
 
 **예약 공개**
 ```

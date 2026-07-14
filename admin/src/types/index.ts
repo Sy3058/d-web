@@ -1,25 +1,14 @@
-// ⚠️ 수기 동기화 타입 - 백엔드와의 드리프트를 컴파일러가 잡아주지 못한다.
-// admin/CLAUDE.md는 이 파일을 openapi-typescript 산출물로 규정하나 F1에서는 codegen
-// 파이프라인 도입을 미뤘다(F2 전 도입). 그때까지 아래 스키마가 바뀌면 이 파일도 함께
-// 고칠 것 - 특히 RoleEnum 값이 바뀌면 _auth.tsx의 role 가드가 조용히 오작동한다.
-// 원본: backend/src/models/user.py(RoleEnum, UserRead), backend/src/schemas/auth.py
+// 이 파일은 손으로 고치지 않는다 - `api.gen.ts`(openapi-typescript 생성물) 위에 얹는
+// 얇은 별칭 레이어일 뿐이다. `components['schemas'][...]` 같은 중첩 경로 대신 기존
+// 코드가 쓰던 이름을 그대로 유지해 호출부 변경 없이 codegen을 도입한다.
+//
+// 백엔드 스키마(backend/src/schemas, models)가 바뀌면:
+//   pnpm --filter admin generate:types
+// 를 돌려 api.gen.ts를 재생성한 뒤, 여기 별칭이 여전히 맞는지 확인할 것.
 
-export type Role = 'reader' | 'owner' | 'moderator';
+import type { components } from './api.gen';
 
-export interface UserRead {
-  id: string;
-  email: string;
-  nickname: string;
-  profile_image: string | null;
-  is_email_verified: boolean;
-  role: Role;
-  created_at: string;
-}
-
-export interface AdminLoginResponse {
-  stage: 'totp' | 'totp_setup' | 'complete';
-}
-
-export interface TotpSetupResponse {
-  otpauth_uri: string;
-}
+export type Role = components['schemas']['RoleEnum'];
+export type UserRead = components['schemas']['UserRead'];
+export type AdminLoginResponse = components['schemas']['AdminLoginResponse'];
+export type TotpSetupResponse = components['schemas']['TotpSetupResponse'];

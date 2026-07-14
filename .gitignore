@@ -50,6 +50,9 @@ secrets/
 pr_body.md
 blog.md
 
+# codegen 중간 산출물 (scripts/generate-api-types.sh 실패 시 잔존 방지)
+admin/src/types/openapi.schema.json
+
 # ========================
 # 학습 노트 (로컬 전용, Obsidian 볼트)
 # ========================
