@@ -5,7 +5,9 @@ boto3(S3 호환) 동기 SDK를 anyio.to_thread로 오프로드한다(M1 bcrypt�
 서버가 바이트를 못 봐 변환(ADM-03 서버 변환)이 불가능하다(M1.5 결정 1).
 aioboto3는 대량 동시 업로드가 필요해질 때 재검토(1인 작가 저빈도 업로드).
 
-여기는 업로드(PUT)만 담당한다 - Signed URL(GET) 발급은 M3(결제·잠금) 소관.
+업로드(PUT) + presigned GET 발급을 담당한다. GET은 원래 M3(결제·잠금) 소관이었으나
+관리자 업로드 화면의 페이지 미리보기용으로 F3에서 앞당김(2026-07-15 확정) - 발급
+엔드포인트는 require_owner 뒤에만 있고, 독자용 결제 검증 경로는 여전히 M3다.
 키는 공개 URL이 아니며 비관리자에게 직접 반환하지 않는다(episodes.image_keys에
 키만 저장).
 
@@ -16,6 +18,7 @@ aioboto3는 대량 동시 업로드가 필요해질 때 재검토(1인 작가 �
 """
 
 import uuid
+from collections.abc import Sequence
 from functools import lru_cache, partial
 from urllib.parse import urlparse
 
@@ -114,3 +117,33 @@ async def upload_bytes(key: str, data: bytes, content_type: str = WEBP_CONTENT_T
     """
     await to_thread.run_sync(partial(_put_object_sync, key, data, content_type))
     return key
+
+
+# 관리자 미리보기용 만료(초). 재배열 작업 중 만료돼도 프론트가 재요청하면 그만이라
+# 짧게 잡는다. 매 요청 새로 발급하고 서버·클라 어디서도 캐시하지 않는다(backend/CLAUDE.md).
+PRESIGN_GET_EXPIRES = 600
+
+
+def _presign_get_sync(keys: Sequence[str]) -> list[str]:
+    client = _get_client()
+    return [
+        client.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": settings.r2_bucket, "Key": key},
+            ExpiresIn=PRESIGN_GET_EXPIRES,
+        )
+        for key in keys
+    ]
+
+
+async def presign_get_urls(keys: Sequence[str]) -> list[str]:
+    """키 목록의 presigned GET URL을 **같은 순서로** 발급한다.
+
+    generate_presigned_url은 네트워크 왕복 없는 로컬 서명 연산이지만, 첫 클라이언트
+    생성(콜드 ~60ms)이 섞일 수 있어 upload_bytes처럼 획득부터 to_thread 안에서 돈다.
+    호출자 인가는 이 모듈 밖 책임 - 현재 호출처는 require_owner 뒤(admin_episodes)뿐이고,
+    독자용은 M3에서 결제 검증을 통과한 경로만 추가한다.
+    """
+    if not keys:
+        return []
+    return await to_thread.run_sync(partial(_presign_get_sync, list(keys)))

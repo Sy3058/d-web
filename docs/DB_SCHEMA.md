@@ -132,12 +132,19 @@ episodes
 ├── work_id      UUID NOT NULL REFERENCES works(id) ON DELETE CASCADE
 ├── episode_no   INTEGER NOT NULL          -- 회차 번호
 ├── title        VARCHAR(200) NOT NULL
+├── subtitle     VARCHAR(200)              -- 부제목 (포스타입식 에디터, F3 재설계)
 ├── thumbnail    TEXT                      -- R2 key
 ├── price        INTEGER                   -- NULL이면 works.episode_base_price 사용
-├── is_free      BOOLEAN DEFAULT FALSE     -- 에피소드별 무료 여부 직접 지정
+├── is_free      BOOLEAN DEFAULT FALSE     -- ⚠️ 파생 컬럼: content의 paywall 경계에서
+│               -- 서버가 계산(직접 입력 폐지) - 목록·무료구간 SQL용 비정규화
+├── content      JSONB NOT NULL DEFAULT '{"type": "doc", "content": []}'
+│               -- 본문 = TipTap/ProseMirror JSON 문서(글+이미지+유료 경계 paywall 노드)
+│               -- 표시 순서·구성의 진실. 검증은 lib/content_doc (화이트리스트·상한·키 소유)
+│               -- 유의미 내용 없으면 EMPTY_DOC으로 정규화(스케줄러 SQL 가드 성립 조건)
 ├── image_keys   JSONB NOT NULL DEFAULT '[]'
-│               -- ["r2/ep1/001.webp", "r2/ep1/002.webp", ...]
-│               -- 배열 인덱스 = 페이지 순서
+│               -- 업로드 매니페스트: 이 회차에 업로드된 R2 키 전량(50장 가드·미참조 추적)
+│               -- content의 image 키는 이 배열의 부분집합이어야 함 (F3 재설계로
+│               -- "배열 인덱스 = 페이지 순서" 의미는 content로 이관)
 ├── is_published BOOLEAN DEFAULT FALSE
 ├── published_at TIMESTAMPTZ               -- 예약 공개 시간
 ├── created_at   TIMESTAMPTZ DEFAULT now()
@@ -145,8 +152,10 @@ episodes
 └── UNIQUE (work_id, episode_no)
 ```
 > - `price IS NULL` → 런타임에 `works.episode_base_price` 참조
-> - `is_free = TRUE` → 비로그인 유저도 `image_keys` 접근 가능
-> - `is_free = FALSE` AND 미구매 → 이미지 URL 절대 비공개, Signed URL만 발급
+> - 유료 경계 = content 최상위의 `paywall` 노드(최대 1개). 경계 앞 = 무료 미리보기,
+>   경계 뒤 = 유료. `is_free` = "경계 뒤 유의미 콘텐츠 없음"(전체 무료)의 파생값.
+> - 미구매 독자 응답(M3) = 서버가 경계 이전 노드만 잘라 반환. 유료 구간의 이미지
+>   키·Signed URL은 절대 비공개(클라이언트 숨김 처리 금지).
 
 ### viewer_progress
 ```sql

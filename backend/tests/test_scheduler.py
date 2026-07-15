@@ -44,11 +44,17 @@ async def _make_episode(
     is_published: bool = False,
     pages: int = 1,
 ) -> Episode:
+    # F3 재설계: 공개 가드의 기준은 content 문서(pages=0 = EMPTY_DOC = 빈 본문).
+    keys = [f"works/{work.id}/episodes/{no}/{i}.webp" for i in range(pages)]
     ep = Episode(
         work_id=work.id,
         episode_no=no,
         title=f"{no}화",
-        image_keys=[f"works/{work.id}/episodes/{no}/{i}.webp" for i in range(pages)],
+        image_keys=keys,
+        content={
+            "type": "doc",
+            "content": [{"type": "image", "attrs": {"key": k}} for k in keys],
+        },
         is_published=is_published,
         published_at=published_at,
     )
@@ -80,7 +86,7 @@ async def test_future_reservation_stays_draft(db_session: AsyncSession, work: Wo
 
 
 async def test_empty_draft_reservation_not_published(db_session: AsyncSession, work: Work):
-    # D3 인계: 이미지 0장 draft는 예약 시각이 지나도 공개하지 않는다
+    # D3 인계 + F3: 빈 본문(EMPTY_DOC) draft는 예약 시각이 지나도 공개하지 않는다
     ep = await _make_episode(db_session, work, 1, published_at=_past(), pages=0)
     assert await publish_due_episodes(db_session) == 0
     await db_session.refresh(ep)

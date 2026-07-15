@@ -24,8 +24,8 @@ from src.lib.exceptions import (
 from src.lib.uploads import R2_UNAVAILABLE, read_image_upload
 from src.models.user import User
 from src.models.work import Episode
-from src.schemas.work import AdminEpisodeRead, EpisodeCreate, EpisodeUpdate
-from src.services import episode_service, work_service
+from src.schemas.work import AdminEpisodeRead, EpisodeCreate, EpisodeImageUrl, EpisodeUpdate
+from src.services import episode_service, r2_service, work_service
 from src.services.image_service import MAX_IMAGES_PER_EPISODE, convert_to_webp
 from src.services.r2_service import R2NotConfiguredError
 
@@ -131,3 +131,22 @@ async def list_episodes(work_id: uuid.UUID, owner: OwnerDep, session: SessionDep
     """episode_no 순 목록. image_keys 포함(F3 재배열 UI 소비)이라 상세 GET은 없다."""
     await _work_or_404(work_id, session)
     return list(await episode_service.list_episodes(work_id, session))
+
+
+@router.get("/{episode_id}/image-urls", response_model=list[EpisodeImageUrl])
+async def get_episode_image_urls(
+    work_id: uuid.UUID, episode_id: uuid.UUID, owner: OwnerDep, session: SessionDep
+) -> list[EpisodeImageUrl]:
+    """업로드된 페이지의 presigned GET URL(image_keys 순서). 관리자 미리보기 전용.
+
+    원래 M3(결제·잠금) 소관이던 GET 발급을 F3 업로드 화면(draft 재진입 미리보기·
+    재배열·썸네일 선택)용으로 앞당김(2026-07-15). 매 요청 새로 발급하고 캐시하지
+    않는다(backend/CLAUDE.md Signed URL 규칙).
+    """
+    episode = await _episode_or_404(work_id, episode_id, session)
+    keys = list(episode.image_keys)
+    try:
+        urls = await r2_service.presign_get_urls(keys)
+    except R2NotConfiguredError as exc:
+        raise R2_UNAVAILABLE from exc
+    return [EpisodeImageUrl(key=key, url=url) for key, url in zip(keys, urls, strict=True)]

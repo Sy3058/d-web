@@ -49,9 +49,11 @@ async def publish_due_episodes(session: AsyncSession) -> int:
             Episode.is_published.is_(False),
             Episode.published_at.is_not(None),
             Episode.published_at <= func.now(),
-            # D3 리뷰 인계: 이미지 0장 draft에 걸린 예약이 빈 회차를 공개하는 것 차단
-            # ("메타 먼저" 워크플로 - 이후 첫 이미지가 붙으면 다음 틱에 공개됨)
-            func.jsonb_array_length(Episode.image_keys) > 0,
+            # D3 리뷰 인계 + F3 재설계: 빈 본문 draft에 걸린 예약이 빈 회차를 공개하는 것
+            # 차단("메타 먼저" 워크플로 - 이후 본문이 저장되면 다음 틱에 공개됨).
+            # 쓰기 경로가 유의미 내용 없는 문서를 EMPTY_DOC(content=[])으로 접어주기
+            # 때문에(lib/content_doc) 배열 길이 > 0 이 곧 "유의미 내용 있음"이다.
+            func.jsonb_array_length(Episode.content["content"]) > 0,
         )
         .values(is_published=True)
         .execution_options(synchronize_session=False)
