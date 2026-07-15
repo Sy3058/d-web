@@ -1,7 +1,9 @@
-"""에피소드 관리 API 테스트 (M1.5 D3, ADM-03).
+"""에피소드 관리 API 테스트 (M1.5 D3, ADM-03 + F3 재설계 2026-07-15).
 
-구조 A(장당 업로드 + JSON 메타 분리) 계약 검증. R2는 upload_bytes를 가로채
-키만 기록한다(hermetic - 실연결은 D1 스모크로 기확인). 인가 픽스처는
+구조 A(장당 업로드 + JSON 메타 분리) 계약 검증. F3부터 본문은 content
+문서(TipTap JSON)가 진실이고 image_keys는 업로드 매니페스트, is_free는
+paywall 경계에서 서버가 파생한다. R2는 upload_bytes를 가로채 키만
+기록한다(hermetic - 실연결은 D1 스모크로 기확인). 인가 픽스처는
 test_admin_works.py와 동일 패턴(쿠키 직접 set - 로그인 플로우 재현 불필요).
 """
 
@@ -115,6 +117,32 @@ async def _episode_with_pages(
     return work_id, episode["id"], resp.json()["image_keys"]
 
 
+def _doc(*nodes: dict) -> dict:
+    return {"type": "doc", "content": list(nodes)}
+
+
+def _para(text: str) -> dict:
+    return {"type": "paragraph", "content": [{"type": "text", "text": text}]}
+
+
+def _img(key: str) -> dict:
+    return {"type": "image", "attrs": {"key": key}}
+
+
+_PAYWALL = {"type": "paywall"}
+_EMPTY_DOC = {"type": "doc", "content": []}
+
+
+async def _episode_with_content(
+    owner_client: AsyncClient, count: int = 1
+) -> tuple[str, str, list[str]]:
+    """페이지 업로드 후 본문(content)까지 채운 공개 가능 상태의 에피소드."""
+    work_id, episode_id, keys = await _episode_with_pages(owner_client, count)
+    resp = await _put(owner_client, work_id, episode_id, content=_doc(*(_img(k) for k in keys)))
+    assert resp.status_code == 200
+    return work_id, episode_id, keys
+
+
 _MISSING = "00000000-0000-0000-0000-000000000000"
 
 
@@ -141,11 +169,33 @@ async def test_reader_forbidden_403(async_client: AsyncClient, existing_user: Us
 
 async def test_create_episode_draft_201(owner_client: AsyncClient):
     work_id = await _create_work_id(owner_client)
-    body = await _create_episode(owner_client, work_id, price=300, is_free=True)
+    body = await _create_episode(owner_client, work_id, price=300)
     assert body["is_published"] is False
     assert body["image_keys"] == []
+    assert body["content"] == _EMPTY_DOC
+    assert body["subtitle"] is None
     assert body["thumbnail"] is None
     assert body["price"] == 300
+    assert body["is_free"] is True  # 빈 문서 = 무료 (파생 정합)
+
+
+async def test_create_episode_auto_assigns_no_and_default_title(owner_client: AsyncClient):
+    # F3 에디터 "캔버스 먼저" 흐름: 메타 없이 POST해도 max+1 번호와 "무제"로 draft 생성.
+    work_id = await _create_work_id(owner_client)
+    resp = await owner_client.post(_episodes_url(work_id), json={})
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["episode_no"] == 1
+    assert body["title"] == "무제"
+    resp = await owner_client.post(_episodes_url(work_id), json={})
+    assert resp.status_code == 201
+    assert resp.json()["episode_no"] == 2
+
+
+async def test_create_episode_ignores_is_free_injection(owner_client: AsyncClient):
+    # is_free는 content 파생 컬럼 - 입력으로 보내도 무시된다(EpisodeCreate에 필드 없음).
+    work_id = await _create_work_id(owner_client)
+    body = await _create_episode(owner_client, work_id, is_free=False)
     assert body["is_free"] is True
 
 
@@ -192,7 +242,7 @@ async def test_upload_images_appends_in_order(owner_client: AsyncClient, uploade
         assert resp.status_code == 200
         assert len(resp.json()["image_keys"]) == expected_len
     keys = resp.json()["image_keys"]
-    assert keys == uploaded_keys  # 배열 순서 = 업로드 순서 (순서 진실은 배열)
+    assert keys == uploaded_keys  # 매니페스트는 업로드 순서 보존 (표시 순서 진실은 content)
     assert len(set(keys)) == 3  # uuid 파일명 - 전부 유일
     prefix = f"works/{work_id}/episodes/{episode['id']}/"
     assert all(k.startswith(prefix) and k.endswith(".webp") for k in keys)
@@ -344,7 +394,7 @@ async def test_reorder_reflected(owner_client: AsyncClient, uploaded_keys: list[
     reordered = [keys[2], keys[0], keys[1]]
     resp = await _put(owner_client, work_id, episode_id, image_keys=reordered)
     assert resp.status_code == 200
-    assert resp.json()["image_keys"] == reordered  # 순서 진실 = 배열 (키 파일명 아님)
+    assert resp.json()["image_keys"] == reordered  # 보낸 배열 그대로 저장(중복 없는 부분집합)
 
 
 async def test_reorder_subset_deletes_page(owner_client: AsyncClient, uploaded_keys: list[str]):
@@ -441,14 +491,131 @@ async def test_thumbnail_explicit_null_clears(owner_client: AsyncClient, uploade
 
 
 # ---------------------------------------------------------------------------
-# 공개 (즉시/예약) - 리뷰 ③·④ 시맨틱
+# PUT content: 본문 문서 저장 (F3 재설계)
+# ---------------------------------------------------------------------------
+
+
+async def test_save_content_derives_paid(owner_client: AsyncClient, uploaded_keys: list[str]):
+    # 글+이미지 혼합 본문 저장 + paywall 뒤 유료 분량 존재 → is_free=false 파생.
+    work_id, episode_id, keys = await _episode_with_pages(owner_client)
+    doc = _doc(_para("도입부"), _img(keys[0]), _PAYWALL, _img(keys[1]), _img(keys[2]))
+    resp = await _put(owner_client, work_id, episode_id, content=doc)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["content"] == doc
+    assert body["is_free"] is False
+
+
+async def test_content_without_paywall_is_free(owner_client: AsyncClient, uploaded_keys: list[str]):
+    # 경계 없음 = 전체 무료 (에디터 기본 - 작가가 상자를 옮겨야 유료).
+    work_id, episode_id, keys = await _episode_with_pages(owner_client, count=1)
+    resp = await _put(owner_client, work_id, episode_id, content=_doc(_img(keys[0])))
+    assert resp.status_code == 200
+    assert resp.json()["is_free"] is True
+
+
+async def test_content_paywall_at_end_is_free(owner_client: AsyncClient, uploaded_keys: list[str]):
+    # 경계 뒤에 유의미 콘텐츠가 없으면 전체 무료.
+    work_id, episode_id, keys = await _episode_with_pages(owner_client, count=1)
+    resp = await _put(owner_client, work_id, episode_id, content=_doc(_img(keys[0]), _PAYWALL))
+    assert resp.status_code == 200
+    assert resp.json()["is_free"] is True
+
+
+async def test_content_foreign_image_key_422(owner_client: AsyncClient, uploaded_keys: list[str]):
+    # 이 회차 매니페스트에 없는 키 참조 = 임의 키 주입 - 다른 회차·작품 원고 참조 금지.
+    work_id, episode_id, keys = await _episode_with_pages(owner_client, count=1)
+    resp = await _put(
+        owner_client,
+        work_id,
+        episode_id,
+        content=_doc(_img("works/other/episodes/other/000.webp")),
+    )
+    assert resp.status_code == 422
+
+
+async def test_content_disallowed_node_422(owner_client: AsyncClient):
+    work_id = await _create_work_id(owner_client)
+    episode = await _create_episode(owner_client, work_id)
+    doc = _doc({"type": "iframe", "attrs": {"src": "https://evil.example"}})
+    resp = await _put(owner_client, work_id, episode["id"], content=doc)
+    assert resp.status_code == 422
+
+
+async def test_content_javascript_link_422(owner_client: AsyncClient):
+    # 마크 화이트리스트를 통과한 link도 href 스킴은 http(s)만 - javascript: 주입 차단.
+    work_id = await _create_work_id(owner_client)
+    episode = await _create_episode(owner_client, work_id)
+    node = {
+        "type": "paragraph",
+        "content": [
+            {
+                "type": "text",
+                "text": "클릭",
+                "marks": [{"type": "link", "attrs": {"href": "javascript:alert(1)"}}],
+            }
+        ],
+    }
+    resp = await _put(owner_client, work_id, episode["id"], content=_doc(node))
+    assert resp.status_code == 422
+
+
+async def test_content_meaningless_normalized_to_empty_doc(owner_client: AsyncClient):
+    # 빈 paragraph·구분선만 있으면 EMPTY_DOC으로 접힌다 - E1 SQL 가드의 성립 조건.
+    work_id = await _create_work_id(owner_client)
+    episode = await _create_episode(owner_client, work_id)
+    doc = _doc({"type": "paragraph"}, {"type": "horizontalRule"})
+    resp = await _put(owner_client, work_id, episode["id"], content=doc)
+    assert resp.status_code == 200
+    assert resp.json()["content"] == _EMPTY_DOC
+
+
+async def test_content_save_stale_manifest_conflict(
+    owner: User, uploaded_keys: list[str], db_session: AsyncSession
+):
+    """F3 리뷰 m1 회귀: content 저장도 길이-가드 - 검증에 쓴 매니페스트 스냅샷이
+    stale이면(인플라이트 업로드·재배열이 먼저 커밋) 409. 무가드 ORM 경로였다면
+    "content 이미지 키 ⊆ image_keys" 불변식이 동시 요청에서 깨졌다."""
+    work = await work_service.create_work(WorkCreate(title="본문경합"), owner.id, db_session)
+    episode = await episode_service.create_episode(
+        work.id, EpisodeCreate(episode_no=1, title="1화"), db_session
+    )
+    appended = f"works/{work.id}/episodes/{episode.id}/{uuid.uuid4().hex}.webp"
+    await db_session.exec(
+        update(Episode)
+        .where(Episode.id == episode.id)
+        .values(image_keys=[appended])
+        .execution_options(synchronize_session=False)
+    )
+    await db_session.commit()
+
+    # episode 인메모리 스냅샷은 여전히 0장 - 그 기준으로 검증된 content 저장 시도
+    with pytest.raises(EpisodeConflictError):
+        await episode_service.update_episode(
+            episode, EpisodeUpdate(content=_doc(_para("글"))), db_session
+        )
+
+
+async def test_manifest_delete_breaking_content_reference_422(
+    owner_client: AsyncClient, uploaded_keys: list[str]
+):
+    # 본문이 참조 중인 키를 매니페스트에서 지우면 깨진 참조 - 최종 상태 기준 재검증.
+    work_id, episode_id, keys = await _episode_with_pages(owner_client)
+    resp = await _put(owner_client, work_id, episode_id, content=_doc(_img(keys[0])))
+    assert resp.status_code == 200
+    resp = await _put(owner_client, work_id, episode_id, image_keys=[keys[1], keys[2]])
+    assert resp.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# 공개 (즉시/예약) - 리뷰 ③·④ 시맨틱 (F3: 요건이 "본문 유의미 콘텐츠"로 이동)
 # ---------------------------------------------------------------------------
 
 
 async def test_publish_immediately_stamps_published_at(
     owner_client: AsyncClient, uploaded_keys: list[str]
 ):
-    work_id, episode_id, keys = await _episode_with_pages(owner_client, count=1)
+    work_id, episode_id, keys = await _episode_with_content(owner_client, count=1)
     resp = await _put(owner_client, work_id, episode_id, is_published=True)
     assert resp.status_code == 200
     body = resp.json()
@@ -456,27 +623,46 @@ async def test_publish_immediately_stamps_published_at(
     assert body["published_at"] is not None  # 공개 회차는 항상 유효한 공개 시각 보유
 
 
+async def test_publish_text_only_episode(owner_client: AsyncClient):
+    # 재설계 핵심 시나리오: 이미지 0장이어도 글이 있으면 공개 가능(공지·연재글).
+    work_id = await _create_work_id(owner_client)
+    episode = await _create_episode(owner_client, work_id)
+    await _put(owner_client, work_id, episode["id"], content=_doc(_para("공지: 다음 주 휴재")))
+    resp = await _put(owner_client, work_id, episode["id"], is_published=True)
+    assert resp.status_code == 200
+    assert resp.json()["is_published"] is True
+
+
 async def test_publish_empty_episode_422(owner_client: AsyncClient):
-    # 리뷰 ④: 이미지 0장 draft는 공개 불가.
+    # 리뷰 ④ 계승: 본문 없는 draft는 공개 불가 (이미지가 있어도 본문에 안 실렸으면 동일).
     work_id = await _create_work_id(owner_client)
     episode = await _create_episode(owner_client, work_id)
     resp = await _put(owner_client, work_id, episode["id"], is_published=True)
     assert resp.status_code == 422
 
 
-async def test_published_episode_cannot_drop_all_pages_422(
+async def test_publish_pages_without_content_422(
     owner_client: AsyncClient, uploaded_keys: list[str]
 ):
-    # 리뷰 ④: 공개 상태에서 image_keys=[]로 전체 삭제도 불가.
+    # 매니페스트에만 있고 본문에 안 실린 이미지는 독자에게 안 보인다 - 공개 요건 미달.
     work_id, episode_id, keys = await _episode_with_pages(owner_client, count=1)
+    resp = await _put(owner_client, work_id, episode_id, is_published=True)
+    assert resp.status_code == 422
+
+
+async def test_published_episode_cannot_clear_content_422(
+    owner_client: AsyncClient, uploaded_keys: list[str]
+):
+    # 리뷰 ④ 계승: 공개 상태에서 본문 전삭제 불가.
+    work_id, episode_id, keys = await _episode_with_content(owner_client, count=1)
     await _put(owner_client, work_id, episode_id, is_published=True)
-    resp = await _put(owner_client, work_id, episode_id, image_keys=[])
+    resp = await _put(owner_client, work_id, episode_id, content=_doc())
     assert resp.status_code == 422
 
 
 async def test_unpublish_clears_published_at(owner_client: AsyncClient, uploaded_keys: list[str]):
     # 리뷰 ③: 비공개 전환 시 published_at을 안 지우면 E1 폴링이 다음 틱에 되살린다.
-    work_id, episode_id, keys = await _episode_with_pages(owner_client, count=1)
+    work_id, episode_id, keys = await _episode_with_content(owner_client, count=1)
     await _put(owner_client, work_id, episode_id, is_published=True)
     resp = await _put(owner_client, work_id, episode_id, is_published=False)
     assert resp.status_code == 200
@@ -490,7 +676,7 @@ async def test_unpublish_ignores_stale_published_at_echo(
 ):
     # E1 계획 리뷰 Critical: 전필드 PUT 폼이 직전 published_at(과거 시각)을 에코해도
     # false 전환은 항상 예약 해제여야 한다 - 안 지우면 E1 폴링이 60초 안에 재공개.
-    work_id, episode_id, keys = await _episode_with_pages(owner_client, count=1)
+    work_id, episode_id, keys = await _episode_with_content(owner_client, count=1)
     resp = await _put(owner_client, work_id, episode_id, is_published=True)
     stale_echo = resp.json()["published_at"]
     resp = await _put(
@@ -560,3 +746,61 @@ async def test_upload_cover_nonimage_422(owner_client: AsyncClient, uploaded_key
     )
     assert resp.status_code == 422
     assert uploaded_keys == []
+
+
+# ---------------------------------------------------------------------------
+# presigned 미리보기 URL (GET image-urls - F3에서 M3 GET 발급 앞당김)
+# ---------------------------------------------------------------------------
+
+
+def _image_urls_url(work_id: str, episode_id: str) -> str:
+    return f"{_episodes_url(work_id)}/{episode_id}/image-urls"
+
+
+async def test_image_urls_pairs_in_key_order(
+    owner_client: AsyncClient, uploaded_keys: list[str], monkeypatch
+):
+    # 응답은 image_keys 순서의 {key, url} 쌍 - 프론트 재배열·썸네일 UI의 매핑 계약.
+    work_id, episode_id, keys = await _episode_with_pages(owner_client)
+
+    async def fake_presign(ks):
+        return [f"https://signed.example/{k}" for k in ks]
+
+    monkeypatch.setattr(r2_service, "presign_get_urls", fake_presign)
+    resp = await owner_client.get(_image_urls_url(work_id, episode_id))
+    assert resp.status_code == 200
+    body = resp.json()
+    assert [item["key"] for item in body] == keys
+    assert [item["url"] for item in body] == [f"https://signed.example/{k}" for k in keys]
+
+
+async def test_image_urls_empty_draft(owner_client: AsyncClient):
+    # 이미지 0장 draft는 presign 경로 자체를 안 타므로 R2 미설정 환경에서도 200 [].
+    work_id = await _create_work_id(owner_client)
+    episode = await _create_episode(owner_client, work_id)
+    resp = await owner_client.get(_image_urls_url(work_id, episode["id"]))
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+async def test_image_urls_reader_forbidden_403(async_client: AsyncClient, existing_user: User):
+    await _authed(async_client, existing_user)
+    resp = await async_client.get(_image_urls_url(_MISSING, _MISSING))
+    assert resp.status_code == 403
+
+
+async def test_image_urls_episode_not_found_404(owner_client: AsyncClient):
+    work_id = await _create_work_id(owner_client)
+    resp = await owner_client.get(_image_urls_url(work_id, _MISSING))
+    assert resp.status_code == 404
+
+
+async def test_image_urls_r2_unconfigured_503(
+    owner_client: AsyncClient, uploaded_keys: list[str], monkeypatch
+):
+    # 페이지가 있는데 R2 미설정이면 운영자 설정 문제(503)지 클라이언트 귀책이 아니다.
+    work_id, episode_id, _keys = await _episode_with_pages(owner_client)
+    monkeypatch.setattr(r2_service.settings, "r2_access_key_id", "")
+    r2_service._get_client.cache_clear()
+    resp = await owner_client.get(_image_urls_url(work_id, episode_id))
+    assert resp.status_code == 503

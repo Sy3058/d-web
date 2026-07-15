@@ -176,16 +176,32 @@ class Episode(SQLModel, table=True):
     )
     episode_no: int = Field(sa_column=Column(Integer, nullable=False))
     title: str = Field(sa_column=Column(String(200), nullable=False))
+    # 부제목 (포스타입식 에디터 - F3 재설계 2026-07-15)
+    subtitle: str | None = Field(default=None, sa_column=Column(String(200), nullable=True))
     # 썸네일 R2 키 (공개 URL 아님)
     thumbnail: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
     # NULL이면 런타임에 works.episode_base_price 참조 (금액 하드코딩 금지 - DECISIONS)
     price: int | None = Field(default=None, sa_column=Column(Integer, nullable=True))
-    # "무료 회차 수"의 단일 진실(별도 컬럼 없음). 관리자 UI가 앞 N화의 is_free를 토글.
+    # ⚠️ 파생 컬럼(F3 재설계): content의 유료 경계(paywall) 뒤에 유의미 콘텐츠가 없으면
+    # true. 직접 입력 폐지 - 쓰기 경로가 content에서 동기화한다(lib/content_doc).
+    # 목록·M2 무료구간 SQL 쿼리용 비정규화.
     is_free: bool = Field(
         default=False,
         sa_column=Column(Boolean, nullable=False, server_default=text("false")),
     )
-    # 배열 인덱스 = 페이지 순서. R2 키 저장(공개 URL 아님). 업로드는 그룹 D.
+    # 본문 = TipTap/ProseMirror JSON 문서(글+이미지+유료 경계). 화이트리스트·상한 검증은
+    # lib/content_doc. 이미지 노드는 R2 키를 참조(순서·구성의 진실이 여기로 이동).
+    content: dict = Field(
+        default_factory=lambda: {"type": "doc", "content": []},
+        sa_column=Column(
+            JSONB,
+            nullable=False,
+            server_default=text('\'{"type": "doc", "content": []}\'::jsonb'),
+        ),
+    )
+    # 업로드 매니페스트: 이 회차에 업로드된 R2 키 전량(50장 가드·미참조 추적).
+    # content의 image 키는 이 배열의 부분집합이어야 한다. 페이지 순서 의미는
+    # F3 재설계로 content에 이관됨(배열 순서는 더 이상 표시 순서가 아님).
     image_keys: list[str] = Field(
         default_factory=list,
         sa_column=Column(JSONB, nullable=False, server_default=text("'[]'::jsonb")),

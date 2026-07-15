@@ -49,6 +49,9 @@ async def test_episode_defaults_round_trip(db_session, user: User):
 
     assert ep.id is not None
     assert ep.image_keys == []
+    assert ep.subtitle is None
+    assert ep.content == {"type": "doc", "content": []}
+    # 컬럼 기본값은 false 유지 - 쓰기 경로(service)가 content에서 파생해 세팅한다.
     assert ep.is_free is False
     assert ep.is_published is False
     assert ep.price is None
@@ -64,7 +67,7 @@ async def test_episode_image_keys_order_preserved(db_session, user: User):
     await db_session.commit()
     await db_session.refresh(ep)
 
-    assert ep.image_keys == keys  # 배열 인덱스 = 페이지 순서
+    assert ep.image_keys == keys  # 업로드 순서 보존 (매니페스트 - 표시 순서 진실은 content)
 
 
 # ---------------------------------------------------------------------------

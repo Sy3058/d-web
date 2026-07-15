@@ -88,3 +88,33 @@ def test_get_client_rejects_endpoint_with_bucket_path(monkeypatch):
     )
     with pytest.raises(r2_service.R2NotConfiguredError, match="경로"):
         r2_service._get_client()
+
+
+async def test_presign_get_urls_order_and_params(monkeypatch):
+    # 입력 키 순서 = 출력 URL 순서(image_keys 배열이 순서 진실 - 라우터가 zip으로 짝지음).
+    fake_client = MagicMock()
+    fake_client.generate_presigned_url.side_effect = lambda *a, **kw: (
+        f"https://signed.example/{kw['Params']['Key']}"
+    )
+    monkeypatch.setattr(r2_service, "_get_client", lambda: fake_client)
+    monkeypatch.setattr(r2_service.settings, "r2_bucket", "test-bucket")
+
+    urls = await r2_service.presign_get_urls(["k1", "k2"])
+
+    assert urls == ["https://signed.example/k1", "https://signed.example/k2"]
+    first = fake_client.generate_presigned_url.call_args_list[0]
+    assert first.args[0] == "get_object"
+    assert first.kwargs["Params"] == {"Bucket": "test-bucket", "Key": "k1"}
+    assert first.kwargs["ExpiresIn"] == r2_service.PRESIGN_GET_EXPIRES
+
+
+async def test_presign_get_urls_empty_short_circuit(monkeypatch):
+    # 빈 목록은 클라이언트 획득 전에 [] - 이미지 0장 draft 조회가 R2 미설정 환경(CI)에서도 안전.
+    monkeypatch.setattr(r2_service.settings, "r2_access_key_id", "")
+    assert await r2_service.presign_get_urls([]) == []
+
+
+async def test_presign_get_urls_unconfigured_raises(monkeypatch):
+    monkeypatch.setattr(r2_service.settings, "r2_endpoint", "")
+    with pytest.raises(r2_service.R2NotConfiguredError):
+        await r2_service.presign_get_urls(["k"])
