@@ -159,28 +159,29 @@ M4 (커뮤니티 - 후원 제외)
 > **목적**: 작품 목록 → 에피소드 목록 → 뷰어 3단계 + 무료 회차 정책.
 > **선행**: M1.5 (시드 데이터 입력 가능 상태)
 > **DoD**: 비로그인 유저가 작품 목록 → 무료 1~N화 끝까지 스크롤. 4화(유료) 진입 시 잠금 UI(M3 작업 전이라 placeholder)까지 노출.
+> **세부**: [M2_foundation.md](./M2_foundation.md) - 그룹 A~H 분해 + 설계 결정 5개(무료 presigned·dweb-cover·SSR 등, 2026-07-15)
 
 ### 백엔드
 - [ ] 작품 목록 API (페이지네이션, 태그 필터)
-- [ ] 작품 상세 API (works + tags + episodes 요약, `selectinload` 사용)
-- [ ] 에피소드 목록 API (회차 번호·제목·썸네일·무료/유료/구매상태)
-- [ ] **무료 에피소드 이미지 URL 반환 API** (`is_free=TRUE`만 통과, 미결제 + 유료는 403)
-- [ ] `viewer_progress` 모델 + 진행도 저장 API (페이지 번호 기준, WORK-09)
-- [ ] 작가 소개 정적 데이터 API (또는 Astro에서 마크다운 직접 import)
+- [ ] 작품 상세 API (works + tags + 공개 episodes 요약, `selectinload` 사용)
+- [ ] 에피소드 목록 API (회차 번호·제목·부제목·썸네일·무료/잠금/구매상태)
+- [ ] **무료 구간 콘텐츠 API** (#76 콘텐츠 모델: content를 paywall 경계에서 **서버 절단** + image 키 presigned URL 치환, no-store. 절단은 M3→M2 앞당김 2026-07-16 - 경계 뒤 반환·결제 검증만 M3)
+- [ ] `viewer_progress` 모델 + 진행도 저장 API (블록 인덱스 기준 - #76 재해석, WORK-09)
+- [ ] 작가 소개는 Astro 마크다운 확정(백엔드 API 없음 - M2_foundation 결정 4)
 
 ### 프론트엔드 (Astro)
-- [ ] 작품 목록 페이지 (SSG, 24시간 ISR 또는 빌드 시 fetch)
-- [ ] 작품 상세 페이지 (SSG)
-- [ ] 에피소드 목록 페이지 (SSG)
-- [ ] **세로 스크롤 웹툰 뷰어** (React 아일랜드 `client:idle`)
-  - lazy load, 이전/다음 화 이동
+- [ ] 작품 목록 페이지 (SSR `prerender=false` + 짧은 Cache-Control - M2_foundation 결정 3)
+- [ ] 작품 상세 + 에피소드 목록 페이지 (SSR)
+- [ ] **뷰어 - 콘텐츠 문서 렌더러** (React 아일랜드, `@tiptap/core generateHTML`)
+  - 글+이미지 혼합 렌더, lazy load, 이전/다음 화 이동, 경계 지점 잠금 placeholder
   - 드래그/복사/우클릭/저장 차단 (UX 우선, 완벽 차단 아님)
-  - 마지막 페이지 번호 진행도 저장 (debounce)
+  - 진행도 저장 (블록 인덱스, debounce)
+  - 본문은 no-store API로 아일랜드가 fetch (SSR HTML에 presigned 금지)
 - [ ] 작가 소개 페이지 (정적)
 
 ### M2에서 의도적으로 제외
 - 작품 검색 (WORK-11, P2)
-- 유료 회차 Signed URL → M3
+- 유료 구간(경계 뒤) 반환 + 결제 검증 → M3 (절단 자체는 M2)
 
 ---
 
