@@ -95,11 +95,21 @@
   -> `exact: true`로 막을 수는 있지만 구조가 남아 다음 사람이 같은 덫을 밟는다 → 키를 세그먼트로 분리(`['admin','works','list']` / `['admin','works','detail',id]`)
   -> 회귀 테스트는 "무관한 쿼리의 `isInvalidated`가 false"로 고정. 옛 구조로 되돌려 **실제로 실패하는지 확인**할 것
 
+## TanStack Router
+
+- **admin build는 `tsc -b`가 먼저 돌아, 라우트 파일 추가/이동 직후엔 낡은 routeTree.gen.ts 기준 타입 에러가 쏟아진다** (M1.5 F3, 2026-07-15)
+  → 라우트 트리는 vite 플러그인이 dev/build 중에 재생성하는데, build 스크립트에선 tsc가 그 앞에서 죽어 재생성 지점까지 못 간다
+  → 새 라우트 작업 후엔 `pnpm --filter admin exec vite build`(esbuild라 타입 검사 없음)로 트리부터 재생성 → 그다음 `pnpm --filter admin build`
+
 ## 폼 / CSS
 
 - **Chrome은 native `<select>` 화살표에 `padding-right`를 적용하지 않는다** (M1.5 F2)
   -> `pr-8`을 줘도 화살표가 테두리에 딱 붙어 있다(브라우저마다 다르게 렌더)
   -> `appearance-none` + 직접 그린 SVG 화살표(`absolute right-3`, `pointer-events-none`)로 위치를 잡는다. 모양도 브라우저 간 통일되는 부수효과
+
+- **`z.preprocess`를 RHF+zodResolver 폼 스키마에 쓰면 `useForm<T>` 제네릭과 타입이 어긋난다** (M1.5 F3)
+  → preprocess는 해당 필드의 입력 타입을 unknown으로 만들어 스키마의 input≠output이 되고, SubmitHandler가 TS2345로 거부된다(실측)
+  → 값 변환(빈 문자열 → null 등)은 스키마가 아니라 `register`의 `setValueAs`로 옮기고, 스키마는 `nullable()`만 남긴다
 
 - **`register(name, { valueAsNumber: true })`는 빈 입력을 `NaN`으로 넘긴다** (M1.5 F2)
   -> zod `z.number()`는 NaN을 타입 에러로 거부하는데, 메시지를 안 주면 **영문 기본 문구**("expected number, received NaN")가 한국어 UI에 그대로 뜬다
@@ -119,6 +129,11 @@
 
 - 백엔드 Python 실행 시 `python` 대신 `uv run python` 사용
   → `python` 명령은 PATH에 없음. `uv run python`, `uv run uvicorn`, `uv run pytest` 형태로 실행할 것
+
+- **`git branch -d`의 "머지됨" 안전판은 upstream 기준이라 main 머지를 보장하지 않는다** (M1.5, 2026-07-15)
+  → upstream이 설정된 브랜치는 HEAD가 아니라 **자기 upstream(origin/<branch>)에 머지됐는지만** 검사한다 - push만 돼 있으면 main에 안 들어간 작업도 통과·삭제된다
+  → squash-merge 워크플로에선 원 커밋이 어차피 main에 없으므로 이 안전판에 기대지 말 것
+  → 정리 전 PR 머지 상태(`gh pr view`)를 확인하고 지울 것. 이 확인을 거쳤다면 `-D`가 오히려 정직하다
 
 - 이미 push된 커밋을 rewrite(`reset --soft`/rebase/amend)하면 로컬과 origin이 갈라진다(divergence)
   → 히스토리 재작성 전 push 여부 확인: `git status -sb`(ahead/behind) 또는 `git rev-parse origin/<branch>`
