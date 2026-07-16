@@ -18,3 +18,14 @@ export type WorkStatus = components['schemas']['WorkStatus'];
 export type Work = components['schemas']['WorkRead'];
 export type WorkCreate = components['schemas']['WorkCreate'];
 export type WorkUpdate = components['schemas']['WorkUpdate'];
+
+// AdminEpisodeRead의 Admin 접두사는 독자 라우터 오용 방지용(백엔드 명명) -
+// admin SPA 안에서는 전부 관리자 문맥이라 짧은 이름으로 쓴다.
+export type Episode = components['schemas']['AdminEpisodeRead'];
+export type EpisodeCreate = components['schemas']['EpisodeCreate'];
+export type EpisodeUpdate = components['schemas']['EpisodeUpdate'];
+export type EpisodeImageUrl = components['schemas']['EpisodeImageUrl'];
+
+// 본문(TipTap/ProseMirror JSON 문서). 백엔드 content는 dict[str, Any]라 codegen이
+// 열린 레코드로 뽑는다 - 에디터는 TipTap의 JSONContent로 다루므로 경계에서 캐스팅한다.
+export type ContentDoc = components['schemas']['AdminEpisodeRead']['content'];
