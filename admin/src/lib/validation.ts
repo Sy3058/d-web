@@ -34,3 +34,16 @@ export const workSchema = z.object({
 });
 
 export type WorkInput = z.infer<typeof workSchema>;
+
+// 발행하기 모달 전용 검증. 회차번호는 서버가 자동 할당(입력 없음), 제목/부제는 캔버스 인라인,
+// is_free는 서버가 유료 경계에서 파생 - 그래서 사용자가 입력하는 값은 판매가뿐이다.
+// 판매가는 유료 분량이 있을 때만 노출되고, 비우면 작품 기본가를 쓴다(null 전송).
+export const episodePublishSchema = z.object({
+  price: z
+    .number({ error: '숫자를 입력해 주세요.' })
+    .int('정수만 입력해 주세요.')
+    .min(0, '0 이상이어야 합니다.')
+    .nullable(),
+});
+
+export type EpisodePublishInput = z.infer<typeof episodePublishSchema>;
