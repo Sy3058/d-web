@@ -43,7 +43,7 @@ export function WorkList({ works }: WorkListProps) {
             {/* 카드 본문만 링크로 감싸고 메뉴는 그 바깥 형제로 둔다 - li 자체를 role="button"으로
                 만들면 그 안의 메뉴 버튼이 중첩 인터랙티브 요소가 돼 키보드·스크린리더가 깨진다. */}
             <Link
-              to="/works/$workId"
+              to="/works/$workId/episodes"
               params={{ workId: work.id }}
               className="flex min-w-0 flex-1 items-center gap-4 px-2 py-4"
             >

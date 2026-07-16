@@ -14,7 +14,11 @@ import { Route as AuthRouteImport } from './routes/_auth'
 import { Route as AuthIndexRouteImport } from './routes/_auth/index'
 import { Route as AuthWorksIndexRouteImport } from './routes/_auth/works/index'
 import { Route as AuthWorksNewRouteImport } from './routes/_auth/works/new'
-import { Route as AuthWorksWorkIdRouteImport } from './routes/_auth/works/$workId'
+import { Route as AuthEpisodesNewRouteImport } from './routes/_auth/episodes/new'
+import { Route as AuthWorksWorkIdIndexRouteImport } from './routes/_auth/works/$workId/index'
+import { Route as AuthWorksWorkIdEpisodesIndexRouteImport } from './routes/_auth/works/$workId/episodes/index'
+import { Route as AuthWorksWorkIdEpisodesUploadRouteImport } from './routes/_auth/works/$workId/episodes/upload'
+import { Route as AuthWorksWorkIdEpisodesEpisodeIdRouteImport } from './routes/_auth/works/$workId/episodes/$episodeId'
 
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
@@ -40,48 +44,105 @@ const AuthWorksNewRoute = AuthWorksNewRouteImport.update({
   path: '/works/new',
   getParentRoute: () => AuthRoute,
 } as any)
-const AuthWorksWorkIdRoute = AuthWorksWorkIdRouteImport.update({
-  id: '/works/$workId',
-  path: '/works/$workId',
+const AuthEpisodesNewRoute = AuthEpisodesNewRouteImport.update({
+  id: '/episodes/new',
+  path: '/episodes/new',
   getParentRoute: () => AuthRoute,
 } as any)
+const AuthWorksWorkIdIndexRoute = AuthWorksWorkIdIndexRouteImport.update({
+  id: '/works/$workId/',
+  path: '/works/$workId/',
+  getParentRoute: () => AuthRoute,
+} as any)
+const AuthWorksWorkIdEpisodesIndexRoute =
+  AuthWorksWorkIdEpisodesIndexRouteImport.update({
+    id: '/works/$workId/episodes/',
+    path: '/works/$workId/episodes/',
+    getParentRoute: () => AuthRoute,
+  } as any)
+const AuthWorksWorkIdEpisodesUploadRoute =
+  AuthWorksWorkIdEpisodesUploadRouteImport.update({
+    id: '/works/$workId/episodes/upload',
+    path: '/works/$workId/episodes/upload',
+    getParentRoute: () => AuthRoute,
+  } as any)
+const AuthWorksWorkIdEpisodesEpisodeIdRoute =
+  AuthWorksWorkIdEpisodesEpisodeIdRouteImport.update({
+    id: '/works/$workId/episodes/$episodeId',
+    path: '/works/$workId/episodes/$episodeId',
+    getParentRoute: () => AuthRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthIndexRoute
   '/login': typeof LoginRoute
-  '/works/$workId': typeof AuthWorksWorkIdRoute
+  '/episodes/new': typeof AuthEpisodesNewRoute
   '/works/new': typeof AuthWorksNewRoute
   '/works/': typeof AuthWorksIndexRoute
+  '/works/$workId/': typeof AuthWorksWorkIdIndexRoute
+  '/works/$workId/episodes/$episodeId': typeof AuthWorksWorkIdEpisodesEpisodeIdRoute
+  '/works/$workId/episodes/upload': typeof AuthWorksWorkIdEpisodesUploadRoute
+  '/works/$workId/episodes/': typeof AuthWorksWorkIdEpisodesIndexRoute
 }
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/': typeof AuthIndexRoute
-  '/works/$workId': typeof AuthWorksWorkIdRoute
+  '/episodes/new': typeof AuthEpisodesNewRoute
   '/works/new': typeof AuthWorksNewRoute
   '/works': typeof AuthWorksIndexRoute
+  '/works/$workId': typeof AuthWorksWorkIdIndexRoute
+  '/works/$workId/episodes/$episodeId': typeof AuthWorksWorkIdEpisodesEpisodeIdRoute
+  '/works/$workId/episodes/upload': typeof AuthWorksWorkIdEpisodesUploadRoute
+  '/works/$workId/episodes': typeof AuthWorksWorkIdEpisodesIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_auth': typeof AuthRouteWithChildren
   '/login': typeof LoginRoute
   '/_auth/': typeof AuthIndexRoute
-  '/_auth/works/$workId': typeof AuthWorksWorkIdRoute
+  '/_auth/episodes/new': typeof AuthEpisodesNewRoute
   '/_auth/works/new': typeof AuthWorksNewRoute
   '/_auth/works/': typeof AuthWorksIndexRoute
+  '/_auth/works/$workId/': typeof AuthWorksWorkIdIndexRoute
+  '/_auth/works/$workId/episodes/$episodeId': typeof AuthWorksWorkIdEpisodesEpisodeIdRoute
+  '/_auth/works/$workId/episodes/upload': typeof AuthWorksWorkIdEpisodesUploadRoute
+  '/_auth/works/$workId/episodes/': typeof AuthWorksWorkIdEpisodesIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login' | '/works/$workId' | '/works/new' | '/works/'
+  fullPaths:
+    | '/'
+    | '/login'
+    | '/episodes/new'
+    | '/works/new'
+    | '/works/'
+    | '/works/$workId/'
+    | '/works/$workId/episodes/$episodeId'
+    | '/works/$workId/episodes/upload'
+    | '/works/$workId/episodes/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/login' | '/' | '/works/$workId' | '/works/new' | '/works'
+  to:
+    | '/login'
+    | '/'
+    | '/episodes/new'
+    | '/works/new'
+    | '/works'
+    | '/works/$workId'
+    | '/works/$workId/episodes/$episodeId'
+    | '/works/$workId/episodes/upload'
+    | '/works/$workId/episodes'
   id:
     | '__root__'
     | '/_auth'
     | '/login'
     | '/_auth/'
-    | '/_auth/works/$workId'
+    | '/_auth/episodes/new'
     | '/_auth/works/new'
     | '/_auth/works/'
+    | '/_auth/works/$workId/'
+    | '/_auth/works/$workId/episodes/$episodeId'
+    | '/_auth/works/$workId/episodes/upload'
+    | '/_auth/works/$workId/episodes/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -126,11 +187,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthWorksNewRouteImport
       parentRoute: typeof AuthRoute
     }
-    '/_auth/works/$workId': {
-      id: '/_auth/works/$workId'
+    '/_auth/episodes/new': {
+      id: '/_auth/episodes/new'
+      path: '/episodes/new'
+      fullPath: '/episodes/new'
+      preLoaderRoute: typeof AuthEpisodesNewRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/works/$workId/': {
+      id: '/_auth/works/$workId/'
       path: '/works/$workId'
-      fullPath: '/works/$workId'
-      preLoaderRoute: typeof AuthWorksWorkIdRouteImport
+      fullPath: '/works/$workId/'
+      preLoaderRoute: typeof AuthWorksWorkIdIndexRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/works/$workId/episodes/': {
+      id: '/_auth/works/$workId/episodes/'
+      path: '/works/$workId/episodes'
+      fullPath: '/works/$workId/episodes/'
+      preLoaderRoute: typeof AuthWorksWorkIdEpisodesIndexRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/works/$workId/episodes/upload': {
+      id: '/_auth/works/$workId/episodes/upload'
+      path: '/works/$workId/episodes/upload'
+      fullPath: '/works/$workId/episodes/upload'
+      preLoaderRoute: typeof AuthWorksWorkIdEpisodesUploadRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/works/$workId/episodes/$episodeId': {
+      id: '/_auth/works/$workId/episodes/$episodeId'
+      path: '/works/$workId/episodes/$episodeId'
+      fullPath: '/works/$workId/episodes/$episodeId'
+      preLoaderRoute: typeof AuthWorksWorkIdEpisodesEpisodeIdRouteImport
       parentRoute: typeof AuthRoute
     }
   }
@@ -138,16 +227,24 @@ declare module '@tanstack/react-router' {
 
 interface AuthRouteChildren {
   AuthIndexRoute: typeof AuthIndexRoute
-  AuthWorksWorkIdRoute: typeof AuthWorksWorkIdRoute
+  AuthEpisodesNewRoute: typeof AuthEpisodesNewRoute
   AuthWorksNewRoute: typeof AuthWorksNewRoute
   AuthWorksIndexRoute: typeof AuthWorksIndexRoute
+  AuthWorksWorkIdIndexRoute: typeof AuthWorksWorkIdIndexRoute
+  AuthWorksWorkIdEpisodesEpisodeIdRoute: typeof AuthWorksWorkIdEpisodesEpisodeIdRoute
+  AuthWorksWorkIdEpisodesUploadRoute: typeof AuthWorksWorkIdEpisodesUploadRoute
+  AuthWorksWorkIdEpisodesIndexRoute: typeof AuthWorksWorkIdEpisodesIndexRoute
 }
 
 const AuthRouteChildren: AuthRouteChildren = {
   AuthIndexRoute: AuthIndexRoute,
-  AuthWorksWorkIdRoute: AuthWorksWorkIdRoute,
+  AuthEpisodesNewRoute: AuthEpisodesNewRoute,
   AuthWorksNewRoute: AuthWorksNewRoute,
   AuthWorksIndexRoute: AuthWorksIndexRoute,
+  AuthWorksWorkIdIndexRoute: AuthWorksWorkIdIndexRoute,
+  AuthWorksWorkIdEpisodesEpisodeIdRoute: AuthWorksWorkIdEpisodesEpisodeIdRoute,
+  AuthWorksWorkIdEpisodesUploadRoute: AuthWorksWorkIdEpisodesUploadRoute,
+  AuthWorksWorkIdEpisodesIndexRoute: AuthWorksWorkIdEpisodesIndexRoute,
 }
 
 const AuthRouteWithChildren = AuthRoute._addFileChildren(AuthRouteChildren)

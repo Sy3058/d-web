@@ -1,10 +1,10 @@
-import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { WorkForm } from '../../../components/works/WorkForm';
-import { useUpdateWork, useUploadCover, useWork } from '../../../hooks/useWorks';
-import { describeAuthError } from '../../../lib/api';
-import type { WorkInput } from '../../../lib/validation';
+import { Link, createFileRoute, useNavigate } from '@tanstack/react-router';
+import { WorkForm } from '../../../../components/works/WorkForm';
+import { useUpdateWork, useUploadCover, useWork } from '../../../../hooks/useWorks';
+import { describeAuthError } from '../../../../lib/api';
+import type { WorkInput } from '../../../../lib/validation';
 
-export const Route = createFileRoute('/_auth/works/$workId')({
+export const Route = createFileRoute('/_auth/works/$workId/')({
   component: EditWorkPage,
 });
 
@@ -33,7 +33,16 @@ function EditWorkPage() {
 
   return (
     <main className="mx-auto max-w-2xl p-6">
-      <h1 className="mb-4 text-2xl font-bold">작품 수정</h1>
+      <div className="mb-4 flex items-center justify-between">
+        <h1 className="text-2xl font-bold">작품 수정</h1>
+        <Link
+          to="/works/$workId/episodes"
+          params={{ workId }}
+          className="rounded border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50"
+        >
+          에피소드 관리
+        </Link>
+      </div>
       {isLoading && <p className="text-gray-500">불러오는 중...</p>}
       {isError && <p className="text-sm text-red-600">{describeAuthError(error)}</p>}
       {work && (
