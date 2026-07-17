@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { episodePublishSchema, type EpisodePublishInput } from '../../lib/validation';
 import type { EpisodeImageUrl } from '../../types';
@@ -18,10 +18,22 @@ interface PublishModalProps {
   saving: boolean;
   error: string | null;
   onCancel: () => void;
-  onPublish: (values: { thumbnail: string | null; price: number | null }) => void;
+  onPublish: (values: {
+    thumbnail: string | null;
+    price: number | null;
+    /** null = 지금 공개(is_published), ISO+offset 문자열 = 예약 공개(published_at). */
+    publishedAt: string | null;
+  }) => void;
 }
 
-/** 발행하기 모달: 대표 이미지(단일)·판매가(유료일 때만) 확정 후 즉시 공개. 공개 예약은 F4. */
+/** 현재 시각을 datetime-local 입력용 로컬 문자열(YYYY-MM-DDThh:mm)로 변환. min/기본값에 쓴다. */
+function nowLocalInput(): string {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/** 발행하기 모달: 대표 이미지(단일)·판매가(유료일 때만)·공개 시점(지금/예약) 확정 후 발행. */
 export function PublishModal({
   workName,
   images,
@@ -38,20 +50,33 @@ export function PublishModal({
   const {
     register,
     handleSubmit,
+    control,
+    setValue,
     formState: { errors },
   } = useForm<EpisodePublishInput>({
     resolver: zodResolver(episodePublishSchema),
-    defaultValues: { price: defaultPrice },
+    defaultValues: { mode: 'now', price: defaultPrice, publishedAt: null },
   });
+  const mode = useWatch({ control, name: 'mode' });
 
   // 무료 회차면 가격은 항상 null(입력칸 자체를 안 띄운다).
+  // 예약이면 로컬 datetime을 offset 포함 ISO로 변환해 published_at으로 넘긴다(지금이면 null).
   const submit = (values: EpisodePublishInput) => {
-    onPublish({ thumbnail, price: hasPaidContent ? values.price : null });
+    const publishedAt =
+      values.mode === 'schedule' && values.publishedAt
+        ? new Date(values.publishedAt).toISOString()
+        : null;
+    onPublish({ thumbnail, price: hasPaidContent ? values.price : null, publishedAt });
   };
 
   const thumbButton = (selected: boolean) =>
     `h-16 w-16 shrink-0 overflow-hidden rounded border ${
       selected ? 'ring-2 ring-gray-900' : 'border-gray-200'
+    }`;
+
+  const segButton = (selected: boolean) =>
+    `flex-1 rounded border px-3 py-2 text-sm ${
+      selected ? 'border-gray-900 bg-gray-900 text-white' : 'border-gray-300 text-gray-700'
     }`;
 
   return (
@@ -118,6 +143,44 @@ export function PublishModal({
             </label>
           )}
 
+          <div className="flex flex-col gap-1">
+            <span className="text-sm font-medium">공개 시점</span>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setValue('mode', 'now')}
+                className={segButton(mode === 'now')}
+              >
+                지금 공개
+              </button>
+              <button
+                type="button"
+                onClick={() => setValue('mode', 'schedule')}
+                className={segButton(mode === 'schedule')}
+              >
+                예약 공개
+              </button>
+            </div>
+            {mode === 'schedule' && (
+              <div className="mt-1 flex flex-col gap-1">
+                <input
+                  type="datetime-local"
+                  min={nowLocalInput()}
+                  {...register('publishedAt', {
+                    setValueAs: (v) => (v === '' || v == null ? null : v),
+                  })}
+                  className="rounded border border-gray-300 px-3 py-2"
+                />
+                {errors.publishedAt && (
+                  <span className="text-sm text-red-600">{errors.publishedAt.message}</span>
+                )}
+                <span className="text-xs text-gray-500">
+                  지정한 시각에 자동 공개돼요. 그 전까지는 예약 상태로 비공개예요.
+                </span>
+              </div>
+            )}
+          </div>
+
           {!canPublish && (
             <p className="text-sm text-amber-600">
               본문에 내용(글 또는 이미지)이 있어야 발행할 수 있어요.
@@ -139,7 +202,13 @@ export function PublishModal({
               disabled={saving || !canPublish}
               className="rounded bg-gray-900 px-4 py-2 text-sm text-white disabled:opacity-50"
             >
-              {saving ? '발행 중...' : '발행하기'}
+              {saving
+                ? mode === 'schedule'
+                  ? '예약 중...'
+                  : '발행 중...'
+                : mode === 'schedule'
+                  ? '예약하기'
+                  : '발행하기'}
             </button>
           </div>
         </form>

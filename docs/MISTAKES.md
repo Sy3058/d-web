@@ -101,6 +101,24 @@
   → 라우트 트리는 vite 플러그인이 dev/build 중에 재생성하는데, build 스크립트에선 tsc가 그 앞에서 죽어 재생성 지점까지 못 간다
   → 새 라우트 작업 후엔 `pnpm --filter admin exec vite build`(esbuild라 타입 검사 없음)로 트리부터 재생성 → 그다음 `pnpm --filter admin build`
 
+## TipTap 에디터
+
+- **커스텀 노드의 React 노드뷰를 확장 정의와 한 파일에 두면 `react-refresh/only-export-components` lint 에러** (M1.5 F3, 2026-07-17)
+  → `.tsx`가 컴포넌트(노드뷰)와 비컴포넌트(`Node.create` 확장·옵션 타입)를 함께 export하면 Vite react-refresh 규칙(에러 게이트)이 막는다
+  → 노드뷰 컴포넌트는 별도 `.tsx`(예: `ImageNodeView.tsx`)로 빼고 확장 정의는 `.ts`에 둔다. 순환 import 방지로 노드뷰는 확장이 아니라 공용 타입/store만 참조
+- **StarterKit v3는 v2와 달리 Link·Underline까지 포함한다** (M1.5 F3, 2026-07-17)
+  → 서버 화이트리스트 밖 노드(heading·목록·codeBlock·code 마크)는 툴바 버튼만 빼면 안 되고 `configure({ heading:false, ... })`로 **확장 자체를 꺼야** 마크다운 단축키(`# `·`- `·` ``` `)·붙여넣기로도 안 만들어진다(안 그러면 저장 시 서버 422)
+  → `getSchema(extensions)`로 뷰(ReactNodeViewRenderer) 없이 스키마만 뽑아 허용/비허용 노드·마크·attrs를 서버와 1:1 회귀 테스트
+- **`editor.view.posAtCoords`는 레이아웃(`document.elementFromPoint`)에 의존해 jsdom 테스트에서 던진다** (M1.5 F4, 2026-07-17)
+  → 이미지 드롭 지점 계산에 posAtCoords를 쓰면 jsdom엔 `elementFromPoint`가 없어 `TypeError`로 테스트가 깨진다(실제 브라우저에서도 좌표 해석은 상황에 따라 실패 가능)
+  → try/catch로 감싸 실패 시 현재 커서 위치로 폴백(프로덕션 견고성 겸용) - 좌표를 못 구해도 삽입 자체는 되게 둔다
+
+## openapi-typescript codegen
+
+- **기본값(default)이 있는 요청 필드를 openapi-typescript가 required(`?` 없음)로 뽑는다** (M1.5 F3, 2026-07-17)
+  → Pydantic `title: str = Field(default="무제")`는 서버에선 생략 가능인데 생성된 TS는 `title: string`(필수)이 돼 `mutateAsync({})`가 TS 에러
+  → 호출부에서 값을 명시해 넘기거나(예: 현재 입력값) 생략이 정말 필요하면 스키마/codegen을 조정. "서버 기본값 = 클라 선택"이 자동으로 성립하지 않는다
+
 ## 폼 / CSS
 
 - **Chrome은 native `<select>` 화살표에 `padding-right`를 적용하지 않는다** (M1.5 F2)
@@ -110,6 +128,10 @@
 - **`z.preprocess`를 RHF+zodResolver 폼 스키마에 쓰면 `useForm<T>` 제네릭과 타입이 어긋난다** (M1.5 F3)
   → preprocess는 해당 필드의 입력 타입을 unknown으로 만들어 스키마의 input≠output이 되고, SubmitHandler가 TS2345로 거부된다(실측)
   → 값 변환(빈 문자열 → null 등)은 스키마가 아니라 `register`의 `setValueAs`로 옮기고, 스키마는 `nullable()`만 남긴다
+
+- **RHF `watch('name')` 호출은 React Compiler `react-hooks/incompatible-library` 경고를 낸다** (M1.5 F4, 2026-07-17)
+  → `watch()`는 렌더 중 호출돼 메모이즈 불가한 값을 반환해, 컴파일러가 "stale UI 위험"으로 그 컴포넌트 메모이제이션을 건너뛴다(eslint 경고 - 에러 아님이나 clean 목표면 제거)
+  → 폼 값을 렌더에 반영하려면 `watch` 대신 훅 `useWatch({ control, name })`로 구독한다(경고 없음)
 
 - **`register(name, { valueAsNumber: true })`는 빈 입력을 `NaN`으로 넘긴다** (M1.5 F2)
   -> zod `z.number()`는 NaN을 타입 에러로 거부하는데, 메시지를 안 주면 **영문 기본 문구**("expected number, received NaN")가 한국어 UI에 그대로 뜬다
