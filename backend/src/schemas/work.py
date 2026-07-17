@@ -57,6 +57,8 @@ class WorkCreate(BaseModel):
     episode_base_price: int = Field(default=500, ge=0)
     bundle_discount_rate: Decimal = Field(default=Decimal("0.1"), ge=0, le=1)
     status: WorkStatus = WorkStatus.ONGOING
+    # 공개 카탈로그(M2 A) 노출 게이트. 기본 비공개 - 작가가 준비 끝나면 켠다.
+    is_published: bool = False
     tag_names: list[str] = Field(default_factory=list)
 
     _check_tags = field_validator("tag_names")(_validate_tag_names)
@@ -71,12 +73,15 @@ class WorkUpdate(BaseModel):
     episode_base_price: int | None = Field(default=None, ge=0)
     bundle_discount_rate: Decimal | None = Field(default=None, ge=0, le=1)
     status: WorkStatus | None = None
+    is_published: bool | None = None
     tag_names: list[str] | None = None
 
     # DB에서 NOT NULL인 필드들. `X | None`의 None은 "생략(미변경)"을 표현하기 위한 것이지
     # null 대입 허용이 아니다 - 명시적 null은 여기서 422로 거부한다(안 막으면 exclude_unset
     # dump에 None이 살아남아 NOT NULL 컬럼 UPDATE에서 500 - 2026-07-09 리뷰).
-    _NON_NULLABLE = frozenset({"title", "episode_base_price", "bundle_discount_rate", "status"})
+    _NON_NULLABLE = frozenset(
+        {"title", "episode_base_price", "bundle_discount_rate", "status", "is_published"}
+    )
 
     @model_validator(mode="after")
     def _reject_explicit_null(self) -> "WorkUpdate":
@@ -102,6 +107,7 @@ class WorkRead(BaseModel):
     episode_base_price: int
     bundle_discount_rate: Decimal
     status: WorkStatus
+    is_published: bool
     # models/work.py Work.tags Relationship 직렬화. service가 selectinload(Work.tags)로
     # 미리 로드해둬야 함 - 여기서 접근 시 lazy load 트리거되면 비동기 세션 에러(N+1 규칙).
     tags: list[TagRead]

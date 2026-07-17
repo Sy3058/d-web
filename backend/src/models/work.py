@@ -123,6 +123,12 @@ class Work(SQLModel, table=True):
         default=WorkStatus.ONGOING,
         sa_column=Column(String(20), nullable=False, server_default=text("'ongoing'")),
     )
+    # 공개 카탈로그(M2 그룹 A) 노출 게이트. status(연재 상태)와 별개 축 - 준비 중 작품을
+    # 삭제 없이 숨긴다. 공개 회차 0개(표지만 있는 커밍순)여도 true면 노출한다(2026-07-17 결정).
+    is_published: bool = Field(
+        default=False,
+        sa_column=Column(Boolean, nullable=False, server_default=text("false")),
+    )
     created_at: datetime | None = Field(default=None, sa_column=_created_at_column())
     updated_at: datetime | None = Field(default=None, sa_column=_updated_at_column())
     deleted_at: datetime | None = Field(
