@@ -2,7 +2,7 @@
 
 | 항목 | 내용 |
 |------|------|
-| 문서 버전 | v0.3 (2026-07-16, M1.5 F3 재설계 #76 반영: 콘텐츠 문서(회차 내 유료 경계) 모델 기준 전면 개정 - 무료 서빙 = content 절단 앞당김, 뷰어 = 문서 렌더러, 진행도 = 블록 인덱스, presign 실물 계약 반영) · v0.2 (2026-07-15, 리뷰 반영: 공개 서빙 게이트에 작품 soft-delete join 명시 + TTL config 키 관계 정리) · v0.1 (2026-07-15, 초안) |
+| 문서 버전 | v0.4 (2026-07-18, 그룹 A 완료 반영: `works.is_published` 신설 확정 + B1/B2에 `public_work_filters()` 사용 지시 추가 - admin 패턴 복사 시 is_published 누락 함정 리뷰 발견) · v0.3 (2026-07-16, M1.5 F3 재설계 #76 반영: 콘텐츠 문서(회차 내 유료 경계) 모델 기준 전면 개정 - 무료 서빙 = content 절단 앞당김, 뷰어 = 문서 렌더러, 진행도 = 블록 인덱스, presign 실물 계약 반영) · v0.2 (2026-07-15, 리뷰 반영: 공개 서빙 게이트에 작품 soft-delete join 명시 + TTL config 키 관계 정리) · v0.1 (2026-07-15, 초안) |
 | 상위 마일스톤 | [M2](./README.md#m2-콘텐츠-무료-구간) |
 | 예상 기간 | 약 2~3주 (표지 공개 버킷 커스텀 도메인 외부 왕복 포함) |
 | 완료 기준 | 비로그인 유저가 작품 목록 → 무료 구간(전체 무료 회차 + 부분 유료 회차의 경계 이전 미리보기) 열람, 유료 경계 도달 시 잠금 UI(M3 전이라 placeholder) 노출 (그룹 H 체크리스트) |
@@ -81,14 +81,15 @@ M2 착수 전 확정. presigned·표지·콘텐츠 모델은 기존 결정(DECIS
 
 > 관리자 CRUD(M1.5 C1)와 **별개 공개 라우터**. table 모델 직접 노출 금지 → 공개 전용 DTO(**`content`·`image_keys`·`price` 내부값·미공개 회차 미포함** - 본문은 그룹 B의 절단 API로만). `selectinload`로 N+1 방지. `deleted_at IS NULL` + 회차는 `is_published` 필터 필수.
 
-### A1. 공개 작품 목록 API
+### A1. 공개 작품 목록 API ✅ (2026-07-18 완료 - PR `be/feat/m2-catalog-api`)
 - 선행: D(공개 URL 조립), 없음(모델은 M1.5 A1 기존)
 - 산출물: `routers/works.py`(공개, main.py 등록), `schemas/catalog.py`(공개 DTO), `lib/pagination.py`, `services/catalog_service.py`(또는 `work_service` 공개 조회 함수)
 - `GET /works?page=&size=&tag=` - soft-delete 제외, 최신순, 태그 필터. 응답 = `{items: [WorkListItem], total, page, size}`. `WorkListItem` = id·title·표지 공개 URL·status·태그·`episode_count`(공개분).
 - DoD: pytest 통합 - 비로그인 목록·페이지네이션·태그 필터, 응답에 `deleted_at` 작품 미포함, 표지 URL이 `public_asset_base_url` 기반 공개 URL.
-- 결정: `episode_count`는 **공개(`is_published`) 회차만** 세도록 조정(M1.5 column_property는 전체 카운트라 공개용은 별도 계산 or 필터). 미공개 작품(전 회차 비공개)의 목록 노출 여부는 status 기준이 아니라 "공개 회차 ≥ 1" 기준 검토(노트).
+- 결정: `episode_count`는 **공개(`is_published`) 회차만** 세도록 조정(M1.5 column_property는 전체 카운트라 공개용은 별도 계산 or 필터).
+- **구현에서 확정(2026-07-17)**: 목록 노출 기준 = "공개 회차 ≥ 1"이 아니라 **작품 단위 `works.is_published` 플래그 신설**(사용자 결정 - 0회차 커밍순도 노출, 준비 중 숨김은 플래그로. 기존 행 backfill=true, 신규 기본 비공개). admin 폼 토글은 후속 admin PR(그때 `generate:types` 재생성 - codegen required 함정). 상세: `docs/MODULES/BE/Works/IMPLEMENTATION_PUBLIC_CATALOG_API.md`.
 
-### A2. 공개 작품 상세 API
+### A2. 공개 작품 상세 API ✅ (2026-07-18 완료 - A1과 같은 PR)
 - 선행: A1
 - 산출물: `GET /works/{id}` - works + tags + **공개 회차 요약 목록**(`selectinload`). 응답 = `WorkDetail`(작품 메타 + `episodes: [EpisodeSummary]`).
 - `EpisodeSummary` = id·`episode_no`·title·`subtitle`(#76 신설)·썸네일 공개 URL·`is_free`(전체 무료 - 경계 파생 컬럼)·`is_locked`(유료 구간 존재 = `!is_free`)·`is_purchased`(M2=항상 false). **`content`·`image_keys`·`price` 내부값 미포함**.
@@ -103,17 +104,17 @@ M2 착수 전 확정. presigned·표지·콘텐츠 모델은 기존 결정(DECIS
 ### B1. 공개 회차 목록 API
 - 선행: A2
 - 산출물: `routers/episodes.py`(공개), `services/episode_read_service.py`
-- `GET /works/{id}/episodes` - 공개(`is_published`) 회차만, `episode_no` 순. **부모 작품 Work join `deleted_at IS NULL`**(soft-delete된 작품의 회차 노출 금지). 항목 = A2의 `EpisodeSummary`와 동일 스키마.
+- `GET /works/{id}/episodes` - 공개(`is_published`) 회차만, `episode_no` 순. **부모 작품 Work join은 `catalog_service.public_work_filters()`**(공개 `is_published` + 미삭제 - A 구현에서 신설된 단일 출처. `deleted_at`만 걸면 숨긴 작품의 회차가 샌다). 항목 = A2의 `EpisodeSummary`와 동일 스키마.
 - DoD: pytest - 미공개 회차 제외, 순서 정확, 부분 유료 회차는 `is_locked=true`, soft-delete 작품의 회차는 404.
 
 ### B2. 무료 구간 콘텐츠 API (절단 + presigned 치환)
 - 선행: B1, #76(`presign_get_urls`·`content_doc` - main 머지 완료)
 - 산출물: `GET /episodes/{id}/content`, `services/episode_read_service.py`에 절단 함수(paywall 최상위 노드에서 문서 분할 - `lib/content_doc` 스키마 전제) + image `key`→presigned URL 치환 함수
-- 동작: 회차가 **작품 미삭제(Work join `deleted_at IS NULL`) AND 공개**이면 content의 **경계 이전 노드만**(`is_free=true`면 전문) image 키를 presigned URL로 치환해 반환 + `has_paid_part` 메타. 미공개·작품 soft-delete·없음 → **404**. 응답 헤더 **`Cache-Control: no-store`**(presigned 캐시 금지 - DECISIONS).
+- 동작: 회차가 **작품 공개 노출 가능(Work join `public_work_filters()` = `is_published` + 미삭제) AND 회차 공개**이면 content의 **경계 이전 노드만**(`is_free=true`면 전문) image 키를 presigned URL로 치환해 반환 + `has_paid_part` 메타. 미공개·작품 비공개/soft-delete·없음 → **404**. 응답 헤더 **`Cache-Control: no-store`**(presigned 캐시 금지 - DECISIONS).
 - DoD: pytest(전부 mock) - (a) 전체 무료 회차 = 전문 + 문서 내 노드 순서 보존, (b) 부분 유료 회차 = 경계 이전만 + `has_paid_part=true` + **경계 뒤 노드·텍스트가 응답에 부재**, (c) 응답 JSON 어디에도 **원본 R2 키 문자열 부재**(치환 검증), (d) 미공개 404, (e) soft-delete 작품의 회차 404, (f) no-store 헤더. **비로그인 통과**(인증 불요).
 - 결정: 로그인 불요(무료 구간은 공개 열람). `viewer_progress` 저장(그룹 C)만 로그인 필요. 절단 위치 = 문서 **최상위** paywall 노드(스키마가 최상위 최대 1개 보장 - `content_doc`). presigned 발급은 절단 **후** 남은 image 노드만(유료 구간 키에 서명하지 않음).
 - ⚠️ 함정: 절단 전 문서를 직렬화 경로에 흘리지 말 것 - **경계 뒤 노드(글 포함)와 image `key` attr이 유료 자산**이다. 유료 구간 유출은 이미지만이 아니라 텍스트도 해당(글 유료 연재 가능 - 콘텐츠 모델 결정).
-- ⚠️ 함정: **작품 soft-delete는 에피소드를 남긴다**(`work_service.soft_delete_work` - 하드 삭제 금지 A1 결정). episode 행만 검사하면 내려간 작품이 계속 열람된다. admin 조회는 이미 Work join으로 거른다(`episode_service.get_episode` - 같은 패턴/헬퍼 재사용).
+- ⚠️ 함정: **작품 soft-delete는 에피소드를 남긴다**(`work_service.soft_delete_work` - 하드 삭제 금지 A1 결정). episode 행만 검사하면 내려간 작품이 계속 열람된다. ⚠️ **admin 패턴(`episode_service.get_episode`)을 그대로 복사하지 말 것**(2026-07-18 리뷰 발견) - admin은 비공개 작품도 봐야 해서 `deleted_at`만 검사하므로, 독자 경로가 이를 복사하면 **숨긴 작품(`works.is_published=false`)의 공개 회차가 회차 ID 직접 접근으로 샌다**. 독자용 Work join은 `catalog_service.public_work_filters()`를 쓸 것.
 
 ---
 

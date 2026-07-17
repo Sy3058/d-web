@@ -162,8 +162,8 @@ M4 (커뮤니티 - 후원 제외)
 > **세부**: [M2_foundation.md](./M2_foundation.md) - 그룹 A~H 분해 + 설계 결정 5개(무료 presigned·dweb-cover·SSR 등, 2026-07-15)
 
 ### 백엔드
-- [ ] 작품 목록 API (페이지네이션, 태그 필터)
-- [ ] 작품 상세 API (works + tags + 공개 episodes 요약, `selectinload` 사용)
+- [x] 작품 목록 API (페이지네이션, 태그 필터) *(그룹 A 완료 2026-07-18: `works.is_published` 게이트 신설 + 공개 회차 카운트. IMPLEMENTATION_PUBLIC_CATALOG_API.md)*
+- [x] 작품 상세 API (works + tags + 공개 episodes 요약, `selectinload` 사용) *(그룹 A 완료 2026-07-18: 썸네일 URL은 D2까지 null - 원고 키 노출 차단)*
 - [ ] 에피소드 목록 API (회차 번호·제목·부제목·썸네일·무료/잠금/구매상태)
 - [ ] **무료 구간 콘텐츠 API** (#76 콘텐츠 모델: content를 paywall 경계에서 **서버 절단** + image 키 presigned URL 치환, no-store. 절단은 M3→M2 앞당김 2026-07-16 - 경계 뒤 반환·결제 검증만 M3)
 - [ ] `viewer_progress` 모델 + 진행도 저장 API (블록 인덱스 기준 - #76 재해석, WORK-09)
