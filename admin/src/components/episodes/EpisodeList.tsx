@@ -4,6 +4,8 @@ import type { Episode } from '../../types';
 interface EpisodeListProps {
   workId: string;
   episodes: Episode[];
+  /** 작품 기본가(works.episode_base_price). price NULL 회차의 실제 금액 표기에 쓴다. */
+  basePrice?: number | null;
 }
 
 function statusBadge(episode: Episode): { label: string; className: string } {
@@ -13,13 +15,14 @@ function statusBadge(episode: Episode): { label: string; className: string } {
   return { label: '임시저장', className: 'bg-gray-100 text-gray-600' };
 }
 
-function priceLabel(episode: Episode): string {
+function priceLabel(episode: Episode, basePrice: number | null | undefined): string {
   if (episode.is_free) return '무료';
-  // price NULL = works.episode_base_price 참조(A1 결정) - 값을 지어내지 않고 그대로 표기.
-  return episode.price == null ? '기본가' : `${episode.price.toLocaleString()}원`;
+  if (episode.price != null) return `${episode.price.toLocaleString()}원`;
+  // price NULL = works.episode_base_price를 따른다(A1). 기본가 로딩 전엔 '기본가'로 폴백.
+  return basePrice == null ? '기본가' : `${basePrice.toLocaleString()}원`;
 }
 
-export function EpisodeList({ workId, episodes }: EpisodeListProps) {
+export function EpisodeList({ workId, episodes, basePrice }: EpisodeListProps) {
   if (episodes.length === 0) {
     return <p className="text-gray-500">아직 에피소드가 없습니다. 첫 에피소드를 등록해 보세요.</p>;
   }
@@ -52,7 +55,7 @@ export function EpisodeList({ workId, episodes }: EpisodeListProps) {
                 {episode.subtitle && <p className="text-xs text-gray-400">{episode.subtitle}</p>}
               </td>
               <td className="px-3 py-2 text-gray-500">{episode.image_keys.length}장</td>
-              <td className="px-3 py-2 text-gray-500">{priceLabel(episode)}</td>
+              <td className="px-3 py-2 text-gray-500">{priceLabel(episode, basePrice)}</td>
               <td className="px-3 py-2">
                 <span className={`rounded px-2 py-0.5 text-xs ${badge.className}`}>
                   {badge.label}

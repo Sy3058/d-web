@@ -30,10 +30,11 @@ function makeEpisode(overrides: Partial<Episode>): Episode {
 }
 
 describe('EpisodeList', () => {
-  it('공개/예약/임시저장 상태와 가격(무료·기본가·지정가)을 구분해 보여준다', () => {
+  it('공개/예약/임시저장 상태와 가격(무료·기본가 금액·지정가)을 구분해 보여준다', () => {
     render(
       <EpisodeList
         workId="w1"
+        basePrice={2000}
         episodes={[
           makeEpisode({ id: 'e1', episode_no: 1, is_published: true, published_at: '2026-07-01T00:00:00Z', is_free: true }),
           makeEpisode({ id: 'e2', episode_no: 2, published_at: '2026-08-01T00:00:00Z' }),
@@ -46,8 +47,19 @@ describe('EpisodeList', () => {
     expect(screen.getByText('예약')).toBeInTheDocument();
     expect(screen.getByText('임시저장')).toBeInTheDocument();
     expect(screen.getByText('무료')).toBeInTheDocument();
-    expect(screen.getByText('기본가')).toBeInTheDocument();
+    // price NULL 회차는 실제 기본가 금액으로 풀어 보여준다.
+    expect(screen.getByText('2,000원')).toBeInTheDocument();
     expect(screen.getByText('1,000원')).toBeInTheDocument();
+  });
+
+  it('기본가가 아직 로딩 전이면 price NULL 회차를 "기본가"로 폴백 표기한다', () => {
+    render(
+      <EpisodeList
+        workId="w1"
+        episodes={[makeEpisode({ id: 'e2', episode_no: 2, published_at: '2026-08-01T00:00:00Z' })]}
+      />,
+    );
+    expect(screen.getByText('기본가')).toBeInTheDocument();
   });
 
   it('에피소드가 없으면 빈 상태 안내를 보여준다', () => {

@@ -30,7 +30,9 @@ function EpisodesPage() {
       </div>
       {isLoading && <p className="text-gray-500">불러오는 중...</p>}
       {isError && <p className="text-sm text-red-600">{describeAuthError(error)}</p>}
-      {episodes && <EpisodeList workId={workId} episodes={episodes} />}
+      {episodes && (
+        <EpisodeList workId={workId} episodes={episodes} basePrice={work?.episode_base_price} />
+      )}
       <p className="mt-6">
         <Link
           to="/works"
