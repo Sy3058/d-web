@@ -305,6 +305,12 @@
   → 커밋을 수반하는 **모든** 경로에서 `session.refresh(obj, attribute_names=["그_속성"])`로 다시 로드할 것. 여기선 콜사이트 열거가 땜질이 아니라 유일한 수단이다(매퍼 정책으로 못 덮는다)
   → 실제 사고: F2 `Work.episode_count`(에피소드 개수 상관 서브쿼리) 도입 시 생성 경로만 refresh했다가 **수정·표지 업로드 응답이 전부 500**(테스트 8개 실패로 검출)
 
+- **`sqlalchemy.select`로 단일 엔티티를 select하면 `session.exec().first()`가 Work 대신 Row를 반환한다** (M2 A, 2026-07-17)
+  → sqlmodel의 `session.exec()`는 `sqlmodel.select()`가 만드는 `SelectOfScalar`를 인식해야 단일 엔티티를 자동 스칼라 언랩한다. `sqlalchemy.select()`로 같은 모양(`select(Work).where(...).options(selectinload(...))`)을 만들면 언랩이 안 돼 `.first()`가 `Row(Work,)`를 주고, `row.id` 접근이 `AttributeError: id`(Row의 컬럼-키 fallback)로 죽는다
+  → 다중 컬럼 select(`select(Work, count_subq)`)는 두 select 모두 어차피 Row 튜플이라 이 차이가 안 드러나 파묻히기 쉽다 - 실제로 목록 API는 우연히 통과하고 상세 API에서만 터짐
+  → 이 프로젝트 관례(work_service.py 등)대로 **엔티티를 직접 select해 session.exec()에 넘길 때는 반드시 `from sqlmodel import select`**. 서브쿼리·column_property 구성용 select(자체는 exec에 안 넘김)는 `sqlalchemy.select`도 무방
+  → 부수 함정: `sqlmodel.select`의 단일 컬럼 select(`select(func.count(...))`)는 exec 결과가 이미 `ScalarResult`라 `.scalar_one()`이 아니라 `.one()`을 써야 한다(`.scalar_one()`은 AttributeError). `sqlalchemy.select`였다면 반대로 `.one()`이 `Row(n,)`를 주므로 `.scalar_one()`이 필요했다 - 어느 select를 썼는지에 따라 짝이 바뀐다
+
 - 다대다 **연결만** 바뀌면 부모 행 UPDATE 자체가 안 나가 onupdate가 발화하지 않는다
   → 부모 updated_at을 갱신하려면 `obj.updated_at = func.now()` 명시 대입으로 행을 일부러 dirty로 만들 것 (대입의 목적은 값이 아니라 UPDATE 유발 - func.now()는 SQL 표현식이라 항상 변경으로 기록)
 

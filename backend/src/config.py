@@ -67,6 +67,10 @@ class Settings(BaseSettings):
     r2_bucket: str = "dweb"
     r2_endpoint: str = ""
     r2_signed_url_ttl_seconds: int = 300
+    # 공개 버킷(dweb-cover, M2 결정 2) 커스텀 도메인 기반 URL. 표지·(향후) 회차 썸네일
+    # 공개 축소본 조립에 쓴다. 미설정(빈 값)이어도 부팅은 허용 - 도메인 연결(외부
+    # 블로커) 전까지 표지 URL이 빈 프리픽스로 조립돼 프론트가 404 placeholder로 받는다.
+    public_asset_base_url: str = ""
 
     # 이메일 발송 (Resend - M1 E1)
     # 미설정 시 fail-open(no-op + 경고). production & 미설정이면 기동 시 추가 경고.
