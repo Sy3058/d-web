@@ -195,6 +195,14 @@
 - "셸 지연 해결됐다"고 단정하지 말 것
   → 지연은 해결된 게 아니라 우회(`sleep` + 파일 redirect + Read)하는 것일 뿐. 상태를 낙관적으로 보고하지 말 것
 
+- `pkill -f "패턴"`은 **자기 자신(그 pkill을 실행 중인 셸)까지 매칭**해 명령을 죽인다
+  → 실제 사고(M1.5 G teardown): 백그라운드 서버를 `pkill -f -- "--port 8099"`로 종료하려 했는데 teardown 셸의 argv에도 그 문자열이 있어 셸이 죽고(exit 144) 뒤따르던 DB drop·파일 정리가 안 돎
+  → 백그라운드 프로세스는 PID(`kill <pid>`)나 harness 백그라운드 태스크로 종료. 굳이 pkill이면 자기 argv에 안 나올 패턴 사용
+
+- e2e로 로컬 서버를 띄우기 전에 **그 포트에 이미 다른 서버가 떠 있는지** 확인할 것
+  → 실제 사고(M1.5 G): 8000에 사용자 dev 서버가 이미 떠 있어 내 uvicorn이 `[Errno 98] address already in use`로 종료. 남의 서버에 e2e를 쏘면 그 서버의 DB(dev)를 오염시킨다
+  → 다른 포트(8099 등)로 띄우고 e2e BASE를 그 포트로. `ss -ltnp | grep :PORT`로 점유 확인
+
 - 브랜치 머지 여부를 `git branch --merged`로만 판단하지 말 것 (이 repo는 squash-merge)
   → squash-merge는 원본 커밋이 main에 그대로 안 남아 `--merged`에 안 잡힘 → "안 머지됨"으로 오판
   → 실제 사고: 이미 PR로 squash-merge된 브랜치를 "작업 안 끝남"이라 잘못 보고함
@@ -320,6 +328,10 @@
   → 필드 타입만 Python `Enum`으로 두고 sa_column을 안 주면 SQLModel/SA가 **네이티브 PG ENUM 타입**을 생성한다 → 프로젝트 결정("VARCHAR + 앱 enum, 네이티브 PG enum 아님") 위반 + 새 값마다 DB 마이그레이션 강제
   → `class X(StrEnum)`(ruff UP042: `(str, Enum)`→`StrEnum` 권장) + `sa_column=Column(String(20), server_default=text("'ongoing'"))`. StrEnum은 str 서브클래스라 멤버 값이 컬럼에 그대로 저장됨
   → M1.5 A1 `works.status`에 적용, B1 `users.role`도 동일 패턴
+
+- 여러 워크트리가 **같은 dev DB를 공유**하면 한 브랜치의 마이그레이션이 dev DB를 스탬프해 다른 브랜치의 `alembic check`가 깨진다
+  → 실제 사고(M1.5 G 검증): dev DB(`dweb`)가 M2 워크트리(`d-web-m2`)의 마이그레이션 `726b16a759b3`으로 앞서 있어 main 워크트리에서 `alembic check`가 `Can't locate revision '726b16a759b3'`로 실패. **main 마이그레이션 자체는 정상**(그 리비전은 main에 없음, head `2a9ae60edceb` 위 정상 체인)
+  → 검증은 **신규/스크래치 DB**에서: `docker exec ... psql -c "CREATE DATABASE dweb_scratch"` → `DATABASE_URL=<scratch> uv run alembic upgrade head && alembic check`(→ "No new upgrade operations detected") → `DROP DATABASE dweb_scratch WITH (FORCE)`. 다른 워크스트림이 쓰는 dev DB는 re-stamp 금지
 
 ## pytest / 비동기 DB 테스트
 
