@@ -115,6 +115,13 @@ async def test_list_pagination(async_client: AsyncClient, db_session: AsyncSessi
     assert len(page2.json()["items"]) == 1
 
 
+async def test_list_size_over_max_422(async_client: AsyncClient):
+    # size 상한은 조용한 클램프가 아니라 422 명시 거부 - 응답 size로 페이지 수를
+    # 계산하는 클라이언트가 실제 반환량과 어긋나지 않게 (코드리뷰 2026-07-18 반영)
+    resp = await async_client.get(WORKS_URL, params={"size": 101})
+    assert resp.status_code == 422
+
+
 async def test_list_tag_filter(async_client: AsyncClient, db_session: AsyncSession, user: User):
     work_romance = await _make_work(db_session, user, title="로맨스작")
     work_action = await _make_work(db_session, user, title="액션작")
@@ -159,6 +166,20 @@ async def test_list_cover_image_url_built_from_public_base(
     from src.config import settings
 
     monkeypatch.setattr(settings, "public_asset_base_url", "https://cover.example.com")
+    await _make_work(db_session, user, cover_image="works/x/cover.webp")
+
+    resp = await async_client.get(WORKS_URL)
+    item = resp.json()["items"][0]
+    assert item["cover_image_url"] == "https://cover.example.com/works/x/cover.webp"
+
+
+async def test_list_cover_image_url_trailing_slash_base_normalized(
+    async_client: AsyncClient, db_session: AsyncSession, user: User, monkeypatch
+):
+    # .env에 base를 트레일링 슬래시로 넣는 실수가 이중 슬래시 URL로 번지지 않아야 한다
+    from src.config import settings
+
+    monkeypatch.setattr(settings, "public_asset_base_url", "https://cover.example.com/")
     await _make_work(db_session, user, cover_image="works/x/cover.webp")
 
     resp = await async_client.get(WORKS_URL)

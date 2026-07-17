@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.lib.db import get_session
-from src.lib.pagination import DEFAULT_PAGE_SIZE
+from src.lib.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
 from src.schemas.catalog import WorkDetail, WorkListResponse
 from src.services import catalog_service
 
@@ -26,7 +26,9 @@ _NOT_FOUND = HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="작품
 async def list_works(
     session: SessionDep,
     page: int = Query(default=1, ge=1),
-    size: int = Query(default=DEFAULT_PAGE_SIZE, ge=1),
+    # le= 상한을 계약(OpenAPI)에 노출해 초과 요청을 422로 명시 거부 - 조용한 클램프만
+    # 있으면 클라이언트가 요청 size로 페이지 수를 계산하다 어긋난다.
+    size: int = Query(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
     tag: str | None = Query(default=None),
 ) -> WorkListResponse:
     return await catalog_service.list_works(session, page=page, size=size, tag=tag)

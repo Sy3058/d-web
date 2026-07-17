@@ -11,15 +11,17 @@ M2 그룹 D2 - 그 전까지는 값을 채우지 않는다(FE는 placeholder 처
 
 import uuid
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel
 
 from src.models.work import WorkStatus
 from src.schemas.work import TagRead
 
+# 이 모듈의 DTO는 전부 서비스가 명시적 kwargs로 조립한다(계산 필드가 섞여 있어
+# model_validate(ORM) 자동 매핑 대상이 아님 - from_attributes를 켜지 않는 이유).
+# 중첩 tags의 ORM->TagRead 변환은 TagRead 자신의 from_attributes가 담당한다.
+
 
 class WorkListItem(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
     id: uuid.UUID
     title: str
     cover_image_url: str | None
@@ -38,8 +40,6 @@ class WorkListResponse(BaseModel):
 
 
 class EpisodeSummary(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
     id: uuid.UUID
     episode_no: int
     title: str
@@ -54,8 +54,6 @@ class EpisodeSummary(BaseModel):
 
 
 class WorkDetail(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
     id: uuid.UUID
     title: str
     synopsis: str | None
