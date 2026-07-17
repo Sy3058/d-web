@@ -54,6 +54,7 @@ export function EpisodeEditor({ initialWorkId, episode }: EpisodeEditorProps) {
   const [fileError, setFileError] = useState<string | null>(null);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [publishOpen, setPublishOpen] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
 
   const createEpisode = useCreateEpisode(workId ?? '');
   const uploadImage = useUploadEpisodeImage(workId ?? '');
@@ -130,8 +131,16 @@ export function EpisodeEditor({ initialWorkId, episode }: EpisodeEditorProps) {
     return updateEpisode.mutateAsync({ episodeId: id, body });
   };
 
+  // 제목은 비울 수 없다 - 저장·발행 시 서버 기본값('무제')으로 조용히 넘기지 않고 작성을 요구한다.
+  const ensureTitle = (): boolean => {
+    if (title.trim() !== '') return true;
+    setError('제목을 작성해 주세요.');
+    return false;
+  };
+
   const onSaveDraft = async () => {
     if (!canPersist) return;
+    if (!ensureTitle()) return;
     setSaving(true);
     setError(null);
     try {
@@ -150,15 +159,21 @@ export function EpisodeEditor({ initialWorkId, episode }: EpisodeEditorProps) {
     }
   };
 
-  const onPublish = async (values: { thumbnail: string | null; price: number | null }) => {
+  const onPublish = async (values: {
+    thumbnail: string | null;
+    price: number | null;
+    publishedAt: string | null;
+  }) => {
     setSaving(true);
     setError(null);
     try {
-      const saved = await save({
-        is_published: true,
-        thumbnail: values.thumbnail,
-        price: values.price,
-      });
+      // 예약(publishedAt 있음)이면 published_at만 전송한다. is_published를 함께 실으면
+      // false가 아니어도 계약상 순수-발행이 아닌 요청이 되어버리고, false를 실으면 서버가
+      // published_at을 NULL로 밀어 예약이 풀린다(E1 인계 계약) - 그래서 키 자체를 뺀다.
+      const extra: Partial<EpisodeUpdate> = values.publishedAt
+        ? { published_at: values.publishedAt, thumbnail: values.thumbnail, price: values.price }
+        : { is_published: true, thumbnail: values.thumbnail, price: values.price };
+      const saved = await save(extra);
       setPublishOpen(false);
       navigate({ to: '/works/$workId/episodes', params: { workId: saved.work_id } });
     } catch (err) {
@@ -166,6 +181,12 @@ export function EpisodeEditor({ initialWorkId, episode }: EpisodeEditorProps) {
     } finally {
       setSaving(false);
     }
+  };
+
+  const openPublish = () => {
+    if (!ensureTitle()) return;
+    setError(null);
+    setPublishOpen(true);
   };
 
   const onInsertImage = () => {
@@ -223,6 +244,40 @@ export function EpisodeEditor({ initialWorkId, episode }: EpisodeEditorProps) {
     }
   };
 
+  // 외부 파일 드래그만 다룬다. 내부 노드 드래그(유료 경계 재배치 등)는 types에 'Files'가 없어
+  // 통과시켜 ProseMirror가 처리하게 둔다.
+  const dragHasFiles = (event: React.DragEvent) => event.dataTransfer.types.includes('Files');
+
+  const onEditorDragOver = (event: React.DragEvent) => {
+    if (!dragHasFiles(event)) return;
+    event.preventDefault(); // preventDefault 해야 drop 이벤트가 발생한다
+    setDragOver(true);
+  };
+
+  const onEditorDragLeave = (event: React.DragEvent) => {
+    if (!dragHasFiles(event)) return;
+    setDragOver(false);
+  };
+
+  const onEditorDrop = (event: React.DragEvent) => {
+    if (!dragHasFiles(event)) return;
+    event.preventDefault();
+    setDragOver(false);
+    if (!workId) {
+      setFileError('이미지를 넣으려면 먼저 시리즈(작품)를 선택하세요.');
+      return;
+    }
+    // 드롭한 지점으로 커서를 옮겨 그 위치에 이미지가 삽입되게 한다. posAtCoords는 레이아웃
+    // (elementFromPoint)에 의존해 환경에 따라 던질 수 있으니, 실패하면 현재 커서 위치를 쓴다.
+    try {
+      const at = editor?.view.posAtCoords({ left: event.clientX, top: event.clientY });
+      if (at) editor?.commands.setTextSelection(at.pos);
+    } catch {
+      // 좌표 해석 실패 - 현재 커서 위치에 삽입
+    }
+    void onFilesSelected(Array.from(event.dataTransfer.files));
+  };
+
   return (
     <div className="flex flex-col gap-3">
       {/* 시리즈(작품): draft 생성 전엔 선택 가능, 이후 고정. 이미지 업로드가 작품을 필요로 해 상단에 둔다. */}
@@ -250,7 +305,7 @@ export function EpisodeEditor({ initialWorkId, episode }: EpisodeEditorProps) {
         value={title}
         onChange={(event) => setTitle(event.target.value)}
         maxLength={200}
-        placeholder="제목 (비우면 무제)"
+        placeholder="제목"
         className="border-b border-gray-200 pb-1 text-2xl font-bold focus:border-gray-400 focus:outline-none"
       />
       <input
@@ -261,9 +316,22 @@ export function EpisodeEditor({ initialWorkId, episode }: EpisodeEditorProps) {
         className="border-b border-gray-100 pb-1 text-lg text-gray-600 focus:border-gray-300 focus:outline-none"
       />
 
-      <div className="rounded border border-gray-300 px-4 py-2">
+      <div
+        data-testid="editor-dropzone"
+        onDragOver={onEditorDragOver}
+        onDragLeave={onEditorDragLeave}
+        onDrop={onEditorDrop}
+        className={`rounded border px-4 py-2 ${
+          dragOver ? 'border-gray-900 bg-gray-50 ring-2 ring-gray-900' : 'border-gray-300'
+        }`}
+      >
         {editor && <EditorToolbar editor={editor} onInsertImage={onInsertImage} disabled={saving} />}
         <EditorContent editor={editor} />
+        {dragOver && (
+          <p className="pointer-events-none pt-2 text-center text-sm text-gray-500">
+            여기에 이미지를 놓으면 추가됩니다
+          </p>
+        )}
       </div>
 
       <input
@@ -309,7 +377,7 @@ export function EpisodeEditor({ initialWorkId, episode }: EpisodeEditorProps) {
         </button>
         <button
           type="button"
-          onClick={() => setPublishOpen(true)}
+          onClick={openPublish}
           disabled={saving || !canPersist}
           className="rounded bg-gray-900 px-4 py-2 text-sm text-white disabled:opacity-50"
         >
@@ -320,7 +388,7 @@ export function EpisodeEditor({ initialWorkId, episode }: EpisodeEditorProps) {
         <p className="text-xs text-amber-600">저장·발행하려면 먼저 시리즈(작품)를 선택하세요.</p>
       )}
       <p className="text-xs text-gray-500">
-        임시저장은 비공개로 남고, 발행하기는 즉시 공개됩니다. 예약 공개는 다음 단계에서 추가됩니다.
+        임시저장은 비공개로 남고, 발행하기에서 지금 공개하거나 원하는 시각으로 예약할 수 있어요.
       </p>
 
       {publishOpen && (
