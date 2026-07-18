@@ -15,7 +15,13 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from src.config import settings
 from src.lib.pagination import compute_offset
 from src.models.work import Episode, Tag, Work, WorkTag
-from src.schemas.catalog import EpisodeSummary, WorkDetail, WorkListItem, WorkListResponse
+from src.schemas.catalog import (
+    EpisodeSummary,
+    PublicTag,
+    WorkDetail,
+    WorkListItem,
+    WorkListResponse,
+)
 
 
 def public_work_filters() -> list:
@@ -61,7 +67,7 @@ def _to_list_item(work: Work, episode_count: int) -> WorkListItem:
     )
 
 
-def _to_episode_summary(ep: Episode) -> EpisodeSummary:
+def _to_episode_summary(ep: Episode, base_price: int) -> EpisodeSummary:
     return EpisodeSummary(
         id=ep.id,
         episode_no=ep.episode_no,
@@ -71,7 +77,31 @@ def _to_episode_summary(ep: Episode) -> EpisodeSummary:
         is_free=ep.is_free,
         is_locked=not ep.is_free,
         is_purchased=False,  # M2는 결제 없음(M3에서 실제 구매 여부로 대체)
+        # 실효가 계산은 여기(서버) 한 곳 - episodes.price NULL이면 작품 기준가(models/work.py).
+        price=None if ep.is_free else (ep.price if ep.price is not None else base_price),
     )
+
+
+async def list_public_tags(session: AsyncSession) -> list[PublicTag]:
+    """공개 작품에 실제로 달린 태그만 + 공개 작품 수 (#82 - E1 태그 필터의 데이터 소스).
+
+    inner join + public_work_filters()라 미공개·삭제 작품에만 달린 태그는 행 자체가
+    안 나온다 - 태그 존재로 미공개 작품의 존재가 새는 경로 차단. Tag 전량 조회 후
+    앱단 필터가 아니라 SQL에서 거르는 이유이기도 하다.
+    """
+    rows = (
+        await session.exec(
+            # works_tags PK가 (work_id, tag_id)라 태그당 작품 행 중복이 불가능 - count에
+            # distinct 불요. group by는 PK(Tag.id)라 Tag 엔티티·name 선택이 유효(PG 함수 종속).
+            select(Tag, func.count(Work.id))
+            .join(WorkTag, WorkTag.tag_id == Tag.id)
+            .join(Work, Work.id == WorkTag.work_id)
+            .where(*public_work_filters())
+            .group_by(Tag.id)
+            .order_by(Tag.name)
+        )
+    ).all()
+    return [PublicTag(id=tag.id, name=tag.name, work_count=count) for tag, count in rows]
 
 
 async def list_works(
@@ -140,5 +170,5 @@ async def get_work_detail(work_id: uuid.UUID, session: AsyncSession) -> WorkDeta
         episode_base_price=work.episode_base_price,
         status=work.status,
         tags=list(work.tags),
-        episodes=[_to_episode_summary(ep) for ep in episodes],
+        episodes=[_to_episode_summary(ep, work.episode_base_price) for ep in episodes],
     )

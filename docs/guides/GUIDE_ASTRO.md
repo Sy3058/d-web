@@ -50,6 +50,14 @@
 - **이 프로젝트 적용**: 현재 `import.meta.env.PUBLIC_API_URL` 사용 중(`GoogleButton.astro`). 타입 안전을 강화하려면 `astro:env`로 이전 가능(선택). **`SECRET_*`를 `.astro` 정적 페이지에서 접근 금지** 규칙은 그대로 유지(`frontend/CLAUDE.md`).
 - 출처: https://docs.astro.build/en/guides/environment-variables/
 
+### 4. 프리렌더 페이지엔 쿼리 파라미터가 없다 (검증 2026-07-19)
+
+- 공식 문서 원문: "On prerendered pages, `request.url` does **not** contain search parameters, like `?type=new`, as it's not possible to determine them ahead of time during static builds. However, `request.url` **does** contain search parameters for pages rendered on-demand."
+- `Astro.url`은 `request.url`에서 파생되므로 **정적 페이지에서 `Astro.url.searchParams`는 항상 비어 있다.** 빌드 시점엔 미래의 요청 쿼리를 알 수 없기 때문이라 우회가 없다.
+- ⇒ **규칙: 쿼리 파라미터를 서버에서 읽어야 하면 그 페이지는 `export const prerender = false`.** 클라이언트에서 `location.search`로 읽는 우회는 가능하나, 그 값으로 DOM을 바꾸면 하이드레이션 후 삽입이라 레이아웃 시프트가 생긴다(없던 블록이 생기는 배너류에서 특히).
+- **이 프로젝트 적용**: `auth/login.astro`가 SSR인 이유가 이것(구글 OAuth BFF 실패 시 백엔드가 `?error=`로 리다이렉트 → 첫 페인트에 배너). M2 E1(작품 목록)도 `?page=`·`?tag=`를 서버에서 읽으므로 **신선도 근거와 무관하게 SSR이 강제**된다.
+- 출처: https://docs.astro.build/en/reference/api-reference/
+
 ### 3. 클라이언트 라우팅 컴포넌트 - `<ClientRouter />` (구 `<ViewTransitions />`)
 
 - `<ViewTransitions />`는 **옛 이름**. 현재는 **`<ClientRouter />`**.

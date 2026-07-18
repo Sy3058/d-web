@@ -195,6 +195,16 @@
   → 출력이 늦으면 `flush`용 echo를 난사하는 대신, 결과를 파일로 redirect(`> /tmp/x.txt 2>&1`)하고 Read로 한 번에 읽기
   → 여러 검증을 한 번에: sentinel(`echo START ... echo END`)로 감싸 한 블록으로 확인
 
+- **Bash 도구의 cwd는 호출 간 유지된다 - 상대경로로 "파일 없음"이 뜨면 삭제를 의심하기 전에 cwd부터 의심할 것** (M2 A 후속, 2026-07-19)
+  → `cd backend && ...`를 한 번 돌리면 이후 호출도 `backend/`에서 시작한다. 리포 루트 기준 상대경로(`docs/...`, `admin/...`)가 `No such file or directory`로 실패하는데, 이게 **"파일이 없다"와 구별이 안 된다**
+  → 실제 사고: `docs/milestones/M2_foundation.md`가 없다고 3번 연속 오판. 심지어 `cd <root> && grep` 조합조차 다음 호출엔 안 남아 또 실패
+  → 파일 확인·수정은 **항상 절대경로**로. 특히 "없음"을 근거로 무언가를 만들거나 지우기 직전엔 절대경로로 재확인(위 "빈 결과를 사실로 오판" 항목과 같은 부류)
+
+- **ruff는 CI와 같은 범위로 돌릴 것 - `.` 전체는 CI가 의도적으로 뺀 파일까지 잡는다** (M2 A 후속, 2026-07-19)
+  → CI 게이트는 `ruff check src/` + `ruff format --check src/ tests/`다(`.github/workflows`, "migrations/는 alembic 자동생성 + DB 적용 + forward-only라 의도적으로 제외" 주석 명시)
+  → `ruff format --check .`로 돌리면 migrations 12개가 "reformat 필요"로 떠서, 내 변경분이 깬 것처럼 보인다. 실제로 main에서도 동일하게 뜨는 기존 상태
+  → 내 변경이 게이트를 깼는지 판단할 땐 **CI와 동일한 경로 인자**로 돌릴 것. 범위가 넓어서 나온 노이즈를 고치려 들면 무관한 파일을 커밋에 끌어들인다
+
 - 파일을 만들기 전에 "없다"고 가정하지 말 것
   → 새로 만들/지울 파일은 먼저 `git ls-files`나 Read로 존재 여부 확정
   → autogenerate(alembic 등)가 만든 파일명/리비전 ID를 추측해서 쓰지 말 것. 실제 생성된 파일을 Read로 확인 후 사용

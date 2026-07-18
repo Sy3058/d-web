@@ -264,7 +264,8 @@ async def test_detail_excludes_internal_fields(
     ep = body["episodes"][0]
     assert "content" not in ep
     assert "image_keys" not in ep
-    assert "price" not in ep
+    # price는 #83부터 실효 판매가로 의도적 공개(내부값 은닉 대상에서 제외) - 위 오버라이드 값
+    assert ep["price"] == 1234
     assert "secret-key.webp" not in resp.text
     assert "비밀내용" not in resp.text
 
@@ -292,3 +293,126 @@ async def test_detail_404_when_soft_deleted(
 async def test_detail_404_when_nonexistent(async_client: AsyncClient):
     resp = await async_client.get(f"{WORKS_URL}/00000000-0000-0000-0000-000000000000")
     assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# 회차 실효 가격 (#83)
+# ---------------------------------------------------------------------------
+
+
+async def test_detail_episode_price_override(
+    async_client: AsyncClient, db_session: AsyncSession, user: User
+):
+    work = await _make_work(db_session, user, episode_base_price=500)
+    await _make_episode(db_session, work, episode_no=1, is_free=False, price=1200)
+
+    resp = await async_client.get(f"{WORKS_URL}/{work.id}")
+    assert resp.json()["episodes"][0]["price"] == 1200
+
+
+async def test_detail_episode_price_falls_back_to_base_price(
+    async_client: AsyncClient, db_session: AsyncSession, user: User
+):
+    work = await _make_work(db_session, user, episode_base_price=700)
+    await _make_episode(db_session, work, episode_no=1, is_free=False, price=None)
+
+    resp = await async_client.get(f"{WORKS_URL}/{work.id}")
+    assert resp.json()["episodes"][0]["price"] == 700
+
+
+async def test_detail_free_episode_price_is_null(
+    async_client: AsyncClient, db_session: AsyncSession, user: User
+):
+    # 무료 회차는 price가 세팅돼 있어도 null - 0원 판매와 구분 + is_free 무시 표기 방지
+    work = await _make_work(db_session, user)
+    await _make_episode(db_session, work, episode_no=1, is_free=True, price=900)
+
+    resp = await async_client.get(f"{WORKS_URL}/{work.id}")
+    ep = resp.json()["episodes"][0]
+    assert ep["is_free"] is True
+    assert ep["price"] is None
+
+
+# ---------------------------------------------------------------------------
+# 공개 태그 목록 (#82)
+# ---------------------------------------------------------------------------
+
+TAGS_URL = "/tags"
+
+
+async def _attach_tag(db_session: AsyncSession, work: Work, name: str) -> Tag:
+    tag = Tag(name=name)
+    db_session.add(tag)
+    await db_session.commit()
+    await db_session.refresh(tag)
+    db_session.add(WorkTag(work_id=work.id, tag_id=tag.id))
+    await db_session.commit()
+    return tag
+
+
+async def test_tags_lists_public_work_tags_with_counts(
+    async_client: AsyncClient, db_session: AsyncSession, user: User
+):
+    work_a = await _make_work(db_session, user, title="작품A")
+    work_b = await _make_work(db_session, user, title="작품B")
+    fantasy = await _attach_tag(db_session, work_a, "판타지")
+    db_session.add(WorkTag(work_id=work_b.id, tag_id=fantasy.id))
+    await db_session.commit()
+    await _attach_tag(db_session, work_b, "액션")
+
+    resp = await async_client.get(TAGS_URL)
+    assert resp.status_code == 200
+    body = resp.json()
+    # order_by(Tag.name) - 액션 < 판타지 (가나다순)
+    assert [(t["name"], t["work_count"]) for t in body] == [("액션", 1), ("판타지", 2)]
+
+
+async def test_tags_work_count_excludes_hidden_works(
+    async_client: AsyncClient, db_session: AsyncSession, user: User
+):
+    # 같은 태그가 공개작·비공개작에 걸쳐 달린 경우. 아래 "단독 비공개" 케이스는 태그가
+    # 통째로 빠지는지만 보므로 카운트 산술 자체는 여기서 검증한다 - 숫자가 부풀면 그
+    # 값이 숨긴 작품의 존재를 흘린다.
+    public_work = await _make_work(db_session, user, title="공개작")
+    hidden = await _make_work(db_session, user, title="준비중", is_published=False)
+    tag = await _attach_tag(db_session, public_work, "판타지")
+    db_session.add(WorkTag(work_id=hidden.id, tag_id=tag.id))
+    await db_session.commit()
+
+    resp = await async_client.get(TAGS_URL)
+    assert [(t["name"], t["work_count"]) for t in resp.json()] == [("판타지", 1)]
+
+
+async def test_tags_excludes_tag_only_on_unpublished_work(
+    async_client: AsyncClient, db_session: AsyncSession, user: User
+):
+    # 미공개 작품에만 달린 태그가 보이면 미공개 작품의 존재가 샌다
+    hidden = await _make_work(db_session, user, title="준비중", is_published=False)
+    await _attach_tag(db_session, hidden, "비밀태그")
+
+    resp = await async_client.get(TAGS_URL)
+    assert resp.json() == []
+    assert "비밀태그" not in resp.text
+
+
+async def test_tags_excludes_tag_only_on_soft_deleted_work(
+    async_client: AsyncClient, db_session: AsyncSession, user: User
+):
+    work = await _make_work(db_session, user, title="내려간작품")
+    await _attach_tag(db_session, work, "삭제작태그")
+    work.deleted_at = datetime.now(UTC)
+    db_session.add(work)
+    await db_session.commit()
+
+    resp = await async_client.get(TAGS_URL)
+    assert resp.json() == []
+
+
+async def test_tags_empty_when_no_tags(
+    async_client: AsyncClient, db_session: AsyncSession, user: User
+):
+    # 태그 없는 공개 작품만 있으면 빈 배열(200) - 404가 아니다
+    await _make_work(db_session, user)
+    resp = await async_client.get(TAGS_URL)
+    assert resp.status_code == 200
+    assert resp.json() == []

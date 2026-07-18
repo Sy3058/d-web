@@ -79,7 +79,7 @@ M2 착수 전 확정. presigned·표지·콘텐츠 모델은 기존 결정(DECIS
 
 ## 그룹 A. 공개 카탈로그 조회 API (WORK-01, 02)
 
-> 관리자 CRUD(M1.5 C1)와 **별개 공개 라우터**. table 모델 직접 노출 금지 → 공개 전용 DTO(**`content`·`image_keys`·`price` 내부값·미공개 회차 미포함** - 본문은 그룹 B의 절단 API로만). `selectinload`로 N+1 방지. `deleted_at IS NULL` + 회차는 `is_published` 필터 필수.
+> 관리자 CRUD(M1.5 C1)와 **별개 공개 라우터**. table 모델 직접 노출 금지 → 공개 전용 DTO(**`content`·`image_keys`·미공개 회차 미포함** - 본문은 그룹 B의 절단 API로만). 가격은 **실효 판매가만** 노출한다(#83, 2026-07-19 - 이 문장은 원래 `price` 내부값도 은닉 대상으로 적었으나, 가격은 숨길 기밀이 아니라 판매를 위해 공개하는 정보라 정정). `selectinload`로 N+1 방지. `deleted_at IS NULL` + 회차는 `is_published` 필터 필수.
 
 ### A1. 공개 작품 목록 API ✅ (2026-07-18 완료 - PR `be/feat/m2-catalog-api`)
 - 선행: D(공개 URL 조립), 없음(모델은 M1.5 A1 기존)
@@ -92,8 +92,15 @@ M2 착수 전 확정. presigned·표지·콘텐츠 모델은 기존 결정(DECIS
 ### A2. 공개 작품 상세 API ✅ (2026-07-18 완료 - A1과 같은 PR)
 - 선행: A1
 - 산출물: `GET /works/{id}` - works + tags + **공개 회차 요약 목록**(`selectinload`). 응답 = `WorkDetail`(작품 메타 + `episodes: [EpisodeSummary]`).
-- `EpisodeSummary` = id·`episode_no`·title·`subtitle`(#76 신설)·썸네일 공개 URL·`is_free`(전체 무료 - 경계 파생 컬럼)·`is_locked`(유료 구간 존재 = `!is_free`)·`is_purchased`(M2=항상 false). **`content`·`image_keys`·`price` 내부값 미포함**.
+- `EpisodeSummary` = id·`episode_no`·title·`subtitle`(#76 신설)·썸네일 공개 URL·`is_free`(전체 무료 - 경계 파생 컬럼)·`is_locked`(유료 구간 존재 = `!is_free`)·`is_purchased`(M2=항상 false)·`price`(**실효 판매가** = `episodes.price ?? works.episode_base_price`를 서버가 계산, 무료 회차는 null - #83 후속 추가). **`content`·`image_keys` 미포함**.
 - DoD: pytest - 상세 응답에 미공개 회차·`content`·`image_keys` 미포함, 무료/잠금 플래그 정확, soft-delete 작품은 404.
+
+### A3. 공개 태그 목록 API ✅ (2026-07-19 완료 - PR `be/feat/m2-catalog-followup`, #82)
+- 선행: A1
+- 산출물: `routers/tags.py`(공개, main.py 등록), `schemas/catalog.PublicTag`, `catalog_service.list_public_tags`
+- `GET /tags` - 공개 작품에 **실제로 달린** 태그만 + `work_count`(공개 작품 수). Tag→WorkTag→Work **inner join + `public_work_filters()`**라 미공개·삭제 작품에만 달린 태그는 행 자체가 안 나온다(태그 이름이 숨긴 작품의 존재를 흘리는 경로 차단). 이름순 정렬.
+- 배경: `GET /works?tag=`(A1) 필터링은 있었으나 **"어떤 태그가 있는지" 알려주는 경로가 없어** E1 태그 필터 UI를 만들 수 없었다. 카드에 보이는 태그만 클릭하는 대안은 1페이지에 안 나온 태그로는 필터가 불가능해 발견성이 깨진다.
+- DoD: pytest - 미공개/삭제 작품 단독 태그 제외, 공개+비공개 혼재 시 `work_count`가 공개분만, 태그 없으면 빈 배열 200.
 
 ---
 
@@ -154,8 +161,10 @@ M2 착수 전 확정. presigned·표지·콘텐츠 모델은 기존 결정(DECIS
 > 결정 3 적용: 페이지별 `prerender=false` SSR + `Cache-Control`. 부분 유료 회차는 잠금 배지 + 미리보기 진입 가능.
 
 ### E1. 작품 목록 페이지
-- 선행: A1, D1
+- 선행: A1, **A3**(태그 필터의 데이터 소스), D1
 - 산출물: `frontend/src/pages/works/index.astro`(SSR), `lib/api.ts` 카탈로그 fetch, 카드 그리드(표지 공개 URL·제목·태그)
+- ⚠️ 쿼리 파라미터(`?page=`·`?tag=`)를 서버에서 읽으므로 **SSR이 강제**된다 - 프리렌더 페이지의 `request.url`에는 search params가 없다(Astro 공식 문서 확인, GUIDE_ASTRO "확인된 델타"). 결정 3의 신선도 근거와 독립된 두 번째 근거.
+- ⚠️ 표지: `cover_image_url`은 `public_asset_base_url` 미설정(D1 전) 시 `/works/{id}/cover.webp`라는 **상대 경로**가 되어 Astro 서버로 요청이 간다. null 체크만으로 부족하고 `<img onerror>` 폴백이 필수.
 - DoD: `pnpm build` 통과, 목록 렌더 + 페이지네이션/태그 필터 동작, 미공개 작품 미노출.
 
 ### E2. 작품 상세 + 회차목록 페이지
