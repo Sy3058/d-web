@@ -57,6 +57,13 @@ class EpisodeSummary(BaseModel):
     price: int | None
 
 
+class PublicTag(BaseModel):
+    id: uuid.UUID
+    name: str
+    # 이 태그가 달린 공개(public_work_filters) 작품 수. 필터 UI의 "판타지 (3)" 표기용.
+    work_count: int
+
+
 class WorkDetail(BaseModel):
     id: uuid.UUID
     title: str
