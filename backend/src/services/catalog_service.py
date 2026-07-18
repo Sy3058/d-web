@@ -61,7 +61,7 @@ def _to_list_item(work: Work, episode_count: int) -> WorkListItem:
     )
 
 
-def _to_episode_summary(ep: Episode) -> EpisodeSummary:
+def _to_episode_summary(ep: Episode, base_price: int) -> EpisodeSummary:
     return EpisodeSummary(
         id=ep.id,
         episode_no=ep.episode_no,
@@ -71,6 +71,8 @@ def _to_episode_summary(ep: Episode) -> EpisodeSummary:
         is_free=ep.is_free,
         is_locked=not ep.is_free,
         is_purchased=False,  # M2는 결제 없음(M3에서 실제 구매 여부로 대체)
+        # 실효가 계산은 여기(서버) 한 곳 - episodes.price NULL이면 작품 기준가(models/work.py).
+        price=None if ep.is_free else (ep.price if ep.price is not None else base_price),
     )
 
 
@@ -140,5 +142,5 @@ async def get_work_detail(work_id: uuid.UUID, session: AsyncSession) -> WorkDeta
         episode_base_price=work.episode_base_price,
         status=work.status,
         tags=list(work.tags),
-        episodes=[_to_episode_summary(ep) for ep in episodes],
+        episodes=[_to_episode_summary(ep, work.episode_base_price) for ep in episodes],
     )

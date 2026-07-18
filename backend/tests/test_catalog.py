@@ -264,7 +264,8 @@ async def test_detail_excludes_internal_fields(
     ep = body["episodes"][0]
     assert "content" not in ep
     assert "image_keys" not in ep
-    assert "price" not in ep
+    # price는 #83부터 실효 판매가로 의도적 공개(내부값 은닉 대상에서 제외) - 위 오버라이드 값
+    assert ep["price"] == 1234
     assert "secret-key.webp" not in resp.text
     assert "비밀내용" not in resp.text
 
@@ -292,3 +293,41 @@ async def test_detail_404_when_soft_deleted(
 async def test_detail_404_when_nonexistent(async_client: AsyncClient):
     resp = await async_client.get(f"{WORKS_URL}/00000000-0000-0000-0000-000000000000")
     assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# 회차 실효 가격 (#83)
+# ---------------------------------------------------------------------------
+
+
+async def test_detail_episode_price_override(
+    async_client: AsyncClient, db_session: AsyncSession, user: User
+):
+    work = await _make_work(db_session, user, episode_base_price=500)
+    await _make_episode(db_session, work, episode_no=1, is_free=False, price=1200)
+
+    resp = await async_client.get(f"{WORKS_URL}/{work.id}")
+    assert resp.json()["episodes"][0]["price"] == 1200
+
+
+async def test_detail_episode_price_falls_back_to_base_price(
+    async_client: AsyncClient, db_session: AsyncSession, user: User
+):
+    work = await _make_work(db_session, user, episode_base_price=700)
+    await _make_episode(db_session, work, episode_no=1, is_free=False, price=None)
+
+    resp = await async_client.get(f"{WORKS_URL}/{work.id}")
+    assert resp.json()["episodes"][0]["price"] == 700
+
+
+async def test_detail_free_episode_price_is_null(
+    async_client: AsyncClient, db_session: AsyncSession, user: User
+):
+    # 무료 회차는 price가 세팅돼 있어도 null - 0원 판매와 구분 + is_free 무시 표기 방지
+    work = await _make_work(db_session, user)
+    await _make_episode(db_session, work, episode_no=1, is_free=True, price=900)
+
+    resp = await async_client.get(f"{WORKS_URL}/{work.id}")
+    ep = resp.json()["episodes"][0]
+    assert ep["is_free"] is True
+    assert ep["price"] is None

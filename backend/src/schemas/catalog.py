@@ -51,6 +51,10 @@ class EpisodeSummary(BaseModel):
     is_locked: bool
     # M2는 결제가 없어 항상 false(M3에서 실제 구매 여부로 대체).
     is_purchased: bool
+    # 실효 판매가(#83): episodes.price ?? works.episode_base_price를 서버가 계산해
+    # 내보낸다 - fallback 규칙을 클라이언트가 알 필요 없게. 무료 회차는 None
+    # (0원 판매와 혼동 방지 + is_free를 무시한 가격 표기 방지).
+    price: int | None
 
 
 class WorkDetail(BaseModel):
