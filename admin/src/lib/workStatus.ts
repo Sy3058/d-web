@@ -9,6 +9,14 @@ export const WORK_STATUS_LABEL: Record<WorkStatus, string> = {
   hiatus: '휴재',
 };
 
+// 목록 배지 색. 공개 여부 배지(공개=초록·비공개=노랑)와 겹치지 않는 색을 쓴다 - 두 배지가
+// 나란히 붙어 있어 같은 색이면 어느 축인지 구분이 안 된다.
+export const WORK_STATUS_BADGE_CLASS: Record<WorkStatus, string> = {
+  ongoing: 'bg-blue-100 text-blue-700',
+  completed: 'bg-purple-100 text-purple-700',
+  hiatus: 'bg-gray-100 text-gray-600',
+};
+
 // z.enum은 최소 1개를 요구하는 튜플 타입을 받는다.
 export const WORK_STATUS_VALUES = Object.keys(WORK_STATUS_LABEL) as [WorkStatus, ...WorkStatus[]];
 

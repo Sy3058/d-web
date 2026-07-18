@@ -52,6 +52,7 @@ function EditWorkPage() {
             synopsis: work.synopsis ?? '',
             episode_base_price: work.episode_base_price,
             status: work.status,
+            is_published: work.is_published,
             tag_names: work.tags.map((tag) => tag.name),
           }}
           hasExistingCover={!!work.cover_image}

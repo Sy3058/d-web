@@ -6,6 +6,31 @@ import { WORK_STATUS_OPTIONS } from '../../lib/workStatus';
 import { TagInput } from './TagInput';
 import { CoverCropModal } from './CoverCropModal';
 
+// Chrome은 기본 select 화살표에 padding-right를 적용하지 않아 화살표가 테두리에 딱 붙는다.
+// 기본 화살표를 끄고(appearance-none) 직접 그려 위치를 잡는다. select가 둘이라 마크업을 뺐다.
+// ⚠️ absolute 배치라 **부모에 relative가 있어야** 한다 - 없으면 에러 없이 폼 전체 기준으로 날아간다.
+function SelectArrow() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.5}
+      // pointer-events-none이라야 화살표를 클릭해도 select가 열린다.
+      className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500"
+    >
+      <path d="M6 8l4 4 4-4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+const SELECT_CLASS = 'w-full appearance-none rounded border border-gray-300 py-2 pl-3 pr-10';
+
+// aria-describedby와 도움말 span의 id를 한 곳에서 잡는다 - 문자열을 양쪽에 따로 쓰면
+// 한쪽만 고쳤을 때 연결이 조용히 끊긴다(화면상 차이가 없어 눈으로는 못 잡는다).
+const IS_PUBLISHED_HELP_ID = 'work-is-published-help';
+
 interface WorkFormProps {
   defaultValues?: Partial<WorkInput>;
   hasExistingCover?: boolean;
@@ -42,6 +67,9 @@ export function WorkForm({
       // 항상 0으로 고정 전송한다. 값 자체는 M3 결제 로직이 참조하므로 스키마엔 남겨둔다.
       bundle_discount_rate: 0,
       status: 'ongoing',
+      // 백엔드 기본값(WorkCreate.is_published=False)과 동일 - admin에서 새로 만드는 작품은
+      // 명시적으로 켜기 전까지 공개 카탈로그에 노출되지 않는다.
+      is_published: false,
       tag_names: [],
       ...defaultValues,
     },
@@ -156,47 +184,68 @@ export function WorkForm({
 
           <label className="flex flex-col gap-1">
             <span className="text-sm font-medium">연재 상태</span>
-            {/* Chrome은 기본 select 화살표에 padding-right를 적용하지 않아 화살표가 테두리에
-                딱 붙는다. 기본 화살표를 끄고(appearance-none) 직접 그려 위치를 잡는다. */}
             <div className="relative">
-              <select
-                {...register('status')}
-                className="w-full appearance-none rounded border border-gray-300 py-2 pl-3 pr-10"
-              >
+              <select {...register('status')} className={SELECT_CLASS}>
                 {WORK_STATUS_OPTIONS.map((opt) => (
                   <option key={opt.value} value={opt.value}>
                     {opt.label}
                   </option>
                 ))}
               </select>
-              <svg
-                aria-hidden="true"
-                viewBox="0 0 20 20"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={1.5}
-                // pointer-events-none이라야 화살표를 클릭해도 select가 열린다.
-                className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500"
-              >
-                <path d="M6 8l4 4 4-4" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
+              <SelectArrow />
             </div>
           </label>
 
+          {/* 도움말은 label 밖에 둔다 - 안에 넣으면 label 텍스트가 통째로 select의 접근성
+              이름이 돼서 스크린리더가 "공개 상태 공개로 두면 독자 사이트..."로 읽는다.
+              이름은 label, 설명은 aria-describedby로 분리한다. */}
           <div className="flex flex-col gap-1">
-            <span className="text-sm font-medium">태그</span>
-            <Controller
-              name="tag_names"
-              control={control}
-              render={({ field }) => <TagInput value={field.value} onChange={field.onChange} />}
-            />
-            {/* 안 그리면 무효한 태그가 들어왔을 때 제출이 아무 안내 없이 막힌다
-                (RHF는 onValid를 호출하지 않을 뿐 화면엔 변화가 없다). */}
-            {errors.tag_names && (
-              <span className="text-sm text-red-600">태그는 1~{TAG_NAME_MAX}자여야 합니다.</span>
-            )}
+            <label className="flex flex-col gap-1">
+              <span className="text-sm font-medium">공개 상태</span>
+              <div className="relative">
+                {/* select 값은 문자열, 스키마·백엔드 계약은 boolean이라 양방향 변환이 필요하다.
+                    register+setValueAs는 입력(문자열->boolean)만 메꿔서, 수정 폼이 서버의
+                    is_published=true를 못 반영하고 늘 "비공개"로 뜬다(테스트로 실측). */}
+                <Controller
+                  name="is_published"
+                  control={control}
+                  render={({ field }) => (
+                    <select
+                      className={SELECT_CLASS}
+                      aria-describedby={IS_PUBLISHED_HELP_ID}
+                      name={field.name}
+                      ref={field.ref}
+                      value={field.value ? 'true' : 'false'}
+                      onChange={(e) => field.onChange(e.target.value === 'true')}
+                      onBlur={field.onBlur}
+                    >
+                      <option value="true">공개</option>
+                      <option value="false">비공개</option>
+                    </select>
+                  )}
+                />
+                <SelectArrow />
+              </div>
+            </label>
+            <span id={IS_PUBLISHED_HELP_ID} className="text-xs text-gray-500">
+              공개로 두면 독자 사이트 작품 목록에 노출됩니다.
+            </span>
           </div>
         </div>
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <span className="text-sm font-medium">태그</span>
+        <Controller
+          name="tag_names"
+          control={control}
+          render={({ field }) => <TagInput value={field.value} onChange={field.onChange} />}
+        />
+        {/* 안 그리면 무효한 태그가 들어왔을 때 제출이 아무 안내 없이 막힌다
+            (RHF는 onValid를 호출하지 않을 뿐 화면엔 변화가 없다). */}
+        {errors.tag_names && (
+          <span className="text-sm text-red-600">태그는 1~{TAG_NAME_MAX}자여야 합니다.</span>
+        )}
       </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}

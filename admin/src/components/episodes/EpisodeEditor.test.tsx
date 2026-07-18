@@ -24,6 +24,7 @@ function makeWork(): Work {
     episode_base_price: 1000,
     bundle_discount_rate: '0.000',
     status: 'ongoing',
+    is_published: false,
     tags: [],
     episode_count: 0,
     created_at: '2026-07-15T00:00:00Z',
