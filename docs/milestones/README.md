@@ -173,7 +173,7 @@ M4 (커뮤니티 - 후원 제외)
 - [ ] 작품 목록 페이지 (SSR `prerender=false` + 짧은 Cache-Control - M2_foundation 결정 3)
 - [ ] 작품 상세 + 에피소드 목록 페이지 (SSR)
 - [ ] **뷰어 - 콘텐츠 문서 렌더러** (React 아일랜드, `@tiptap/core generateHTML`)
-  - 글+이미지 혼합 렌더, lazy load, 이전/다음 화 이동, 경계 지점 잠금 placeholder
+  - 글+이미지 혼합 렌더, **이미지 즉시 전량 요청 + `fetchpriority`**(lazy 아님 - M2_foundation 결정 6), 이전/다음 화 이동, 경계 지점 잠금 placeholder
   - 드래그/복사/우클릭/저장 차단 (UX 우선, 완벽 차단 아님)
   - 진행도 저장 (블록 인덱스, debounce)
   - 본문은 no-store API로 아일랜드가 fetch (SSR HTML에 presigned 금지)
