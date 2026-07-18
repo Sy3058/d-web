@@ -71,6 +71,14 @@
   -> 프로덕션 빌드에서 관리자 SPA가 **사용자 브라우저의 localhost**를 호출하는 버그가 됐을 것
   -> 예방: env를 읽는 줄과 `.env.example`을 **같이 열어 이름을 대조**. 폴백은 오타를 감춘다
 
+- **소스 트리에 tsc 산출물 `.js`가 생기면 그 뒤 `.tsx` 수정이 전부 무시된다** (M2 admin 토글, 2026-07-18)
+  -> 원인은 `pnpm exec tsc -b --noEmit false` 같은 **CLI로 noEmit 덮어쓰기**. tsconfig의 noEmit이 꺼져 `src/` 전체에 컴파일된 `.js` 수십 개가 쏟아진다(정상 빌드 산출물은 `dist/`로만 간다)
+  -> Vite의 확장자 해석 순서는 **`.js`가 `.tsx`보다 앞**이라 `import './WorkForm'`이 옛 `.js`를 잡는다 -> 화면·테스트가 편집 이전 코드를 계속 실행
+  -> **증상이 캐시 문제로 위장한다**: 소스는 분명 맞고 `tsc -b`도 클린인데 렌더 결과만 옛것. `node_modules/.vite` 삭제, `vitest --clearCache`, `--no-cache`, `touch`(mtime 갱신) 전부 무효다(캐시가 아니라 실재 파일이 이기는 것이라 당연)
+  -> **30초 진단**: `find src -name "*.js"` - 하나라도 나오면 이 함정이다. 보조 확인은 `Component.toString()`에 방금 추가한 문자열이 있는지, 그리고 `import('./X.tsx?t='+Date.now())`로 확장자를 명시하면 새 코드가 나오는지(나오면 확정)
+  -> **정리는 `git status --short --untracked-files=all | grep '\.js$'`로 전수 확인 후 삭제**한다. untracked만 잡히니 `eslint.config.js` 같은 추적 원본은 자동으로 걸러지고, `src/`만 훑다가 놓치기 쉬운 **`vite.config.js`(설정 파일도 `.js`가 `.ts`보다 우선 로드된다)** 까지 잡힌다(실제로 이걸 놓쳐 두 번 밟았다)
+  -> 예방: 타입 검사는 package.json 스크립트(`pnpm --filter admin build`) 그대로 쓰고 **tsc 옵션을 CLI로 덮어쓰지 말 것**
+
 ## TanStack Query (v5)
 
 - **`setQueryData(key, undefined)`는 캐시를 지우지 않는다 - no-op이다** (M1.5 F1, 2026-07-14)
@@ -136,6 +144,12 @@
 - **`register(name, { valueAsNumber: true })`는 빈 입력을 `NaN`으로 넘긴다** (M1.5 F2)
   -> zod `z.number()`는 NaN을 타입 에러로 거부하는데, 메시지를 안 주면 **영문 기본 문구**("expected number, received NaN")가 한국어 UI에 그대로 뜬다
   -> `z.number({ error: '숫자를 입력해 주세요.' })`로 타입 에러 문구를 지정할 것(zod 4는 `message`/`invalid_type_error`가 `error`로 통합)
+
+- **boolean 필드를 `<select>`로 받을 때 `register`+`setValueAs`만 쓰면 수정 폼이 기존 값을 반영하지 못한다** (M2 admin 공개 토글, 2026-07-18)
+  -> `setValueAs`는 **입력 방향(문자열 -> boolean)만** 처리한다. 반대로 `defaultValues`의 boolean을 select DOM에 써넣는 출력 방향은 못 메꿔서, 서버가 `true`를 줘도 화면은 늘 첫 옵션(또는 "비공개")으로 뜬다
+  -> 조용한 버그다: 등록은 멀쩡히 동작하고 **수정 화면에서만** 값이 틀리며, 그대로 저장하면 사용자가 의도치 않게 공개를 꺼버린다
+  -> `Controller`로 양방향을 명시한다: `value={field.value ? 'true' : 'false'}` + `onChange={e => field.onChange(e.target.value === 'true')}`
+  -> 회귀 테스트는 "`defaultValues`에 `true`를 주고 아무 조작 없이 제출 -> `true`가 그대로 나오는가"로 고정(이 케이스가 실제로 실패를 잡았다)
 
 ## 공통
 
