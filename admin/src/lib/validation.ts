@@ -30,6 +30,7 @@ export const workSchema = z.object({
     .min(0, '0~1 사이 값이어야 합니다.')
     .max(1, '0~1 사이 값이어야 합니다.'),
   status: z.enum(WORK_STATUS_VALUES),
+  is_published: z.boolean(),
   tag_names: z.array(z.string().min(1).max(TAG_NAME_MAX)),
 });
 

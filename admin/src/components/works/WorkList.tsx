@@ -2,8 +2,11 @@ import { Link, useNavigate } from '@tanstack/react-router';
 import type { Work } from '../../types';
 import { useDeleteWork } from '../../hooks/useWorks';
 import { describeAuthError } from '../../lib/api';
-import { WORK_STATUS_LABEL } from '../../lib/workStatus';
+import { WORK_STATUS_BADGE_CLASS, WORK_STATUS_LABEL } from '../../lib/workStatus';
 import { WorkActionsMenu } from './WorkActionsMenu';
+
+// 배지 3종(연재 상태·공개 여부·태그)의 공통 모양. 색만 갈아끼운다.
+const BADGE_CLASS = 'rounded px-2 py-0.5 text-xs';
 
 interface WorkListProps {
   works: Work[];
@@ -45,7 +48,10 @@ export function WorkList({ works }: WorkListProps) {
             <Link
               to="/works/$workId/episodes"
               params={{ workId: work.id }}
-              className="flex min-w-0 flex-1 items-center gap-4 px-2 py-4"
+              // 비공개 작품은 카드를 흐리게 - 목록에서 "독자에게 안 보이는 작품"이 한눈에 구분된다.
+              className={`flex min-w-0 flex-1 items-center gap-4 px-2 py-4${
+                work.is_published ? '' : ' opacity-60'
+              }`}
             >
               {/* cover_image는 URL이 아니라 R2 키(works/{id}/cover.webp)라 <img>에 바로 못 박는다.
                   표지 서빙 경로는 M2에서 만든다(2026-07-15 결정: 표지 전용 공개 버킷 + 커스텀
@@ -60,14 +66,20 @@ export function WorkList({ works }: WorkListProps) {
                   <span className="truncate text-sm text-gray-500">{work.synopsis}</span>
                 )}
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
+                  <span className={`${BADGE_CLASS} ${WORK_STATUS_BADGE_CLASS[work.status]}`}>
                     {WORK_STATUS_LABEL[work.status]}
                   </span>
+                  <span
+                    className={`${BADGE_CLASS} ${
+                      work.is_published
+                        ? 'bg-green-100 text-green-700'
+                        : 'bg-yellow-100 text-yellow-700'
+                    }`}
+                  >
+                    {work.is_published ? '공개' : '비공개'}
+                  </span>
                   {work.tags.map((tag) => (
-                    <span
-                      key={tag.id}
-                      className="rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-600"
-                    >
+                    <span key={tag.id} className={`${BADGE_CLASS} bg-gray-100 text-gray-600`}>
                       #{tag.name}
                     </span>
                   ))}

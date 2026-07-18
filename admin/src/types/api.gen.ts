@@ -393,6 +393,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/works": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Works */
+        get: operations["list_works_works_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/works/{work_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Work */
+        get: operations["get_work_works__work_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/": {
         parameters: {
             query?: never;
@@ -523,6 +557,28 @@ export interface components {
             key: string;
             /** Url */
             url: string;
+        };
+        /** EpisodeSummary */
+        EpisodeSummary: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Episode No */
+            episode_no: number;
+            /** Title */
+            title: string;
+            /** Subtitle */
+            subtitle: string | null;
+            /** Thumbnail Url */
+            thumbnail_url: string | null;
+            /** Is Free */
+            is_free: boolean;
+            /** Is Locked */
+            is_locked: boolean;
+            /** Is Purchased */
+            is_purchased: boolean;
         };
         /**
          * EpisodeUpdate
@@ -703,8 +759,62 @@ export interface components {
             bundle_discount_rate: number | string;
             /** @default ongoing */
             status: components["schemas"]["WorkStatus"];
+            /**
+             * Is Published
+             * @default false
+             */
+            is_published: boolean;
             /** Tag Names */
             tag_names?: string[];
+        };
+        /** WorkDetail */
+        WorkDetail: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Title */
+            title: string;
+            /** Synopsis */
+            synopsis: string | null;
+            /** Cover Image Url */
+            cover_image_url: string | null;
+            /** Episode Base Price */
+            episode_base_price: number;
+            status: components["schemas"]["WorkStatus"];
+            /** Tags */
+            tags: components["schemas"]["TagRead"][];
+            /** Episodes */
+            episodes: components["schemas"]["EpisodeSummary"][];
+        };
+        /** WorkListItem */
+        WorkListItem: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Title */
+            title: string;
+            /** Cover Image Url */
+            cover_image_url: string | null;
+            status: components["schemas"]["WorkStatus"];
+            /** Tags */
+            tags: components["schemas"]["TagRead"][];
+            /** Episode Count */
+            episode_count: number;
+        };
+        /** WorkListResponse */
+        WorkListResponse: {
+            /** Items */
+            items: components["schemas"]["WorkListItem"][];
+            /** Total */
+            total: number;
+            /** Page */
+            page: number;
+            /** Size */
+            size: number;
         };
         /** WorkRead */
         WorkRead: {
@@ -729,6 +839,8 @@ export interface components {
             /** Bundle Discount Rate */
             bundle_discount_rate: string;
             status: components["schemas"]["WorkStatus"];
+            /** Is Published */
+            is_published: boolean;
             /** Tags */
             tags: components["schemas"]["TagRead"][];
             /** Episode Count */
@@ -769,6 +881,8 @@ export interface components {
             /** Bundle Discount Rate */
             bundle_discount_rate?: number | string | null;
             status?: components["schemas"]["WorkStatus"] | null;
+            /** Is Published */
+            is_published?: boolean | null;
             /** Tag Names */
             tag_names?: string[] | null;
         };
@@ -1485,6 +1599,70 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EpisodeImageUrl"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_works_works_get: {
+        parameters: {
+            query?: {
+                page?: number;
+                size?: number;
+                tag?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_work_works__work_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                work_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkDetail"];
                 };
             };
             /** @description Validation Error */

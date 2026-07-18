@@ -123,3 +123,27 @@ Work.episode_count = column_property(
 | 작품 순서 지정(DB 컬럼 + 재정렬 API) | 필요 시 |
 | 삭제 확인이 `window.confirm`(admin/CLAUDE.md 구조표의 `common/Modal.tsx` 미구현) | 공용 모달 도입 시 |
 | FE/admin CI job | F2 이후(결정: 2026-07-14) |
+
+---
+
+## 7. 후속 변경
+
+### 작품 공개(`is_published`) 토글 (M2 그룹 A 후속, 2026-07-18)
+
+M2 A(공개 카탈로그 API, #81)가 `works.is_published`를 신설하면서 **신규 작품이 기본 비공개**가 됐다. admin에 제어 수단이 없으면 등록한 작품이 독자 카탈로그에 영원히 안 뜨므로(공개하려면 API 직접 호출뿐) 폼에 토글을 얹었다.
+
+| 파일 | 변경 |
+|------|------|
+| `lib/validation.ts` | `workSchema`에 `is_published: z.boolean()` |
+| `components/works/WorkForm.tsx` | 기본값 `false`(BE `WorkCreate` 기본과 일치) + **공개/비공개 드롭다운**(연재 상태와 같은 형태 - 2026-07-18 사용자 요청으로 체크박스에서 전환). 등록·수정 폼이 이 컴포넌트를 공유해 양쪽에 동시 적용. 같이 조정: 태그를 2단 블록 밖(표지 아래 전체 너비)으로 이동, select 화살표 마크업을 `SelectArrow`로 추출(select가 둘이 되며 중복) |
+| `routes/_auth/works/$workId/index.tsx` | 수정 폼 `defaultValues`에 `work.is_published` 반영 |
+| `components/works/WorkList.tsx` | 목록 가독성 개선: 공개(초록)/비공개(노랑) 배지 + **연재 상태 배지에 색 부여**(연재중=파랑·완결=보라·휴재=회색, 공개 여부 배지와 겹치지 않는 색 - 두 배지가 나란히 붙어 있어 같은 색이면 어느 축인지 구분이 안 된다) + **비공개 작품 카드는 흐리게**(`opacity-60`) |
+| `lib/workStatus.ts` | `WORK_STATUS_BADGE_CLASS` 추가(라벨과 같은 단일 출처 - `Record<WorkStatus, string>`이라 상태 값이 늘면 색 누락이 컴파일 타임에 잡힌다) |
+| `types/api.gen.ts` | `generate:types` 재생성 |
+| `components/works/WorkForm.test.tsx` | 신설 3건(기본 비공개 제출 · 토글 후 공개 제출 · `defaultValues` 반영) |
+
+- **codegen required 함정이 예고대로 발현**: 재생성 시 `WorkCreate.is_published`가 required로 나와 `new.tsx`의 `mutateAsync(data)`와 테스트 픽스처 2개가 tsc 에러. `workSchema`에 필드를 넣는 것으로 해소(MISTAKES "openapi-typescript codegen").
+- 에피소드 쪽의 "순수 메타 수정 PUT에 `is_published`를 에코하지 말 것"(E1 계약) 함정은 **작품엔 해당 없다** - 작품에는 예약 공개(`published_at`)가 없어 값을 그대로 보내는 것이 맞다.
+- **Opus 리뷰 반영 3건**(Critical/Major 0): ① 테스트 주석이 `setValueAs`를 가리켜 `Controller`를 되돌리도록 유도하던 것 정정, ② 도움말 문구가 `<label>` 안에 있어 select 접근성 이름이 "공개 상태 공개로 두면 독자 사이트..."로 읽히던 것 → 도움말을 label 밖으로 빼고 `aria-describedby`로 분리(`getByRole('combobox', { name: '공개 상태' })` 정확 매칭으로 실측 확인), ③ `SelectArrow`가 부모 `relative`에 의존한다는 제약을 주석에 명시.
+- **드롭다운 전환에서 실제 버그를 하나 잡았다**: boolean을 `<select>`로 받으며 `register`+`setValueAs`를 쓰면 입력(문자열 -> boolean) 방향만 처리돼, **수정 폼이 서버의 `is_published=true`를 반영하지 못하고 늘 "비공개"로 뜬다**(그대로 저장하면 공개가 꺼진다). `Controller`로 양방향을 명시해 해결했고, "`defaultValues`에 `true`를 주고 무조작 제출" 테스트가 이 실패를 잡았다(MISTAKES "폼 / CSS").
+- ⚠️ 이 작업 중 `tsc -b --noEmit false`를 잘못 실행해 `src/`에 컴파일된 `.js`가 쏟아지면서, 이후 `.tsx` 수정이 전부 무시되는 사고가 있었다(캐시 문제로 위장). 진단·예방은 MISTAKES "Vite / Astro" 참조.
