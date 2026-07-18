@@ -4,8 +4,8 @@
 |------|------|
 | 모듈 | Backend / Works (공개 읽기 경로) |
 | 관련 마일스톤 | [M2](../../../milestones/M2_foundation.md) 그룹 A (A1+A2, WORK-01·02) |
-| 작성 시점 | M2 A (2026-07-18) |
-| 상태 | 구현 + Opus 리뷰(Major 1 반영) + /code-review high(10건 중 6건 반영) 완료. `pytest` 312 passed(신규 19), ruff·`alembic check` 클린 |
+| 작성 시점 | M2 A (2026-07-18), 후속 A3+가격 추가 (2026-07-19) |
+| 상태 | 구현 + Opus 리뷰(Major 1 반영) + /code-review high(10건 중 6건 반영) 완료. 후속(#82·#83) + /code-review xhigh(7건 중 3건 반영) 완료. `pytest` 320 passed, ruff 클린 |
 | 관련 문서 | M2_foundation.md 그룹 A·결정 2·5, MISTAKES.md "SQLAlchemy / AsyncSession"(sqlmodel.select 함정), IMPLEMENTATION_WORK_CRUD.md(admin 쓰기 측) |
 
 비로그인 독자가 작품 목록/상세를 조회하는 첫 공개 API. `GET /works`(페이지네이션·태그 필터·공개 회차 수) + `GET /works/{id}`(작품 메타 + 공개 회차 요약). 회차 본문 서빙(절단·presign)은 그룹 B 소관.
@@ -77,3 +77,36 @@
 - 노출 게이트: 비공개 작품 목록 제외·상세 404, soft-delete 동일, 미공개 회차 제외, 공개 회차만 카운트
 - `uv run ruff check`+`format --check` 클린, `uv run alembic check` "No new upgrade operations detected"
 - 실DB 스모크(ASGITransport): 목록 200 → 상세 200 → 미존재 404
+
+---
+
+## 5. 후속: 회차 실효 가격 + 공개 태그 목록 (2026-07-19, #82·#83)
+
+E(FE 목록/상세) 착수 검증에서 **계약 구멍 2개**가 드러나 같은 모듈에 얹었다. 둘 다 "FE가 화면을 만들 수 없다"가 근거지, 리팩터가 아니다.
+
+| 파일 | 내용 |
+|------|------|
+| `schemas/catalog.py` | `EpisodeSummary.price`(실효가), `PublicTag`(id·name·work_count) |
+| `services/catalog_service.py` | `_to_episode_summary(ep, base_price)` 실효가 계산, `list_public_tags()` |
+| `routers/tags.py` | `GET /tags` 공개 라우터(인증 불요) |
+| `admin/src/types/api.gen.ts` | codegen 재생성(+51줄, 삭제 0) |
+
+### 가격은 은닉 대상이 아니다 - 계약 정정 (#83)
+A1/A2는 `price`를 `content`·`image_keys`와 함께 은닉했는데, 그 문장이 **원고 유출 방어**와 **가격 비공개**를 뭉뚱그린 것이었다. 가격은 판매를 위해 공개하는 정보다. 다만 그냥 노출하면 안 되는 이유가 따로 있다: 실제 회차 가격은 `episodes.price ?? works.episode_base_price`(`models/work.py:189`)라, 작품 기준가만 내려주면 **오버라이드된 회차에서 표시 금액과 결제 금액이 어긋난다**(소비자 오인 표시).
+
+→ **fallback 계산을 서버 한 곳에 둔다.** 원시값 2개를 내려 FE가 계산하게 하면 규칙이 BE·FE 두 곳에 복제되고, M3에서 이벤트 할인가가 붙을 때 한쪽만 갱신되면 화면가와 결제가가 갈라진다. 무료 회차는 `null`(0원 판매와 구분 + `is_free`를 무시한 가격 표기 차단). FE 규칙이 "`is_free`면 무료 배지, 아니면 `price`원"으로 단순해진다.
+
+### 태그 목록 API - 필터의 데이터 소스 (#82)
+`GET /works?tag=` 필터링은 A1에 있었으나 **"어떤 태그가 존재하는지" 알려주는 경로가 없었다.** 대안(카드에 보이는 태그만 클릭)은 1페이지에 안 나온 태그로는 필터 자체가 불가능해 발견성이 깨진다 - 백엔드를 늘리는 게 맞다는 판단.
+
+⚠️ **inner join + `public_work_filters()`를 WHERE에** 둔다. `Tag`를 전량 조회해 앱단에서 거르거나 LEFT JOIN을 쓰면 미공개 작품에만 달린 태그가 카운트 0으로 응답에 남아 **태그 이름이 숨긴 작품의 존재를 흘린다**. `works_tags` PK가 `(work_id, tag_id)`라 태그당 작품 중복이 불가능해 `count`에 distinct가 불필요하고, `GROUP BY tags.id`는 PK 함수 종속이라 PG에서 Tag 엔티티 선택이 유효하다.
+
+### 리뷰(xhigh 7건) 반영·보류
+| 지적 | 처리 |
+|------|------|
+| `work_count` 혼합 가시성(공개+비공개 동시) 미검증 | **반영** - 카운트가 공개분만 세는지 단언하는 테스트 추가. 이 산술이 틀리면 숫자가 숨긴 작품을 흘린다 |
+| `api.gen.ts` 미재생성 | **반영** - `pnpm --filter admin generate:types`. #87이 #81분 드리프트를 이미 해소해 이번 추가분만 반영됨 |
+| `db_session` 타입 어노테이션 누락 | 반영 |
+| `PublicTag`가 `TagRead`(id·name) 중복 | 보류 - 공개 DTO는 admin 스키마와 의도적으로 분리(§2 참조). 상속하면 그 경계가 흐려짐 |
+| `GET /tags` 개수 상한 없음 | 보류 - 1인 작가 태그 규모에서 무의미. `MAX_PAGE_SIZE` 비대칭은 인지 |
+| 한글 정렬 단언이 DB collation 의존 | 보류 - C·ICU 양쪽에서 액<판 동일. 깨지면 그때 집합 비교로 완화 |
