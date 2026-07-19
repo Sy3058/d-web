@@ -1,0 +1,55 @@
+"""뷰어 진행도 저장/조회 서비스 (M2 그룹 C1)."""
+
+import uuid
+
+from sqlalchemy import func
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlmodel import select
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from src.models.viewer import ViewerProgress
+from src.services import catalog_service
+
+
+async def upsert_progress(
+    user_id: uuid.UUID, episode_id: uuid.UUID, page_no: int, session: AsyncSession
+) -> ViewerProgress | None:
+    """진행도 upsert. 유저-회차 쌍이 없으면 insert, 있으면 page_no·updated_at 갱신.
+
+    회차가 독자에게 노출 가능한 상태가 아니면 저장하지 않고 None을 반환한다(라우터가
+    404로 매핑 - catalog_service.get_work_detail과 같은 패턴). 이 검사를 호출자(라우터)에
+    두지 않는 이유: 저장 가능 여부는 HTTP 포장이 아니라 도메인 불변식이라 트랜잭션 경계를
+    소유한 서비스가 지켜야 한다(backend/CLAUDE.md 레이어 규칙). 라우터에만 두면 두 번째
+    호출부가 생길 때 조용히 우회된다 - public_work_filters() docstring이 경고하는 것과
+    같은 계열의 사고.
+
+    onupdate=func.now()(models/viewer.py)는 일반 UPDATE 문에서만 발동하고 ON CONFLICT
+    DO UPDATE의 SET절에는 적용되지 않아 updated_at을 여기서 명시한다(study
+    postgres-upsert-onupdate-trap).
+    """
+    if not await catalog_service.public_episode_exists(episode_id, session):
+        return None
+
+    stmt = pg_insert(ViewerProgress).values(user_id=user_id, episode_id=episode_id, page_no=page_no)
+    stmt = stmt.on_conflict_do_update(
+        constraint="uq_viewer_progress_user_episode",
+        set_={"page_no": stmt.excluded.page_no, "updated_at": func.now()},
+    ).returning(ViewerProgress)
+
+    result = await session.exec(stmt)
+    row = result.scalars().one()
+    await session.commit()
+    return row
+
+
+async def get_progress(
+    user_id: uuid.UUID, episode_id: uuid.UUID, session: AsyncSession
+) -> ViewerProgress | None:
+    """저장된 진행도 조회. 없으면 None(라우터가 404로 매핑)."""
+    result = await session.exec(
+        select(ViewerProgress).where(
+            ViewerProgress.user_id == user_id,
+            ViewerProgress.episode_id == episode_id,
+        )
+    )
+    return result.first()

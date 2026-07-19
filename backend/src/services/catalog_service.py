@@ -172,3 +172,22 @@ async def get_work_detail(work_id: uuid.UUID, session: AsyncSession) -> WorkDeta
         tags=list(work.tags),
         episodes=[_to_episode_summary(ep, work.episode_base_price) for ep in episodes],
     )
+
+
+async def public_episode_exists(episode_id: uuid.UUID, session: AsyncSession) -> bool:
+    """독자에게 노출 가능한 회차인지 확인 (회차 자체 공개 + 소속 작품 public_work_filters()).
+
+    그룹 C1(뷰어 진행도) PUT 저장 게이트. 그룹 B(회차 콘텐츠 API)가 아직 없어 신설했지만
+    필터 단일 출처는 그대로 public_work_filters() - B가 나중에 별도 조회 함수를 만들어도
+    이 필터는 갈라지지 않는다. Episode.id만 select해 content(JSONB) 로딩을 피한다.
+    """
+    result = await session.exec(
+        select(Episode.id)
+        .join(Work, Work.id == Episode.work_id)
+        .where(
+            Episode.id == episode_id,
+            Episode.is_published.is_(True),
+            *public_work_filters(),
+        )
+    )
+    return result.first() is not None
