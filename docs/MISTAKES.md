@@ -39,6 +39,11 @@
   → 비용은 프로세스당 1회라 어차피 한 번 냄. lazy는 그 1회를 부팅(요청 안 받음, 무해)에서 요청 처리 중(유해)으로 옮길 뿐 → 손해
   → 모듈 로드 시 1회 생성(루프 없어 무해)이 정답. 실제 사고: M1 C `_dummy_hash` lazy → Opus 리뷰 Major
 
+- **정수 필드 검증은 하한만 걸지 말고 DB 컬럼 타입의 상한도 걸 것** (2026-07-20 C1)
+  → `Field(ge=0)`만 두면 `2147483647` 초과 값이 Pydantic을 통과해 DB까지 가고, 4바이트 `Integer` 컬럼에서 asyncpg가 `DataError: value out of int32 range`를 던진다. 핸들러가 없으면 **422가 아니라 500**(+ Sentry 이벤트)
+  → "상한값은 의미상 제한할 필요가 없다"는 판단(예: 진행도 페이지 번호)과 **저장 타입의 물리적 한계는 별개**다. 의미 상한이 없어도 `le=2_147_483_647`은 걸어야 클라이언트가 깨끗한 422를 받는다
+  → 실제 사고: C1 진행도 `page_no`. 계획 리뷰에서 "과대값 피해는 본인 진행도뿐이라 안전"으로 넘어갔다가 코드 리뷰에서 500으로 발견(임시 테스트로 실측 확정)
+
 <!-- 예시:
 - SQLModel 관계 lazy loading N+1 → selectinload 명시
 - 포트원 webhook 금액 검증 누락 → 서버에서 금액 재검증
@@ -396,3 +401,9 @@
   → `TestClient`(동기, 자체 루프)는 session-scope async `db_session`(asyncpg)과 루프가 어긋나 `got Future ... different loop`
   → 해결: `AsyncClient(transport=ASGITransport(app=app), base_url=...)` + `app.dependency_overrides[get_session]`로 같은 루프에서 앱 실행, 비동기 `await client.post(...)`
   → 쿠키를 **수동으로 jar에 set**할 때(요청별 `cookies=`는 deprecated)는 base_url 호스트를 점 있는 이름(`http://test.example`) + `cookies.set(..., domain="test.example")`. 점 없는 호스트(`test`)는 cookiejar가 `.local`을 붙여 도메인 매칭이 깨져 쿠키 미전송
+
+- **teardown 정리가 한 번 실패하면 그 뒤 실행들이 엉뚱한 곳에서 깨진다** (2026-07-20 C1)
+  → 증상: 전체 스위트가 **실행할 때마다 다른 테스트**가 실패/에러. 개별 파일 단독 실행은 전부 통과
+  → 실제 사슬: `db_session` teardown의 `DELETE FROM users`가 FK 위반으로 중단 → `dweb_test`에 데이터 잔류 → 다음 실행에서 회차에 이미 이미지가 있는 상태가 되어 길이-가드 조건부 UPDATE가 409 → 응답에 `image_keys`가 없어 `KeyError`. **원래 원인과 무관한 파일에서 터진다**
+  → 대응 순서: (1) 개별 파일 단독 실행으로 "오염이냐 코드냐" 먼저 가른다 (2) 오염이면 코드를 고치지 말고 **테스트 DB 스키마를 초기화**(`DROP SCHEMA public CASCADE; CREATE SCHEMA public;` - 실행 전 DB명이 `dweb_test`인지 assert할 것) (3) 초기화 후 **연속 여러 번** 돌려 재발 여부 확인
+  → 교훈: 실패가 매번 다르면 그 실패 지점을 디버깅하지 말 것. 상태 오염을 먼저 의심한다. 이번 건은 **최초 트리거를 끝내 특정하지 못했다** - 그럴 땐 "고쳤다"가 아니라 "해소했고 원인 미특정"으로 남길 것
