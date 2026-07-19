@@ -11,36 +11,11 @@ from httpx import AsyncClient
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.models.user import User
-from src.models.work import Episode, Tag, Work, WorkTag
+from src.models.work import Tag, Work, WorkTag
+from tests.factories import make_episode as _make_episode
+from tests.factories import make_work as _make_work
 
 WORKS_URL = "/works"
-
-
-async def _make_work(db_session: AsyncSession, author: User, **overrides) -> Work:
-    work = Work(
-        author_id=author.id,
-        title=overrides.pop("title", "테스트작"),
-        is_published=overrides.pop("is_published", True),
-        **overrides,
-    )
-    db_session.add(work)
-    await db_session.commit()
-    await db_session.refresh(work)
-    return work
-
-
-async def _make_episode(db_session: AsyncSession, work: Work, **overrides) -> Episode:
-    ep = Episode(
-        work_id=work.id,
-        episode_no=overrides.pop("episode_no", 1),
-        title=overrides.pop("title", "1화"),
-        is_published=overrides.pop("is_published", True),
-        **overrides,
-    )
-    db_session.add(ep)
-    await db_session.commit()
-    await db_session.refresh(ep)
-    return ep
 
 
 # ---------------------------------------------------------------------------

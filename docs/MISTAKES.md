@@ -39,6 +39,11 @@
   → 비용은 프로세스당 1회라 어차피 한 번 냄. lazy는 그 1회를 부팅(요청 안 받음, 무해)에서 요청 처리 중(유해)으로 옮길 뿐 → 손해
   → 모듈 로드 시 1회 생성(루프 없어 무해)이 정답. 실제 사고: M1 C `_dummy_hash` lazy → Opus 리뷰 Major
 
+- **정수 필드 검증은 하한만 걸지 말고 DB 컬럼 타입의 상한도 걸 것** (2026-07-20 C1)
+  → `Field(ge=0)`만 두면 `2147483647` 초과 값이 Pydantic을 통과해 DB까지 가고, 4바이트 `Integer` 컬럼에서 asyncpg가 `DataError: value out of int32 range`를 던진다. 핸들러가 없으면 **422가 아니라 500**(+ Sentry 이벤트)
+  → "상한값은 의미상 제한할 필요가 없다"는 판단(예: 진행도 페이지 번호)과 **저장 타입의 물리적 한계는 별개**다. 의미 상한이 없어도 `le=2_147_483_647`은 걸어야 클라이언트가 깨끗한 422를 받는다
+  → 실제 사고: C1 진행도 `page_no`. 계획 리뷰에서 "과대값 피해는 본인 진행도뿐이라 안전"으로 넘어갔다가 코드 리뷰에서 500으로 발견(임시 테스트로 실측 확정)
+
 <!-- 예시:
 - SQLModel 관계 lazy loading N+1 → selectinload 명시
 - 포트원 webhook 금액 검증 누락 → 서버에서 금액 재검증
@@ -396,3 +401,11 @@
   → `TestClient`(동기, 자체 루프)는 session-scope async `db_session`(asyncpg)과 루프가 어긋나 `got Future ... different loop`
   → 해결: `AsyncClient(transport=ASGITransport(app=app), base_url=...)` + `app.dependency_overrides[get_session]`로 같은 루프에서 앱 실행, 비동기 `await client.post(...)`
   → 쿠키를 **수동으로 jar에 set**할 때(요청별 `cookies=`는 deprecated)는 base_url 호스트를 점 있는 이름(`http://test.example`) + `cookies.set(..., domain="test.example")`. 점 없는 호스트(`test`)는 cookiejar가 `.local`을 붙여 도메인 매칭이 깨져 쿠키 미전송
+
+- **테스트 DB를 세션 두 개가 공유하면 서로를 파괴한다** (2026-07-20 C1, 해결됨)
+  → 증상: 전체 스위트가 **실행할 때마다 다른 테스트**가 실패/에러. 개별 파일 단독 실행은 전부 통과
+  → 원인: 워크트리 두 개(`d-web`, `d-web-m2`)에서 **동시에 pytest**를 돌리면 고정 DB `dweb_test` 하나를 공유한다. `db_session` teardown이 매 테스트마다 전 테이블을 DELETE하므로 **상대가 방금 만든 행이 상대 테스트 도중 사라진다**
+  → 파생 증상: `DELETE FROM users`가 FK 위반(내가 works를 지운 직후 상대가 works를 INSERT) → teardown 중단 → 데이터 잔류 → 다음 실행에서 회차에 이미 이미지가 있어 길이-가드 UPDATE가 409 → `KeyError: 'image_keys'`. **원래 원인과 무관한 파일에서 터진다**
+  → 해결(도입됨): conftest `test_engine`이 **PID 전용 DB**(`dweb_test_<pid>`)를 CREATE/DROP한다. `CREATE/DROP DATABASE`는 트랜잭션 안에서 불가라 `isolation_level="AUTOCOMMIT"` 연결로 실행. 검증 = pytest 2개 동시 실행 → 양쪽 337 passed
+  → ⚠️ 정리 시 **다른 PID의 DB는 건드리지 말 것** - 동시 실행 중인 세션 것일 수 있다. 비정상 종료 잔재만 수동 정리
+  → 진단 교훈: 실패가 매번 다르면 그 실패 지점을 디버깅하지 말고 **상태 오염을 먼저 의심**한다. 그리고 "지금 관측되지 않음"을 "없음"으로 단정하지 말 것 - 이번 건은 동시 접속을 몇 번 샘플링해 0으로 나오자 동시성 가설을 기각했는데, 상대 세션이 그 순간 쉬고 있었을 뿐이었다(사용자 제보로 확정)

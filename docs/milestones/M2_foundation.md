@@ -138,12 +138,13 @@ M2 착수 전 확정. presigned·표지·콘텐츠 모델은 기존 결정(DECIS
 
 ## 그룹 C. 뷰어 진행도 (WORK-09)
 
-### C1. `viewer_progress` 모델 + 진행도 저장/조회 API
+### C1. `viewer_progress` 모델 + 진행도 저장/조회 API ✅ (2026-07-20 완료 - 브랜치 be/feat/m2-viewer-progress)
 - 선행: M1.5 A1(episodes), M1(users)
 - 산출물: `models/viewer.py`(`ViewerProgress`), Alembic 마이그레이션 1개, `routers/progress.py`, `services/progress_service.py`
 - `PUT /episodes/{id}/progress` - body `{page_no}`, **인증 필수**. `INSERT ... ON CONFLICT (user_id, episode_id) DO UPDATE`(upsert, `page_no`·`updated_at` 갱신). 선택적 `GET /episodes/{id}/progress`(재진입 복원용).
 - DoD: `alembic upgrade head` → `viewer_progress` 테이블 + `UNIQUE(user_id, episode_id)`. pytest - 로그인 upsert(중복 시 갱신, 신규 시 insert), 비로그인 401, 존재하지 않는 episode 404/무시.
 - 결정: `page_no`는 콘텐츠 모델 전환(#76)에 따라 **"문서 최상위 블록 인덱스"로 재해석**(DECISIONS "에피소드 콘텐츠 모델" 여파 - 컬럼·스키마 변경 없음, 의미만). debounce는 FE 책임(그룹 F). 저장 실패는 조용히 무시(열람 차단 아님 - 부가 기능). 회차 존재 검증은 B와 같은 공개 조회(Work join 포함) 재사용 - soft-delete 작품 회차엔 저장하지 않음.
+- **구현에서 확정(2026-07-20)**: 착수 시점에 그룹 B(회차 콘텐츠 API)가 아직 없어 "B 재사용"이 불가 - 대신 `catalog_service.public_episode_exists()`를 신설해 `public_work_filters()`(단일 출처)를 그대로 태웠다. B가 나중에 생겨도 필터는 갈라지지 않는다. **GET은 공개성 재검사 없이 진행도 행 존재만 확인**(PUT만 매번 검사) - 작품 재공개 시 기존 진행도가 유지되는 편이 UX상 맞다는 결정(사용자 확정). 상세: `docs/MODULES/BE/Viewer/IMPLEMENTATION_VIEWER_PROGRESS.md`.
 
 ---
 

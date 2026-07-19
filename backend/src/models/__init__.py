@@ -12,6 +12,7 @@ from .user import (
     User,
     UserRead,
 )
+from .viewer import ViewerProgress
 from .work import (
     Episode,
     Tag,
@@ -32,4 +33,5 @@ __all__ = [
     "WorkTag",
     "Episode",
     "WorkStatus",
+    "ViewerProgress",
 ]
