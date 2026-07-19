@@ -63,7 +63,11 @@ PUT은 저장 자체를 막는 게이트라 `public_episode_exists()`를 매번 
 7. 개인 데이터 응답에 캐시 헤더 없음 → `Cache-Control: no-store` + 검증 테스트.
 8. `episode_id` 미인덱스(CASCADE 시 순차 스캔) → 모델 `Index` 추가. 마이그레이션이 미커밋 상태라 새 리비전 대신 기존 파일에 `create_index`/`drop_index`를 직접 넣고, 개발 DB는 테이블 drop → 이전 리비전 stamp → `upgrade head`로 **신규 적용 경로를 재현 검증**했다(인덱스 3개 실재 확인).
 
-**검증 중 사고**: 반영 후 전체 스위트가 실행마다 다른 지점에서 깨졌다. 원인은 teardown의 `DELETE FROM users`가 FK 위반으로 중단되어 `dweb_test`에 데이터가 잔류했고, 이후 실행들이 무관한 곳(admin_episodes 업로드 409 등)에서 연쇄 실패한 것. 기각한 가설: 테이블 삭제 순서 붕괴(`works`(3) < `users`(8)로 정상), 개발 DB 오염(`TEST_DATABASE_URL=dweb_test` 분리 확인), 동시 pytest(관측 시 부재). **최초 트리거는 특정하지 못했다** - 동시 접속 증거가 없어 타 세션 경합이라 단정할 수 없다. `dweb_test` 스키마 초기화로 해소했고 이후 337 passed 3회 연속 안정.
+**검증 중 사고 → 테스트 격리 개선**: 반영 후 전체 스위트가 실행마다 다른 지점에서 깨졌다. 원인은 **워크트리 두 개(`d-web`, `d-web-m2`)가 고정 테스트 DB `dweb_test` 하나를 공유**한 것 - `db_session` teardown이 매 테스트마다 전 테이블을 DELETE하므로 상대 세션이 만든 행이 상대 테스트 도중 사라진다. `DELETE FROM users` FK 위반 → teardown 중단 → 데이터 잔류 → 이후 실행이 무관한 곳(admin_episodes 업로드 409)에서 연쇄 실패로 번졌다.
+
+진단 중 기각했던 가설: 테이블 삭제 순서 붕괴(`works`(3) < `users`(8)로 정상), 개발 DB 오염(`TEST_DATABASE_URL` 분리 확인). **동시 pytest 가설도 한 번 기각했는데 이것이 오판이었다** - 몇 차례 샘플링에서 동시 접속이 0이라 배제했으나 상대 세션이 그 순간 쉬고 있었을 뿐이고, 사용자 제보로 확정됐다. "관측되지 않음"을 "없음"으로 단정한 실수.
+
+해결: conftest `test_engine`이 **PID 전용 DB**(`dweb_test_<pid>`)를 만들고 세션 종료 시 드롭하도록 변경(`CREATE/DROP DATABASE`는 트랜잭션 밖이어야 해 `isolation_level="AUTOCOMMIT"` 연결 사용, 다른 PID의 DB는 건드리지 않음). 검증 = **pytest 2개 동시 실행에서 양쪽 337 passed** + 종료 후 잔재 DB 0개.
 
 ## 4. 이연 / 후속
 

@@ -1,9 +1,11 @@
+import os
 from collections.abc import AsyncGenerator
 from unittest.mock import AsyncMock, patch
 
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlmodel import SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -45,16 +47,52 @@ def _stub_hibp(monkeypatch):
     monkeypatch.setattr(hibp, "is_password_pwned", AsyncMock(return_value=False))
 
 
+def _per_process_db(base_url: str) -> tuple[str, str]:
+    """이 pytest 프로세스 전용 DB의 (URL, 이름). 예: dweb_test -> dweb_test_12345."""
+    server, _, base_name = base_url.rpartition("/")
+    db_name = f"{base_name}_{os.getpid()}"
+    return f"{server}/{db_name}", db_name
+
+
+async def _drop_db(base_url: str, db_name: str) -> None:
+    """CREATE/DROP DATABASE는 트랜잭션 안에서 불가 → AUTOCOMMIT 연결로 실행한다.
+
+    접속 대상은 base DB(dweb_test) - 여기엔 아무것도 쓰지 않고 명령 통로로만 쓴다.
+    """
+    maintenance = create_async_engine(base_url, isolation_level="AUTOCOMMIT")
+    async with maintenance.connect() as conn:
+        await conn.execute(text(f'DROP DATABASE IF EXISTS "{db_name}" WITH (FORCE)'))
+    await maintenance.dispose()
+
+
 @pytest_asyncio.fixture(scope="session")
 async def test_engine():
-    url = settings.test_database_url or settings.database_url
+    """PID 전용 테스트 DB를 만들고 세션 종료 시 통째로 드롭한다.
+
+    고정 DB 하나를 공유하면 워크트리/세션 두 개가 동시에 pytest를 돌릴 때 서로를
+    파괴한다 - db_session teardown이 매 테스트마다 전 테이블을 DELETE하기 때문에,
+    상대가 방금 만든 행이 테스트 도중 사라져 **무관한 파일이 실행마다 다르게 깨진다**
+    (2026-07-20 실사고. MISTAKES "pytest / 비동기 DB 테스트" 참조).
+    프로세스마다 DB를 갈라 경합 자체를 없앤다.
+
+    ⚠️ 다른 PID의 DB는 정리하지 않는다 - 동시 실행 중인 세션의 것일 수 있다. 비정상
+    종료로 남은 dweb_test_<pid>는 수동 정리 대상(같은 PID 재사용 시엔 아래가 덮어씀).
+    """
+    base_url = settings.test_database_url or settings.database_url
+    url, db_name = _per_process_db(base_url)
+
+    await _drop_db(base_url, db_name)  # PID 재사용으로 남은 잔재 정리
+    maintenance = create_async_engine(base_url, isolation_level="AUTOCOMMIT")
+    async with maintenance.connect() as conn:
+        await conn.execute(text(f'CREATE DATABASE "{db_name}"'))
+    await maintenance.dispose()
+
     engine = create_async_engine(url)
     async with engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.create_all)
     yield engine
-    async with engine.begin() as conn:
-        await conn.run_sync(SQLModel.metadata.drop_all)
     await engine.dispose()
+    await _drop_db(base_url, db_name)
 
 
 @pytest.fixture

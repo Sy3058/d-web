@@ -402,8 +402,10 @@
   → 해결: `AsyncClient(transport=ASGITransport(app=app), base_url=...)` + `app.dependency_overrides[get_session]`로 같은 루프에서 앱 실행, 비동기 `await client.post(...)`
   → 쿠키를 **수동으로 jar에 set**할 때(요청별 `cookies=`는 deprecated)는 base_url 호스트를 점 있는 이름(`http://test.example`) + `cookies.set(..., domain="test.example")`. 점 없는 호스트(`test`)는 cookiejar가 `.local`을 붙여 도메인 매칭이 깨져 쿠키 미전송
 
-- **teardown 정리가 한 번 실패하면 그 뒤 실행들이 엉뚱한 곳에서 깨진다** (2026-07-20 C1)
+- **테스트 DB를 세션 두 개가 공유하면 서로를 파괴한다** (2026-07-20 C1, 해결됨)
   → 증상: 전체 스위트가 **실행할 때마다 다른 테스트**가 실패/에러. 개별 파일 단독 실행은 전부 통과
-  → 실제 사슬: `db_session` teardown의 `DELETE FROM users`가 FK 위반으로 중단 → `dweb_test`에 데이터 잔류 → 다음 실행에서 회차에 이미 이미지가 있는 상태가 되어 길이-가드 조건부 UPDATE가 409 → 응답에 `image_keys`가 없어 `KeyError`. **원래 원인과 무관한 파일에서 터진다**
-  → 대응 순서: (1) 개별 파일 단독 실행으로 "오염이냐 코드냐" 먼저 가른다 (2) 오염이면 코드를 고치지 말고 **테스트 DB 스키마를 초기화**(`DROP SCHEMA public CASCADE; CREATE SCHEMA public;` - 실행 전 DB명이 `dweb_test`인지 assert할 것) (3) 초기화 후 **연속 여러 번** 돌려 재발 여부 확인
-  → 교훈: 실패가 매번 다르면 그 실패 지점을 디버깅하지 말 것. 상태 오염을 먼저 의심한다. 이번 건은 **최초 트리거를 끝내 특정하지 못했다** - 그럴 땐 "고쳤다"가 아니라 "해소했고 원인 미특정"으로 남길 것
+  → 원인: 워크트리 두 개(`d-web`, `d-web-m2`)에서 **동시에 pytest**를 돌리면 고정 DB `dweb_test` 하나를 공유한다. `db_session` teardown이 매 테스트마다 전 테이블을 DELETE하므로 **상대가 방금 만든 행이 상대 테스트 도중 사라진다**
+  → 파생 증상: `DELETE FROM users`가 FK 위반(내가 works를 지운 직후 상대가 works를 INSERT) → teardown 중단 → 데이터 잔류 → 다음 실행에서 회차에 이미 이미지가 있어 길이-가드 UPDATE가 409 → `KeyError: 'image_keys'`. **원래 원인과 무관한 파일에서 터진다**
+  → 해결(도입됨): conftest `test_engine`이 **PID 전용 DB**(`dweb_test_<pid>`)를 CREATE/DROP한다. `CREATE/DROP DATABASE`는 트랜잭션 안에서 불가라 `isolation_level="AUTOCOMMIT"` 연결로 실행. 검증 = pytest 2개 동시 실행 → 양쪽 337 passed
+  → ⚠️ 정리 시 **다른 PID의 DB는 건드리지 말 것** - 동시 실행 중인 세션 것일 수 있다. 비정상 종료 잔재만 수동 정리
+  → 진단 교훈: 실패가 매번 다르면 그 실패 지점을 디버깅하지 말고 **상태 오염을 먼저 의심**한다. 그리고 "지금 관측되지 않음"을 "없음"으로 단정하지 말 것 - 이번 건은 동시 접속을 몇 번 샘플링해 0으로 나오자 동시성 가설을 기각했는데, 상대 세션이 그 순간 쉬고 있었을 뿐이었다(사용자 제보로 확정)
