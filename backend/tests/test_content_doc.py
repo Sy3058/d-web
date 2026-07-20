@@ -4,6 +4,8 @@ DB 불필요한 순수 함수 검증. API 경유 통합 계약(422 매핑, is_fr
 test_admin_episodes.py의 "PUT content" 섹션이 담당한다.
 """
 
+import copy
+
 import pytest
 
 from src.lib.content_doc import (
@@ -13,30 +15,15 @@ from src.lib.content_doc import (
     derive_is_free,
     empty_doc,
     has_meaningful_content,
+    split_at_paywall,
     validate_content,
 )
 from src.lib.exceptions import EpisodeValidationError
-
-KEY = "works/w/episodes/e/page.webp"
-
-
-def _doc(*nodes: dict) -> dict:
-    return {"type": "doc", "content": list(nodes)}
-
-
-def _para(text: str, marks: list[dict] | None = None) -> dict:
-    node: dict = {"type": "text", "text": text}
-    if marks is not None:
-        node["marks"] = marks
-    return {"type": "paragraph", "content": [node]}
-
-
-def _img(key: str = KEY) -> dict:
-    return {"type": "image", "attrs": {"key": key}}
-
-
-_PAYWALL = {"type": "paywall"}
-
+from tests.factories import CONTENT_KEY as KEY
+from tests.factories import PAYWALL as _PAYWALL
+from tests.factories import doc as _doc
+from tests.factories import img as _img
+from tests.factories import para as _para
 
 # ---------------------------------------------------------------------------
 # validate_content: 구조·화이트리스트
@@ -219,3 +206,68 @@ def test_paywall_at_front_full_paid():
 def test_paywall_with_meaningless_tail_is_free():
     doc = _doc(_para("전부 무료"), _PAYWALL, {"type": "paragraph"}, _para("  "))
     assert derive_is_free(doc) is True
+
+
+# ---------------------------------------------------------------------------
+# split_at_paywall: 독자 응답 절단 (M2 B2)
+# ---------------------------------------------------------------------------
+
+
+def test_split_without_paywall_keeps_every_node():
+    doc = _doc(_para("첫 문단"), _img(), _para("끝 문단"))
+    free, has_paid = split_at_paywall(doc)
+    assert free["content"] == doc["content"]  # 순서·내용 그대로
+    assert has_paid is False
+
+
+def test_split_drops_the_paywall_node_itself():
+    # 경계는 본문이 아니라 메타(has_paid_part)로 나간다 - 노드가 남으면 뷰어가
+    # 잠금 상자를 본문 안에 한 번, 플래그로 또 한 번 그린다.
+    free, has_paid = split_at_paywall(_doc(_para("미리보기"), _PAYWALL, _para("본편")))
+    assert free["content"] == [_para("미리보기")]
+    assert has_paid is True
+
+
+def test_split_at_front_yields_empty_free_part():
+    free, has_paid = split_at_paywall(_doc(_PAYWALL, _para("본편"), _img()))
+    assert free == {"type": "doc", "content": []}
+    assert has_paid is True
+
+
+def test_split_meaningless_tail_is_not_paid_part():
+    # 경계 뒤에 빈 문단만 남은 문서는 "유료 있음"이 아니다.
+    doc = _doc(_para("전부 무료"), _PAYWALL, {"type": "paragraph"}, _para("   "))
+    free, has_paid = split_at_paywall(doc)
+    assert free["content"] == [_para("전부 무료")]
+    assert has_paid is False
+
+
+def test_split_does_not_mutate_input():
+    doc = _doc(_para("미리보기"), _PAYWALL, _para("본편"))
+    before = copy.deepcopy(doc)
+    split_at_paywall(doc)
+    assert doc == before
+
+
+@pytest.mark.parametrize(
+    "doc",
+    [
+        _doc(),
+        _doc(_para("전부 무료")),
+        _doc(_para("미리보기"), _PAYWALL, _para("본편")),
+        _doc(_PAYWALL, _para("본편")),
+        _doc(_para("전부 무료"), _PAYWALL),
+        _doc(_para("전부 무료"), _PAYWALL, _para("   ")),
+        _doc(_para("전부 무료"), _PAYWALL, {"type": "horizontalRule"}),
+        _doc(_para("미리보기"), _PAYWALL, _img()),
+    ],
+)
+def test_split_has_paid_part_agrees_with_derive_is_free(doc):
+    """경계 해석의 단일 출처 감시.
+
+    is_free 컬럼은 derive_is_free가 쓰고, 절단은 split_at_paywall이 한다. 두 함수가
+    경계를 다르게 읽으면 "무료 배지인데 잠금이 뜨는" 회차가 생긴다. 리팩터로 한쪽만
+    바뀌는 순간 여기서 깨진다.
+    """
+    _, has_paid = split_at_paywall(doc)
+    assert has_paid is (not derive_is_free(doc))

@@ -5,6 +5,7 @@
 FK 부모(author)는 conftest의 user 픽스처, 자식(Work/Episode)은 여기서 직접 INSERT.
 """
 
+import uuid
 from datetime import UTC, datetime
 
 from httpx import AsyncClient
@@ -434,3 +435,109 @@ async def test_tags_empty_when_no_tags(
     resp = await async_client.get(TAGS_URL)
     assert resp.status_code == 200
     assert resp.json() == []
+
+
+# ---------------------------------------------------------------------------
+# 회차 목록 (M2 B1)
+# ---------------------------------------------------------------------------
+
+
+def _episodes_url(work_id) -> str:
+    return f"{WORKS_URL}/{work_id}/episodes"
+
+
+async def test_episodes_excludes_unpublished_episode(
+    async_client: AsyncClient, db_session: AsyncSession, user: User
+):
+    work = await _make_work(db_session, user)
+    published = await _make_episode(db_session, work, episode_no=1)
+    await _make_episode(db_session, work, episode_no=2, is_published=False)
+
+    resp = await async_client.get(_episodes_url(work.id))
+    assert resp.status_code == 200
+    assert [ep["id"] for ep in resp.json()] == [str(published.id)]
+
+
+async def test_episodes_ordered_by_episode_no(
+    async_client: AsyncClient, db_session: AsyncSession, user: User
+):
+    work = await _make_work(db_session, user)
+    # 생성 순서를 역으로 - 정렬이 삽입 순서가 아니라 episode_no를 따르는지 본다.
+    await _make_episode(db_session, work, episode_no=3, title="3화")
+    await _make_episode(db_session, work, episode_no=1, title="1화")
+    await _make_episode(db_session, work, episode_no=2, title="2화")
+
+    resp = await async_client.get(_episodes_url(work.id))
+    assert [ep["episode_no"] for ep in resp.json()] == [1, 2, 3]
+
+
+async def test_episodes_match_detail_payload(
+    async_client: AsyncClient, db_session: AsyncSession, user: User
+):
+    """B1과 A2가 같은 배열을 낸다(드리프트 감시).
+
+    두 엔드포인트가 같은 서비스 함수를 쓰므로 구조적으로 어긋날 수 없지만, 누가
+    B1에 별도 쿼리를 넣는 순간 여기서 깨진다.
+    """
+    work = await _make_work(db_session, user)
+    await _make_episode(db_session, work, episode_no=1)
+    await _make_episode(db_session, work, episode_no=2, is_free=True)
+
+    listed = await async_client.get(_episodes_url(work.id))
+    detail = await async_client.get(f"{WORKS_URL}/{work.id}")
+    assert listed.json() == detail.json()["episodes"]
+
+
+async def test_episodes_empty_list_when_none_published(
+    async_client: AsyncClient, db_session: AsyncSession, user: User
+):
+    # 커밍순(공개 회차 0개) 작품은 빈 배열 200 - 404가 아니다.
+    work = await _make_work(db_session, user)
+    await _make_episode(db_session, work, is_published=False)
+
+    resp = await async_client.get(_episodes_url(work.id))
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+async def test_episodes_404_when_work_unpublished(
+    async_client: AsyncClient, db_session: AsyncSession, user: User
+):
+    work = await _make_work(db_session, user, is_published=False)
+    await _make_episode(db_session, work)
+
+    resp = await async_client.get(_episodes_url(work.id))
+    assert resp.status_code == 404
+
+
+async def test_episodes_404_when_work_soft_deleted(
+    async_client: AsyncClient, db_session: AsyncSession, user: User
+):
+    work = await _make_work(db_session, user)
+    await _make_episode(db_session, work)
+    work.deleted_at = datetime.now(UTC)
+    db_session.add(work)
+    await db_session.commit()
+
+    resp = await async_client.get(_episodes_url(work.id))
+    assert resp.status_code == 404
+
+
+async def test_episodes_404_when_work_nonexistent(async_client: AsyncClient):
+    resp = await async_client.get(_episodes_url(uuid.uuid4()))
+    assert resp.status_code == 404
+
+
+async def test_404_is_not_cached(async_client: AsyncClient, db_session: AsyncSession, user: User):
+    """숨긴 작품의 404가 캐시되면 공개 토글을 켜도 독자가 계속 404를 본다.
+
+    404는 명세상 기본 캐시 가능 상태 코드라 명시적 헤더가 없으면 heuristic 캐싱
+    대상이 된다. 상세·회차목록이 같은 _NOT_FOUND를 쓴다(목록 GET /works는 결과가
+    없어도 빈 배열 200이라 404 경로가 없다).
+    """
+    work = await _make_work(db_session, user, is_published=False)
+
+    for url in (f"{WORKS_URL}/{work.id}", _episodes_url(work.id)):
+        resp = await async_client.get(url)
+        assert resp.status_code == 404
+        assert resp.headers.get("cache-control") == "no-store"

@@ -16,6 +16,7 @@ from src.routers import (
     admin_episodes,
     admin_works,
     auth,
+    episodes,
     oauth,
     progress,
     tags,
@@ -76,6 +77,7 @@ app.include_router(admin_works.router)
 app.include_router(admin_episodes.router)
 app.include_router(works.router)
 app.include_router(tags.router)
+app.include_router(episodes.router)
 app.include_router(progress.router)
 
 

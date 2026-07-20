@@ -181,3 +181,29 @@ def derive_is_free(doc: dict[str, Any]) -> bool:
         if isinstance(node, dict) and node.get("type") == "paywall":
             return not any(_is_meaningful(rest) for rest in top[index + 1 :])
     return True
+
+
+def split_at_paywall(doc: dict[str, Any]) -> tuple[dict[str, Any], bool]:
+    """무료 구간 문서와 유료 구간 존재 여부를 반환한다 (M2 B2 독자 응답용).
+
+    반환: (경계 이전 노드만 담은 doc, has_paid_part)
+
+    ⚠️ episodes.is_free를 보지 않고 **항상** 같은 경로로 자른다. is_free는 목록 SQL용
+    파생 컬럼(models/work.py)이고 진실은 이 문서다 - "is_free면 절단 생략"으로 분기하면
+    컬럼이 문서와 어긋나는 순간(쓰기 경로 버그·과거 데이터·수동 UPDATE) 유료 구간이
+    통째로 나간다. 분기가 없으면 컬럼이 틀려도 피해는 목록 배지 오표시에 그친다.
+    파생 컬럼은 필터·표시용이고 보안 결정은 원본을 본다.
+
+    has_paid_part는 derive_is_free와 **같은 기준**(_is_meaningful)이어야 한다. 경계 뒤에
+    빈 문단만 남은 문서를 "유료 있음"으로 잡으면 무료 회차에 잠금 UI가 뜬다.
+    """
+    top = doc.get("content") or []
+    for index, node in enumerate(top):
+        if isinstance(node, dict) and node.get("type") == "paywall":
+            # 경계 노드 자체는 응답에 넣지 않는다(top[:index+1]이 아닌 이유) - 잠금 표시는
+            # has_paid_part가 담당하므로, 노드까지 실리면 뷰어가 본문 안에 한 번·플래그로
+            # 또 한 번 그린다.
+            free_nodes = top[:index]
+            has_paid_part = any(_is_meaningful(rest) for rest in top[index + 1 :])
+            return {"type": "doc", "content": free_nodes}, has_paid_part
+    return {"type": "doc", "content": list(top)}, False
