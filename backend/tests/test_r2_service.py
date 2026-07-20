@@ -5,6 +5,7 @@ CI엔 R2 자격증명이 없다). 실버킷 연결은 2026-07-10 스모크(put/g
 """
 
 import uuid
+from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
 import pytest
@@ -60,6 +61,62 @@ async def test_upload_bytes_custom_content_type(monkeypatch):
     await r2_service.upload_bytes("k", b"d", content_type="image/png")
 
     assert fake_client.put_object.call_args.kwargs["ContentType"] == "image/png"
+
+
+async def test_upload_bytes_explicit_bucket_overrides_default(monkeypatch):
+    # 표지·썸네일 등 공개 자산은 호출자가 bucket=을 명시해 원고 버킷과 분리한다(M2 D1).
+    fake_client = MagicMock()
+    monkeypatch.setattr(r2_service, "_get_client", lambda: fake_client)
+    monkeypatch.setattr(r2_service.settings, "r2_bucket", "dweb")
+
+    await r2_service.upload_bytes("works/w/cover.webp", b"payload", bucket="dweb-cover")
+
+    assert fake_client.put_object.call_args.kwargs["Bucket"] == "dweb-cover"
+
+
+async def test_upload_bytes_bucket_omitted_keeps_default(monkeypatch):
+    # bucket 생략 시 원고 버킷(r2_bucket) 유지 - D1 도입이 기존 원고 업로드 경로를
+    # 회귀시키지 않아야 한다.
+    fake_client = MagicMock()
+    monkeypatch.setattr(r2_service, "_get_client", lambda: fake_client)
+    monkeypatch.setattr(r2_service.settings, "r2_bucket", "dweb")
+
+    await r2_service.upload_bytes("works/w/episodes/e/p.webp", b"payload")
+
+    assert fake_client.put_object.call_args.kwargs["Bucket"] == "dweb"
+
+
+def test_public_url_none_when_key_missing(monkeypatch):
+    monkeypatch.setattr(r2_service.settings, "public_asset_base_url", "https://cover.example.com")
+    assert r2_service.public_url(None) is None
+
+
+def test_public_url_none_when_base_unset(monkeypatch):
+    monkeypatch.setattr(r2_service.settings, "public_asset_base_url", "")
+    assert r2_service.public_url("works/x/cover.webp") is None
+
+
+def test_public_url_trailing_slash_normalized(monkeypatch):
+    monkeypatch.setattr(r2_service.settings, "public_asset_base_url", "https://cover.example.com/")
+    assert (
+        r2_service.public_url("works/x/cover.webp")
+        == "https://cover.example.com/works/x/cover.webp"
+    )
+
+
+def test_public_url_without_version_has_no_query(monkeypatch):
+    monkeypatch.setattr(r2_service.settings, "public_asset_base_url", "https://cover.example.com")
+    assert (
+        r2_service.public_url("works/x/cover.webp")
+        == "https://cover.example.com/works/x/cover.webp"
+    )
+
+
+def test_public_url_with_version_appends_cache_buster(monkeypatch):
+    monkeypatch.setattr(r2_service.settings, "public_asset_base_url", "https://cover.example.com")
+    version = datetime(2026, 7, 20, 12, 0, 0, tzinfo=UTC)
+    url = r2_service.public_url("works/x/cover.webp", version=version)
+    assert url == f"https://cover.example.com/works/x/cover.webp?v={int(version.timestamp())}"
 
 
 def test_get_client_unconfigured_raises(monkeypatch):

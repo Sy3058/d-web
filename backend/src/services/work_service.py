@@ -14,6 +14,7 @@ from sqlalchemy.orm import selectinload
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from src.config import settings
 from src.models.work import Tag, Work
 from src.schemas.work import WorkCreate, WorkUpdate
 from src.services import r2_service
@@ -147,9 +148,12 @@ async def set_cover_image(work: Work, webp: bytes, session: AsyncSession) -> Wor
 
     표지는 작품당 1장 고정 키(works/{id}/cover.webp) - 재업로드는 같은 키를
     덮어쓰므로 미참조 파일(orphan)이 생기지 않고 DB 값도 사실상 불변이다. C1의 "키 문자열
-    직접 수용"(WorkCreate/Update.cover_image)은 하위호환으로 유지된다.
+    직접 수용"(WorkCreate/Update.cover_image)은 하위호환으로 유지된다. 업로드 대상은
+    공개 버킷(M2 D1) - 원고(dweb)와 분리해 표지는 서명 없이 상시 노출한다.
     """
-    key = await r2_service.upload_bytes(r2_service.cover_key(work.id), webp)
+    key = await r2_service.upload_bytes(
+        r2_service.cover_key(work.id), webp, bucket=settings.r2_public_bucket
+    )
     work.cover_image = key
     session.add(work)
     await session.commit()

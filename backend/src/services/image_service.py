@@ -27,6 +27,7 @@ MAX_IMAGES_PER_EPISODE = 50
 
 # ── 변환 규격 ──────────────────────────────────────────────────────────────
 TARGET_WIDTH = 800  # 가로 고정, 세로는 비율 유지(ADM-03)
+THUMB_WIDTH = 400  # 에피소드 썸네일 공개 축소본 폭(M2 D2) - 목록 카드용이라 원고보다 작게
 WEBP_QUALITY = 80  # 용량/화질 균형 기본값(실측 후 조정 여지)
 # WebP 포맷 자체의 변 길이 한계(스펙 14bit = 16383px). 800px로 줄인 뒤에도
 # 세로가 이걸 넘는 초장축 원고는 인코딩 자체가 불가능하므로 분할 업로드를 요구한다.
@@ -37,30 +38,30 @@ _ORIENTATION_TAG = 0x0112
 _AXIS_SWAP_ORIENTATIONS = (5, 6, 7, 8)
 
 
-def _maybe_draft_jpeg(img: Image.Image) -> None:
+def _maybe_draft_jpeg(img: Image.Image, target_width: int) -> None:
     """대형 JPEG을 DCT 도메인 축소 디코드로 열도록 설정한다(실측 2.8배 가속).
 
-    draft는 JPEG 전용이고 그 외 포맷엔 no-op. 최종 목표(800px)의 2배 여유를
+    draft는 JPEG 전용이고 그 외 포맷엔 no-op. 최종 목표(target_width)의 2배 여유를
     요청하는 것은 thumbnail()과 같은 품질 관행 - 중간 이미지에서 LANCZOS로
     최종 축소하므로 화질 손실이 없다. EXIF 회전(5~8)은 transpose 후 축이
     바뀌므로 '유효 가로'를 회전 후 기준으로 계산한다(안 하면 회전 원고가
-    목표보다 작게 디코드돼 결과 폭이 800 미만으로 어긋난다 - 리뷰 검증).
+    목표보다 작게 디코드돼 결과 폭이 목표 미만으로 어긋난다 - 리뷰 검증).
     """
     if img.format != "JPEG":
         return
     orientation = img.getexif().get(_ORIENTATION_TAG, 1)
     swapped = orientation in _AXIS_SWAP_ORIENTATIONS
     effective_width = img.height if swapped else img.width
-    if effective_width <= TARGET_WIDTH * 2:
+    if effective_width <= target_width * 2:
         return  # 여유 포함 목표 이하 - 축소 디코드 이득 없음
-    ratio = (TARGET_WIDTH * 2) / effective_width
+    ratio = (target_width * 2) / effective_width
     img.draft(
         None,  # 모드는 유지(크기만) - CMYK JPEG 등은 아래 정규화 단계가 처리
         (max(1, round(img.width * ratio)), max(1, round(img.height * ratio))),
     )
 
 
-def _convert_sync(data: bytes) -> bytes:
+def _convert_sync(data: bytes, target_width: int) -> bytes:
     """검증 + 변환 본체(동기). 반드시 to_thread 경유로 호출할 것(convert_to_webp)."""
     if len(data) > MAX_IMAGE_BYTES:
         raise ImageValidationError(
@@ -76,7 +77,7 @@ def _convert_sync(data: bytes) -> bytes:
         # 헤더의 크기 선언만으로 본 디코드 전에 폭탄 거부(메모리 할당 전).
         if img.width * img.height > MAX_IMAGE_PIXELS:
             raise ImageValidationError("이미지 해상도가 허용 범위를 초과합니다")
-        _maybe_draft_jpeg(img)
+        _maybe_draft_jpeg(img, target_width)
         # 실제 픽셀 디코드 - 비이미지/손상 파일은 여기서 걸린다.
         img.load()
     except ImageValidationError:
@@ -107,13 +108,13 @@ def _convert_sync(data: bytes) -> bytes:
     elif img.mode not in ("RGB", "RGBA"):
         img = img.convert("RGB")
 
-    if img.width > TARGET_WIDTH:
-        ratio = TARGET_WIDTH / img.width
+    if img.width > target_width:
+        ratio = target_width / img.width
         img = img.resize(
-            (TARGET_WIDTH, max(1, round(img.height * ratio))),
+            (target_width, max(1, round(img.height * ratio))),
             Image.Resampling.LANCZOS,
         )
-    # 원본이 800px 이하면 업스케일하지 않는다 - 없는 정보를 만들어내지 못해
+    # 원본이 목표 폭 이하면 업스케일하지 않는다 - 없는 정보를 만들어내지 못해
     # 화질은 그대로인데 용량만 커진다(구현 결정, 2026-07-10).
 
     if img.height > WEBP_MAX_DIMENSION:
@@ -126,10 +127,12 @@ def _convert_sync(data: bytes) -> bytes:
     return buf.getvalue()
 
 
-async def convert_to_webp(data: bytes) -> bytes:
-    """원본 이미지 바이트 → 가로 최대 800px WebP 바이트.
+async def convert_to_webp(data: bytes, *, target_width: int = TARGET_WIDTH) -> bytes:
+    """원본 이미지 바이트 → 가로 최대 target_width WebP 바이트(기본 800px, 원고).
 
+    target_width=THUMB_WIDTH(400)로 호출하면 회차 썸네일 공개 축소본이 나온다(M2 D2) -
+    검증 상한(MAX_IMAGE_BYTES 등)과 정규화 파이프라인은 폭과 무관하게 동일 적용.
     검증 실패는 ImageValidationError(클라 귀책). CPU 바운드라 to_thread로
     오프로드 - async def에서 _convert_sync를 직접 호출하지 말 것(MISTAKES 결정 2).
     """
-    return await to_thread.run_sync(_convert_sync, data)
+    return await to_thread.run_sync(_convert_sync, data, target_width)

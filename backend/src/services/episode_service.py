@@ -20,6 +20,7 @@ from sqlalchemy.sql import func
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from src.config import settings
 from src.lib.content_doc import (
     derive_is_free,
     empty_doc,
@@ -30,7 +31,7 @@ from src.lib.exceptions import EpisodeConflictError, EpisodeValidationError
 from src.models.work import Episode, Work
 from src.schemas.work import EpisodeCreate, EpisodeUpdate
 from src.services import r2_service
-from src.services.image_service import MAX_IMAGES_PER_EPISODE
+from src.services.image_service import MAX_IMAGES_PER_EPISODE, THUMB_WIDTH, convert_to_webp
 
 _DUPLICATE_EPISODE_NO = "이미 존재하는 회차 번호입니다"
 _STALE_EPISODE = "회차가 다른 요청으로 먼저 변경되었습니다 - 새로고침 후 다시 시도하세요"
@@ -219,6 +220,23 @@ async def update_episode(episode: Episode, data: EpisodeUpdate, session: AsyncSe
             # 몫이다. "내리면서 재예약"은 별도 요청으로.
             changes["published_at"] = None
 
+    # 썸네일 공개 축소본(M2 D2) - 검증(raise 가능 구간)이 전부 끝난 뒤, DB 커밋 전에
+    # 실행한다. old_thumbnail은 아래 두 커밋 분기 각각의 성공 직후 삭제 판단에 재사용.
+    old_thumbnail = episode.thumbnail
+    new_thumbnail = changes.get("thumbnail", old_thumbnail)
+    thumbnail_changed = new_thumbnail != old_thumbnail
+    should_delete_public_thumb = (
+        thumbnail_changed and new_thumbnail is None and old_thumbnail is not None
+    )
+    if thumbnail_changed and new_thumbnail is not None:
+        page_bytes = await r2_service.download_bytes(new_thumbnail)
+        thumb_webp = await convert_to_webp(page_bytes, target_width=THUMB_WIDTH)
+        await r2_service.upload_bytes(
+            r2_service.episode_thumb_key(episode.work_id, episode.id),
+            thumb_webp,
+            bucket=settings.r2_public_bucket,
+        )
+
     if new_keys is not None or "content" in changes:
         if new_keys is not None:
             changes["image_keys"] = new_keys
@@ -241,6 +259,12 @@ async def update_episode(episode: Episode, data: EpisodeUpdate, session: AsyncSe
         await session.commit()
         # bulk UPDATE(synchronize_session=False)는 인메모리 객체를 안 맞춰주므로 재로드.
         await session.refresh(episode)
+        if should_delete_public_thumb:
+            # DB 커밋 성공 **후**에만 삭제(실패해도 무해한 미참조 파일로 남게).
+            await r2_service.delete_object(
+                r2_service.episode_thumb_key(episode.work_id, episode.id),
+                bucket=settings.r2_public_bucket,
+            )
         return episode
 
     for field, value in changes.items():
@@ -251,4 +275,9 @@ async def update_episode(episode: Episode, data: EpisodeUpdate, session: AsyncSe
     except IntegrityError as exc:
         await session.rollback()
         raise EpisodeConflictError(_DUPLICATE_EPISODE_NO) from exc
+    if should_delete_public_thumb:
+        await r2_service.delete_object(
+            r2_service.episode_thumb_key(episode.work_id, episode.id),
+            bucket=settings.r2_public_bucket,
+        )
     return episode

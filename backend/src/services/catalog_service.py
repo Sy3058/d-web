@@ -6,13 +6,13 @@ router는 HTTP 매핑만, 여기서 필터·집계·DTO 조립까지 담당한�
 """
 
 import uuid
+from datetime import datetime
 
 from sqlalchemy import func
 from sqlalchemy.orm import defer, selectinload
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from src.config import settings
 from src.lib.pagination import compute_offset
 from src.models.work import Episode, Tag, Work, WorkTag
 from src.schemas.catalog import (
@@ -22,6 +22,7 @@ from src.schemas.catalog import (
     WorkListItem,
     WorkListResponse,
 )
+from src.services import r2_service
 
 
 def public_work_filters() -> list:
@@ -32,17 +33,6 @@ def public_work_filters() -> list:
     봐야 하므로) 그대로 복사하면 숨긴 작품(is_published=false)의 회차가 새어 나간다.
     """
     return [Work.is_published.is_(True), Work.deleted_at.is_(None)]
-
-
-def _public_url(key: str | None) -> str | None:
-    """R2 키를 공개 버킷 URL로 조립. 키가 없으면 None(표지 미등록).
-
-    base의 트레일링 슬래시는 정규화한다 - .env에 https://host/ 로 넣는 실수가
-    이중 슬래시 URL(일부 CDN에서 404)로 조용히 번지지 않게.
-    """
-    if not key:
-        return None
-    return f"{settings.public_asset_base_url.rstrip('/')}/{key}"
 
 
 def _public_episode_count_subquery():
@@ -60,20 +50,34 @@ def _to_list_item(work: Work, episode_count: int) -> WorkListItem:
     return WorkListItem(
         id=work.id,
         title=work.title,
-        cover_image_url=_public_url(work.cover_image),
+        cover_image_url=r2_service.public_url(work.cover_image, version=work.updated_at),
         status=work.status,
         tags=list(work.tags),
         episode_count=episode_count,
     )
 
 
-def _to_episode_summary(ep: Episode, base_price: int) -> EpisodeSummary:
+def _to_episode_summary(
+    ep: Episode,
+    base_price: int,
+    work_cover_image: str | None,
+    work_updated_at: datetime,
+) -> EpisodeSummary:
+    if ep.thumbnail is not None:
+        thumbnail_url = r2_service.public_url(
+            r2_service.episode_thumb_key(ep.work_id, ep.id), version=ep.updated_at
+        )
+    else:
+        # 회차 썸네일 미선택 시 작품 표지로 대체(fallback). 원고 첫 페이지로 대체하면
+        # 유료·미공개 페이지가 공개 URL로 새는 경로가 되므로 금지(M2 D2 결정) - 둘 다
+        # 없으면 public_url이 None을 반환해 FE가 placeholder로 처리한다.
+        thumbnail_url = r2_service.public_url(work_cover_image, version=work_updated_at)
     return EpisodeSummary(
         id=ep.id,
         episode_no=ep.episode_no,
         title=ep.title,
         subtitle=ep.subtitle,
-        thumbnail_url=None,  # D2(공개 축소본) 이전 - schemas/catalog.py 모듈 docstring 참조
+        thumbnail_url=thumbnail_url,
         is_free=ep.is_free,
         is_locked=not ep.is_free,
         is_purchased=False,  # M2는 결제 없음(M3에서 실제 구매 여부로 대체)
@@ -166,11 +170,14 @@ async def get_work_detail(work_id: uuid.UUID, session: AsyncSession) -> WorkDeta
         id=work.id,
         title=work.title,
         synopsis=work.synopsis,
-        cover_image_url=_public_url(work.cover_image),
+        cover_image_url=r2_service.public_url(work.cover_image, version=work.updated_at),
         episode_base_price=work.episode_base_price,
         status=work.status,
         tags=list(work.tags),
-        episodes=[_to_episode_summary(ep, work.episode_base_price) for ep in episodes],
+        episodes=[
+            _to_episode_summary(ep, work.episode_base_price, work.cover_image, work.updated_at)
+            for ep in episodes
+        ],
     )
 
 
