@@ -42,7 +42,7 @@ export function WorkList({ works }: WorkListProps) {
       )}
       <ul className="flex flex-col divide-y divide-gray-100">
         {works.map((work) => (
-          <li key={work.id} className="flex items-center gap-2 pr-2 hover:bg-gray-50">
+          <li key={work.id} className="flex items-center gap-2 py-2 pr-2 hover:bg-gray-50">
             {/* 카드 본문만 링크로 감싸고 메뉴는 그 바깥 형제로 둔다 - li 자체를 role="button"으로
                 만들면 그 안의 메뉴 버튼이 중첩 인터랙티브 요소가 돼 키보드·스크린리더가 깨진다. */}
             <Link
@@ -53,12 +53,19 @@ export function WorkList({ works }: WorkListProps) {
                 work.is_published ? '' : ' opacity-60'
               }`}
             >
-              {/* cover_image는 URL이 아니라 R2 키(works/{id}/cover.webp)라 <img>에 바로 못 박는다.
-                  표지 서빙 경로는 M2에서 만든다(2026-07-15 결정: 표지 전용 공개 버킷 + 커스텀
-                  도메인 - DECISIONS "표지 서빙"). 그때까지는 placeholder. */}
-              <div className="flex aspect-[3/4] w-24 shrink-0 items-center justify-center rounded border border-gray-200 bg-gray-100 text-[11px] text-gray-400">
-                표지
-              </div>
+              {/* cover_url = 공개 버킷 URL(M2 D1) - 표지 미등록이거나 도메인 미연결(base
+                  미설정) 시 백엔드가 null을 내려 placeholder로 대체한다. */}
+              {work.cover_url ? (
+                <img
+                  src={work.cover_url}
+                  alt=""
+                  className="aspect-[3/4] w-24 shrink-0 rounded border border-gray-200 object-cover"
+                />
+              ) : (
+                <div className="flex aspect-[3/4] w-24 shrink-0 items-center justify-center rounded border border-gray-200 bg-gray-100 text-[11px] text-gray-400">
+                  표지
+                </div>
+              )}
 
               <div className="flex min-w-0 flex-1 flex-col gap-1">
                 <span className="truncate font-medium">{work.title}</span>

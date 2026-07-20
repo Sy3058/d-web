@@ -20,6 +20,7 @@ function makeEpisode(id: string, imageKeys: string[] = []): Episode {
     title: '1화',
     subtitle: null,
     thumbnail: null,
+    thumbnail_url: null,
     price: null,
     is_free: false,
     content: { type: 'doc', content: [] },

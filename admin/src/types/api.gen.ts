@@ -514,6 +514,8 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+            /** Thumbnail Url */
+            readonly thumbnail_url: string | null;
         };
         /** AdminLoginResponse */
         AdminLoginResponse: {
@@ -886,6 +888,8 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+            /** Cover Url */
+            readonly cover_url: string | null;
         };
         /**
          * WorkStatus
