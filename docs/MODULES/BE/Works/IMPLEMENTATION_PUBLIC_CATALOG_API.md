@@ -40,8 +40,8 @@
 ### 공개 DTO 완전 분리 (`schemas/catalog.py`)
 `AdminEpisodeRead`(image_keys·content 노출) 재사용 금지 - 독자 응답은 필드 하나까지 별도 정의. `content`·`image_keys`·회차 `price`·`bundle_discount_rate`(M3 미구현 할인율, Opus 리뷰 Major로 제거)는 **필드 자체가 없다**. 테스트는 필드 부재뿐 아니라 **응답 텍스트에서 비밀 문자열(원고 키·본문) 검색**으로 유출을 이중 검증.
 
-### 썸네일 URL = 이 단계에선 항상 null
-`episodes.thumbnail`은 현재 dweb(비공개 원고 버킷) 페이지 키라, 공개 URL 조립 시 원고 키 문자열이 독자 JSON에 노출된다(계획 검증에서 Major로 잡음). D2(공개 축소본 `dweb-cover/.../thumb.webp`) 이후에 조립을 얹는다. 표지는 전용 파일이라 URL 조립하되 D1(버킷 전환) 전까지 404 placeholder(문서화된 단계).
+### 썸네일 URL (D1/D2 완료, 2026-07-20)
+`episodes.thumbnail`은 dweb(비공개 원고 버킷) 페이지 키라, 그 키를 그대로 공개 URL로 조립하면 원고 키 문자열이 독자 JSON에 노출된다(계획 검증에서 Major로 잡음) - 이 시점엔 그래서 항상 `null`이었다. D2가 회차 저장 시점에 파생시킨 공개 축소본(`dweb-cover/.../thumb.webp`)의 결정적 키로 조립하도록 배선 완료. 표지도 D1의 공개 버킷 전환으로 실제 URL이 뜬다(base 미설정 시에만 `null`). 상세: `docs/MODULES/BE/Works/IMPLEMENTATION_PUBLIC_BUCKET.md`.
 
 ### `episode_count` = 공개 회차만 세는 별도 상관 서브쿼리
 모델의 `Work.episode_count`(column_property)는 **전체** 회차 카운트라 값이 다를 뿐 아니라 **미공개 회차 수량이 노출**된다("총 7화"가 초안 5개의 존재를 알림). 공개용은 `is_published` 필터 서브쿼리로 별도 계산하고, 안 쓰는 column_property는 `defer(Work.episode_count)`로 행마다 계산되는 낭비를 차단(/code-review 반영).
