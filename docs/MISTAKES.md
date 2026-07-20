@@ -213,10 +213,13 @@
   → 출력이 늦으면 `flush`용 echo를 난사하는 대신, 결과를 파일로 redirect(`> /tmp/x.txt 2>&1`)하고 Read로 한 번에 읽기
   → 여러 검증을 한 번에: sentinel(`echo START ... echo END`)로 감싸 한 블록으로 확인
 
-- **Bash 도구의 cwd는 호출 간 유지된다 - 상대경로로 "파일 없음"이 뜨면 삭제를 의심하기 전에 cwd부터 의심할 것** (M2 A 후속, 2026-07-19)
-  → `cd backend && ...`를 한 번 돌리면 이후 호출도 `backend/`에서 시작한다. 리포 루트 기준 상대경로(`docs/...`, `admin/...`)가 `No such file or directory`로 실패하는데, 이게 **"파일이 없다"와 구별이 안 된다**
-  → 실제 사고: `docs/milestones/M2_foundation.md`가 없다고 3번 연속 오판. 심지어 `cd <root> && grep` 조합조차 다음 호출엔 안 남아 또 실패
-  → 파일 확인·수정은 **항상 절대경로**로. 특히 "없음"을 근거로 무언가를 만들거나 지우기 직전엔 절대경로로 재확인(위 "빈 결과를 사실로 오판" 항목과 같은 부류)
+- **Bash 도구의 cwd는 호출 간 유지된다 - 상대경로가 빗나가면 삭제·부재를 의심하기 전에 cwd부터 의심할 것** (M2 A 후속 2026-07-19, M2 D 사고 추가 2026-07-21)
+  → 호출마다 새 셸이 아니라 **세션 내내 유지되는 하나의 지속 셸**이다. `cd backend && ...`를 한 번 돌리면 되돌아 나오는 `cd`를 넣지 않는 한 **완전히 별개의 다음 호출도** `backend/`에서 시작한다
+  → 빗나가는 방식이 두 가지고 **둘 다 조용하다**: (a) `No such file or directory` - "파일이 없다"와 구별이 안 됨, (b) 이중 경로(`backend/backend/...`)로 **에러 없이 빈 출력** - "차이 없음"으로 오판
+  → 실제 사고 1(M2 A): `docs/milestones/M2_foundation.md`가 없다고 3번 연속 오판. `cd <root> && grep` 조합조차 다음 호출엔 안 남아 또 실패
+  → 실제 사고 2(M2 D): `git diff <A> <B> -- backend/services/catalog_service.py`를 `backend/` 안에서 실행해 빈 결과 → **"겹치는 파일 없음"으로 오판**(브랜치 base 동기화 사고로 이어질 뻔). 별개로 `cd admin`에서 안 나온 채 `git add compose.yml`이 `pathspec did not match`로 실패
+  → 해법: **항상 절대경로**, 또는 서브디렉터리 명령은 `(cd sub && cmd)` 서브셸로 격리해 cwd를 안 남긴다. 상대경로 명령 전엔 `pwd` 확인(시스템 프롬프트 자체가 "cd 대신 절대경로"를 지침으로 명시)
+  → 특히 "없음"·"차이 없음"을 근거로 무언가를 만들거나 지우기 직전엔 절대경로로 재확인(위 "빈 결과를 사실로 오판" 항목과 같은 부류)
 
 - **ruff는 CI와 같은 범위로 돌릴 것 - `.` 전체는 CI가 의도적으로 뺀 파일까지 잡는다** (M2 A 후속, 2026-07-19)
   → CI 게이트는 `ruff check src/` + `ruff format --check src/ tests/`다(`.github/workflows`, "migrations/는 alembic 자동생성 + DB 적용 + forward-only라 의도적으로 제외" 주석 명시)
