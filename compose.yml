@@ -1,3 +1,10 @@
+name: d-web
+# 프로젝트명을 고정한다 - 없으면 디렉터리명이 프로젝트명이 돼서, git worktree로 분리된
+# 두 디렉터리(d-web, d-web-m2)가 docker compose up을 각자 돌릴 때 서로 다른 프로젝트로
+# 인식돼 별도의 빈 볼륨 컨테이너가 생긴다(2026-07-20 실제 사고 - d-web-m2-postgres-1이
+# 호스트 포트 5432를 가로채 진짜 dev 데이터가 안 보이게 됨). d-web으로 고정해 기존
+# 컨테이너 이름(d-web-postgres-1 등)·볼륨(d-web_postgres_data)과 그대로 일치시킨다.
+
 services:
   postgres:
     image: postgres:16-alpine
