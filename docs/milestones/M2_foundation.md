@@ -2,7 +2,7 @@
 
 | 항목 | 내용 |
 |------|------|
-| 문서 버전 | v0.7 (2026-07-20, 그룹 D 완료 반영: D1(공개 버킷 전환)·D2(썸네일 공개 축소본) 구현·리뷰·실서버 스모크 완료. URL 조립 `r2_service.public_url()` 단일화, R2 side-effect 순서(생성 커밋 전/삭제 커밋 후) 확정) · v0.6 (2026-07-19, 뷰어 이미지 로딩 전략 확정: lazy → **즉시 전량 요청 + `fetchpriority`**(결정 6 신설) - presigned 만료(600초) 구간을 구조적으로 회피. 서명 쿠키가 Cloudflare엔 네이티브로 없다는 공식 문서 확인 결과 반영(M3 이연), presigned가 커스텀 도메인 불가라는 사실 결정 1에 명시) · v0.5 (2026-07-18, M1.5 완전 종료·그룹 D 계획 구체화: 에디터 #78·예약 UI #79 머지 반영, 썸네일 = 원고 키 방식 확정(D2 = BE-only 공개 축소본 파생), D1/D2에 #81 후속 조사 반영(공개 URL 조립 단일화·캐시 버스터·공개 카탈로그 배선·download_bytes), R2 토큰 스코프 리스크 추가) · v0.4 (2026-07-18, 그룹 A 완료 반영: `works.is_published` 신설 확정 + B1/B2에 `public_work_filters()` 사용 지시 추가 - admin 패턴 복사 시 is_published 누락 함정 리뷰 발견) · v0.3 (2026-07-16, M1.5 F3 재설계 #76 반영: 콘텐츠 문서(회차 내 유료 경계) 모델 기준 전면 개정 - 무료 서빙 = content 절단 앞당김, 뷰어 = 문서 렌더러, 진행도 = 블록 인덱스, presign 실물 계약 반영) · v0.2 (2026-07-15, 리뷰 반영: 공개 서빙 게이트에 작품 soft-delete join 명시 + TTL config 키 관계 정리) · v0.1 (2026-07-15, 초안) |
+| 문서 버전 | v0.8 (2026-07-21, 그룹 B 완료 반영: B1(회차 목록)·B2(무료 구간 콘텐츠) 구현·Opus 리뷰 완료. **B2 DoD (c) 문구 정정** - "응답에 원본 R2 키 문자열 부재"는 presigned URL이 구조상 키를 경로에 포함하므로 성립 불가, "유료 구간 키 전무 + image attrs에 key 부재"로 대체. 절단은 `is_free` 컬럼과 무관하게 항상 수행으로 확정) · v0.7 (2026-07-20, 그룹 D 완료 반영: D1(공개 버킷 전환)·D2(썸네일 공개 축소본) 구현·리뷰·실서버 스모크 완료. URL 조립 `r2_service.public_url()` 단일화, R2 side-effect 순서(생성 커밋 전/삭제 커밋 후) 확정) · v0.6 (2026-07-19, 뷰어 이미지 로딩 전략 확정: lazy → **즉시 전량 요청 + `fetchpriority`**(결정 6 신설) - presigned 만료(600초) 구간을 구조적으로 회피. 서명 쿠키가 Cloudflare엔 네이티브로 없다는 공식 문서 확인 결과 반영(M3 이연), presigned가 커스텀 도메인 불가라는 사실 결정 1에 명시) · v0.5 (2026-07-18, M1.5 완전 종료·그룹 D 계획 구체화: 에디터 #78·예약 UI #79 머지 반영, 썸네일 = 원고 키 방식 확정(D2 = BE-only 공개 축소본 파생), D1/D2에 #81 후속 조사 반영(공개 URL 조립 단일화·캐시 버스터·공개 카탈로그 배선·download_bytes), R2 토큰 스코프 리스크 추가) · v0.4 (2026-07-18, 그룹 A 완료 반영: `works.is_published` 신설 확정 + B1/B2에 `public_work_filters()` 사용 지시 추가 - admin 패턴 복사 시 is_published 누락 함정 리뷰 발견) · v0.3 (2026-07-16, M1.5 F3 재설계 #76 반영: 콘텐츠 문서(회차 내 유료 경계) 모델 기준 전면 개정 - 무료 서빙 = content 절단 앞당김, 뷰어 = 문서 렌더러, 진행도 = 블록 인덱스, presign 실물 계약 반영) · v0.2 (2026-07-15, 리뷰 반영: 공개 서빙 게이트에 작품 soft-delete join 명시 + TTL config 키 관계 정리) · v0.1 (2026-07-15, 초안) |
 | 상위 마일스톤 | [M2](./README.md#m2-콘텐츠-무료-구간) |
 | 예상 기간 | 약 2~3주 (표지 공개 버킷 커스텀 도메인 외부 왕복 포함) |
 | 완료 기준 | 비로그인 유저가 작품 목록 → 무료 구간(전체 무료 회차 + 부분 유료 회차의 경계 이전 미리보기) 열람, 유료 경계 도달 시 잠금 UI(M3 전이라 placeholder) 노출 (그룹 H 체크리스트) |
@@ -119,19 +119,22 @@ M2 착수 전 확정. presigned·표지·콘텐츠 모델은 기존 결정(DECIS
 
 > ⚠️ **유료 구간·미공개 원고 유출 방어선**. 계획·코드 Opus xhigh 검증 생략 금지. 절단·presign은 **#76 머지분(`lib/content_doc`·`presign_get_urls`) 재사용**(결정 1), M2는 독자용 절단·치환 층과 공개 엔드포인트만 얹는다.
 
-### B1. 공개 회차 목록 API
+### B1. 공개 회차 목록 API ✅ (2026-07-21 완료 - 브랜치 `be/feat/m2-episode-content`)
 - 선행: A2
 - 산출물: `routers/episodes.py`(공개), `services/episode_read_service.py`
 - `GET /works/{id}/episodes` - 공개(`is_published`) 회차만, `episode_no` 순. **부모 작품 Work join은 `catalog_service.public_work_filters()`**(공개 `is_published` + 미삭제 - A 구현에서 신설된 단일 출처. `deleted_at`만 걸면 숨긴 작품의 회차가 샌다). 항목 = A2의 `EpisodeSummary`와 동일 스키마.
 - DoD: pytest - 미공개 회차 제외, 순서 정확, 부분 유료 회차는 `is_locked=true`, soft-delete 작품의 회차는 404.
+- **구현에서 확정(2026-07-21)**: A2(`GET /works/{id}`)가 이미 같은 `EpisodeSummary` 배열을 embed하고 있어 **B1은 정보상 중복**이다(회차 목록은 페이지네이션도 없음 - 결정 5). 삭제도 검토했으나 **존치 + `catalog_service.get_work_detail()` 재사용(4줄)**로 확정(사용자 결정) - 별도 쿼리를 두면 공개 필터 경로가 둘로 갈라진다. `test_episodes_match_detail_payload`가 두 응답의 동일성을 감시한다. 그룹 E/F 구현 후 실제 소비자가 없으면 삭제 재검토.
 
-### B2. 무료 구간 콘텐츠 API (절단 + presigned 치환)
+### B2. 무료 구간 콘텐츠 API (절단 + presigned 치환) ✅ (2026-07-21 완료 - B1과 같은 브랜치)
 - 선행: B1, #76(`presign_get_urls`·`content_doc` - main 머지 완료)
 - 산출물: `GET /episodes/{id}/content`, `services/episode_read_service.py`에 절단 함수(paywall 최상위 노드에서 문서 분할 - `lib/content_doc` 스키마 전제) + image `key`→presigned URL 치환 함수
 - 동작: 회차가 **작품 공개 노출 가능(Work join `public_work_filters()` = `is_published` + 미삭제) AND 회차 공개**이면 content의 **경계 이전 노드만**(`is_free=true`면 전문) image 키를 presigned URL로 치환해 반환 + `has_paid_part` 메타. 미공개·작품 비공개/soft-delete·없음 → **404**. 응답 헤더 **`Cache-Control: no-store`**(presigned 캐시 금지 - DECISIONS).
-- DoD: pytest(전부 mock) - (a) 전체 무료 회차 = 전문 + 문서 내 노드 순서 보존, (b) 부분 유료 회차 = 경계 이전만 + `has_paid_part=true` + **경계 뒤 노드·텍스트가 응답에 부재**, (c) 응답 JSON 어디에도 **원본 R2 키 문자열 부재**(치환 검증), (d) 미공개 404, (e) soft-delete 작품의 회차 404, (f) no-store 헤더. **비로그인 통과**(인증 불요).
+- DoD: pytest(전부 mock) - (a) 전체 무료 회차 = 전문 + 문서 내 노드 순서 보존, (b) 부분 유료 회차 = 경계 이전만 + `has_paid_part=true` + **경계 뒤 노드·텍스트가 응답에 부재**, (c) **유료 구간 R2 키가 응답에 전무 + image attrs에 `key` 부재**(= `{"src"}`만), (d) 미공개 404, (e) soft-delete 작품의 회차 404, (f) no-store 헤더. **비로그인 통과**(인증 불요).
+  - ⚠️ (c)는 원래 "응답 어디에도 원본 R2 키 문자열 부재"였으나 **성립 불가라 2026-07-21 정정**: 실제 presigned URL은 구조상 키를 경로에 포함한다(`{endpoint}/{bucket}/{key}?X-Amz-...`). 무료 구간 키가 자기 서명 URL 안에 나타나는 건 무해하다(키만으론 서명 없이 접근 불가 + 페이지 파일명이 `uuid4().hex`라 다른 페이지 유추 불가). 지켜야 할 성질은 유료 구간 키 전무와 맨 키 비노출이다.
 - 결정: 로그인 불요(무료 구간은 공개 열람). `viewer_progress` 저장(그룹 C)만 로그인 필요. 절단 위치 = 문서 **최상위** paywall 노드(스키마가 최상위 최대 1개 보장 - `content_doc`). presigned 발급은 절단 **후** 남은 image 노드만(유료 구간 키에 서명하지 않음).
 - ⚠️ 함정: 절단 전 문서를 직렬화 경로에 흘리지 말 것 - **경계 뒤 노드(글 포함)와 image `key` attr이 유료 자산**이다. 유료 구간 유출은 이미지만이 아니라 텍스트도 해당(글 유료 연재 가능 - 콘텐츠 모델 결정).
+- **구현에서 확정(2026-07-21)**: ① **절단은 `episodes.is_free`와 무관하게 항상 수행**한다 - "is_free면 전문 반환" 분기를 두면 파생 컬럼이 문서와 어긋나는 순간 유료 구간이 통째로 나간다(파생 컬럼은 필터·표시용, 보안 결정은 원본. study `derived-column-not-security-gate`). 부수 효과로 paywall 노드 자체도 항상 응답에서 빠진다. ② **순서 고정: 절단 → presign.** 뒤집히면 유료 키에도 서명이 발급되는데 **최종 응답은 멀쩡해 보여** 응답 검사로는 안 잡힌다 - presign mock **호출 인자** 검사가 유일한 탐지 수단. ③ image attrs는 `{"key"}` → `{"src"}` **교체**라 **응답 스키마가 저장 스키마와 갈라진다** - #76 "3곳 동일 스키마" 규칙의 의도된 예외이고 **그룹 F 렌더러는 `src` 기준**으로 짤 것. ④ 404에도 `no-store` 필수(리뷰 Minor - `HTTPException`은 라우터의 Response를 안 쓰고, 404는 명세상 기본 캐시 가능이라 예약 공개 전 404가 캐시되면 공개 후에도 404). 상세: `docs/MODULES/BE/Viewer/IMPLEMENTATION_FREE_CONTENT_API.md`.
 - ⚠️ 함정: **작품 soft-delete는 에피소드를 남긴다**(`work_service.soft_delete_work` - 하드 삭제 금지 A1 결정). episode 행만 검사하면 내려간 작품이 계속 열람된다. ⚠️ **admin 패턴(`episode_service.get_episode`)을 그대로 복사하지 말 것**(2026-07-18 리뷰 발견) - admin은 비공개 작품도 봐야 해서 `deleted_at`만 검사하므로, 독자 경로가 이를 복사하면 **숨긴 작품(`works.is_published=false`)의 공개 회차가 회차 ID 직접 접근으로 샌다**. 독자용 Work join은 `catalog_service.public_work_filters()`를 쓸 것.
 
 ---

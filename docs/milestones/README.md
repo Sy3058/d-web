@@ -164,8 +164,8 @@ M4 (커뮤니티 - 후원 제외)
 ### 백엔드
 - [x] 작품 목록 API (페이지네이션, 태그 필터) *(그룹 A 완료 2026-07-18: `works.is_published` 게이트 신설 + 공개 회차 카운트. IMPLEMENTATION_PUBLIC_CATALOG_API.md)*
 - [x] 작품 상세 API (works + tags + 공개 episodes 요약, `selectinload` 사용) *(그룹 A 완료 2026-07-18: 썸네일 URL은 D2까지 null - 원고 키 노출 차단)*
-- [ ] 에피소드 목록 API (회차 번호·제목·부제목·썸네일·무료/잠금/구매상태)
-- [ ] **무료 구간 콘텐츠 API** (#76 콘텐츠 모델: content를 paywall 경계에서 **서버 절단** + image 키 presigned URL 치환, no-store. 절단은 M3→M2 앞당김 2026-07-16 - 경계 뒤 반환·결제 검증만 M3)
+- [x] 에피소드 목록 API (회차 번호·제목·부제목·썸네일·무료/잠금/구매상태) *(그룹 B1 완료 2026-07-21: `GET /works/{id}/episodes` - A2와 같은 서비스 함수 재사용)*
+- [x] **무료 구간 콘텐츠 API** (#76 콘텐츠 모델: content를 paywall 경계에서 **서버 절단** + image 키 presigned URL 치환, no-store. 절단은 M3→M2 앞당김 2026-07-16 - 경계 뒤 반환·결제 검증만 M3) *(그룹 B2 완료 2026-07-21: 절단은 `is_free`와 무관하게 항상 수행, 절단→presign 순서 고정. IMPLEMENTATION_FREE_CONTENT_API.md)*
 - [x] `viewer_progress` 모델 + 진행도 저장 API (블록 인덱스 기준 - #76 재해석, WORK-09) *(그룹 C1 완료 2026-07-20: PUT/GET /episodes/{id}/progress, upsert. IMPLEMENTATION_VIEWER_PROGRESS.md)*
 - [ ] 작가 소개는 Astro 마크다운 확정(백엔드 API 없음 - M2_foundation 결정 4)
 

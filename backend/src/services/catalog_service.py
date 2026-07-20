@@ -181,6 +181,20 @@ async def get_work_detail(work_id: uuid.UUID, session: AsyncSession) -> WorkDeta
     )
 
 
+async def list_public_episodes(
+    work_id: uuid.UUID, session: AsyncSession
+) -> list[EpisodeSummary] | None:
+    """공개 회차 목록 (M2 B1). 작품이 노출 불가면 None(라우터가 404로 매핑).
+
+    get_work_detail을 그대로 재사용한다 - 같은 회차 배열을 두 번 쿼리하면 공개 필터를
+    타는 경로가 둘로 갈라지고, 한쪽만 고치는 사고가 난다. 작품 메타(tags·synopsis)를
+    같이 읽어 버리는 낭비가 있지만 단일 작품 조회라 무시할 수준이고, 필터 일원화가
+    우선이다(B2 우선순위: 안정성 > 성능).
+    """
+    detail = await get_work_detail(work_id, session)
+    return None if detail is None else detail.episodes
+
+
 async def public_episode_exists(episode_id: uuid.UUID, session: AsyncSession) -> bool:
     """독자에게 노출 가능한 회차인지 확인 (회차 자체 공개 + 소속 작품 public_work_filters()).
 

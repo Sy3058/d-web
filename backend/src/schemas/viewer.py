@@ -1,7 +1,8 @@
-"""뷰어 진행도 응답/요청 스키마 (M2 그룹 C1)."""
+"""뷰어 진행도·본문 응답/요청 스키마 (M2 그룹 C1, B2)."""
 
 import uuid
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -19,3 +20,18 @@ class ProgressRead(BaseModel):
     episode_id: uuid.UUID
     page_no: int
     updated_at: datetime
+
+
+class EpisodeContent(BaseModel):
+    """무료 구간 본문 응답 (M2 B2). 회차 메타·네비는 GET /works/{id}(A2)가 담당한다."""
+
+    episode_id: uuid.UUID
+    # ⚠️ 저장 문서의 image 노드는 attrs={"key": R2키}지만 여기서는 attrs={"src": presigned
+    # URL}이다. 저장 스키마는 "무엇을 받아들일까"(입력 검증·XSS 방어선, lib/content_doc),
+    # 이 응답은 "무엇을 보여줄까"의 계약이라 원래 다르다 - R2 키는 내보낼 수 없고 뷰어는
+    # URL 없이 렌더할 수 없다. 노드·마크 화이트리스트는 동일하므로 #76의 "서버·에디터·뷰어
+    # 3곳 동일 스키마" 규칙에서 image attrs 하나만 의도적 예외다(뷰어 렌더러는 src 기준).
+    content: dict[str, Any]
+    # 응답만으로는 "원래 여기서 끝난 회차"와 "유료라 잘린 회차"가 구분되지 않는다. 절단은
+    # 서버가 하고 잠금 placeholder를 띄울지는 이 플래그가 알려준다.
+    has_paid_part: bool

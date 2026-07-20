@@ -14,6 +14,29 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from src.models.user import User
 from src.models.work import Episode, Work
 
+# --- 본문 문서(TipTap JSON) 빌더 -------------------------------------------
+# test_content_doc.py(검증기 단위)와 test_episode_content.py(B2 API)가 공유한다.
+# 파일마다 복붙하면 화이트리스트에 노드가 추가될 때 한쪽만 고쳐 낡은 문서 모양을
+# 검증하게 된다(이 모듈이 만들어진 이유와 같은 사고).
+
+CONTENT_KEY = "works/w/episodes/e/page.webp"
+PAYWALL: dict = {"type": "paywall"}
+
+
+def doc(*nodes: dict) -> dict:
+    return {"type": "doc", "content": list(nodes)}
+
+
+def para(text: str, marks: list[dict] | None = None) -> dict:
+    node: dict = {"type": "text", "text": text}
+    if marks is not None:
+        node["marks"] = marks
+    return {"type": "paragraph", "content": [node]}
+
+
+def img(key: str = CONTENT_KEY) -> dict:
+    return {"type": "image", "attrs": {"key": key}}
+
 
 async def make_work(db_session: AsyncSession, author: User, **overrides) -> Work:
     work = Work(

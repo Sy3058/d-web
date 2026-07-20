@@ -12,14 +12,22 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.lib.db import get_session
 from src.lib.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
-from src.schemas.catalog import WorkDetail, WorkListResponse
+from src.schemas.catalog import EpisodeSummary, WorkDetail, WorkListResponse
 from src.services import catalog_service
 
 router = APIRouter(prefix="/works", tags=["works"])
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
-_NOT_FOUND = HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="작품을 찾을 수 없습니다")
+# 404에 no-store를 싣는 이유: 404는 명세상 기본 캐시 가능 상태 코드라(RFC 9111) 명시가
+# 없으면 heuristic 캐싱 대상이 된다. 작가가 작품 공개 토글을 켜기 전에 독자가 열어본
+# 404가 캐시되면, 공개한 뒤에도 그 독자는 계속 404를 본다. HTTPException은 라우터
+# 함수의 Response가 아니라 예외 핸들러가 만든 응답으로 나가므로 여기서 직접 실어야 한다.
+_NOT_FOUND = HTTPException(
+    status_code=status.HTTP_404_NOT_FOUND,
+    detail="작품을 찾을 수 없습니다",
+    headers={"Cache-Control": "no-store"},
+)
 
 
 @router.get("", response_model=WorkListResponse)
@@ -40,3 +48,13 @@ async def get_work(work_id: uuid.UUID, session: SessionDep) -> WorkDetail:
     if detail is None:
         raise _NOT_FOUND
     return detail
+
+
+@router.get("/{work_id}/episodes", response_model=list[EpisodeSummary])
+async def list_work_episodes(work_id: uuid.UUID, session: SessionDep) -> list[EpisodeSummary]:
+    """공개 회차 목록 (M2 B1). GET /works/{id}(A2)의 episodes와 같은 배열을, 작품 메타
+    없이 필요한 소비자(뷰어 네비 등)를 위해 단독으로 낸다."""
+    episodes = await catalog_service.list_public_episodes(work_id, session)
+    if episodes is None:
+        raise _NOT_FOUND
+    return episodes

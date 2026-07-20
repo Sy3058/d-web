@@ -416,6 +416,11 @@ CREATE INDEX idx_trusted_devices_user_id ON trusted_devices(user_id);
 
 -- 공개된 에피소드만 조회 (idx_episodes_work_id와 별개의 partial index)
 CREATE INDEX idx_episodes_published     ON episodes(work_id) WHERE is_published = TRUE;
+
+-- 진행도의 FK 자식 조회 (M2 C1, 2026-07-20 코드리뷰 반영). UNIQUE(user_id, episode_id)는
+-- 선두 컬럼이 user_id라 episode_id 단독 조회에 쓰이지 못한다. episodes 행 삭제 시
+-- ON DELETE CASCADE가 자식을 찾을 때 없으면 순차 스캔.
+CREATE INDEX idx_viewer_progress_episode_id ON viewer_progress(episode_id);
 ```
 
 ---
