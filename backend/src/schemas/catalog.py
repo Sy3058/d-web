@@ -3,10 +3,10 @@
 독자용 전용 DTO. schemas/work.py의 AdminEpisodeRead는 image_keys·content(원고 실물)를
 그대로 노출하므로 여기서 재사용하지 않는다 - 비관리자에게 원고 키가 새는 통로가 된다.
 
-썸네일 URL은 이 그룹에서는 항상 None이다: 현재 episodes.thumbnail은 dweb(비공개 원고
-버킷)의 페이지 키를 그대로 참조하고 있어(models/work.py), 공개 URL로 조립하면 유료
-회차의 원고 실물이 노출된다. 공개 축소본(dweb-cover)을 만들어 그 키로 대체하는 작업은
-M2 그룹 D2 - 그 전까지는 값을 채우지 않는다(FE는 placeholder 처리).
+썸네일 URL(M2 D2): episodes.thumbnail은 dweb(비공개 원고 버킷)의 페이지 키를 그대로
+참조하므로(models/work.py) 그 키를 직접 공개 URL로 조립하지 않는다 - 대신 회차 저장
+시점에 파생한 공개 축소본(dweb-cover의 결정적 키)을 가리킨다(episode_service.
+update_episode). 썸네일 미선택 회차는 작품 표지로 대체, 표지도 없으면 None(FE placeholder).
 """
 
 import uuid
@@ -44,7 +44,7 @@ class EpisodeSummary(BaseModel):
     episode_no: int
     title: str
     subtitle: str | None
-    # D2(공개 축소본) 이전까지 항상 None - 모듈 docstring 참조.
+    # 회차 공개 축소본 또는 작품 표지 fallback - 모듈 docstring 참조.
     thumbnail_url: str | None
     is_free: bool
     # 유료 구간 존재 여부(= not is_free). 배지 표시용.

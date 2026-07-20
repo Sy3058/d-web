@@ -2,7 +2,7 @@
 
 | 항목 | 내용 |
 |------|------|
-| 문서 버전 | v0.6 (2026-07-19, 뷰어 이미지 로딩 전략 확정: lazy → **즉시 전량 요청 + `fetchpriority`**(결정 6 신설) - presigned 만료(600초) 구간을 구조적으로 회피. 서명 쿠키가 Cloudflare엔 네이티브로 없다는 공식 문서 확인 결과 반영(M3 이연), presigned가 커스텀 도메인 불가라는 사실 결정 1에 명시) · v0.5 (2026-07-18, M1.5 완전 종료·그룹 D 계획 구체화: 에디터 #78·예약 UI #79 머지 반영, 썸네일 = 원고 키 방식 확정(D2 = BE-only 공개 축소본 파생), D1/D2에 #81 후속 조사 반영(공개 URL 조립 단일화·캐시 버스터·공개 카탈로그 배선·download_bytes), R2 토큰 스코프 리스크 추가) · v0.4 (2026-07-18, 그룹 A 완료 반영: `works.is_published` 신설 확정 + B1/B2에 `public_work_filters()` 사용 지시 추가 - admin 패턴 복사 시 is_published 누락 함정 리뷰 발견) · v0.3 (2026-07-16, M1.5 F3 재설계 #76 반영: 콘텐츠 문서(회차 내 유료 경계) 모델 기준 전면 개정 - 무료 서빙 = content 절단 앞당김, 뷰어 = 문서 렌더러, 진행도 = 블록 인덱스, presign 실물 계약 반영) · v0.2 (2026-07-15, 리뷰 반영: 공개 서빙 게이트에 작품 soft-delete join 명시 + TTL config 키 관계 정리) · v0.1 (2026-07-15, 초안) |
+| 문서 버전 | v0.7 (2026-07-20, 그룹 D 완료 반영: D1(공개 버킷 전환)·D2(썸네일 공개 축소본) 구현·리뷰·실서버 스모크 완료. URL 조립 `r2_service.public_url()` 단일화, R2 side-effect 순서(생성 커밋 전/삭제 커밋 후) 확정) · v0.6 (2026-07-19, 뷰어 이미지 로딩 전략 확정: lazy → **즉시 전량 요청 + `fetchpriority`**(결정 6 신설) - presigned 만료(600초) 구간을 구조적으로 회피. 서명 쿠키가 Cloudflare엔 네이티브로 없다는 공식 문서 확인 결과 반영(M3 이연), presigned가 커스텀 도메인 불가라는 사실 결정 1에 명시) · v0.5 (2026-07-18, M1.5 완전 종료·그룹 D 계획 구체화: 에디터 #78·예약 UI #79 머지 반영, 썸네일 = 원고 키 방식 확정(D2 = BE-only 공개 축소본 파생), D1/D2에 #81 후속 조사 반영(공개 URL 조립 단일화·캐시 버스터·공개 카탈로그 배선·download_bytes), R2 토큰 스코프 리스크 추가) · v0.4 (2026-07-18, 그룹 A 완료 반영: `works.is_published` 신설 확정 + B1/B2에 `public_work_filters()` 사용 지시 추가 - admin 패턴 복사 시 is_published 누락 함정 리뷰 발견) · v0.3 (2026-07-16, M1.5 F3 재설계 #76 반영: 콘텐츠 문서(회차 내 유료 경계) 모델 기준 전면 개정 - 무료 서빙 = content 절단 앞당김, 뷰어 = 문서 렌더러, 진행도 = 블록 인덱스, presign 실물 계약 반영) · v0.2 (2026-07-15, 리뷰 반영: 공개 서빙 게이트에 작품 soft-delete join 명시 + TTL config 키 관계 정리) · v0.1 (2026-07-15, 초안) |
 | 상위 마일스톤 | [M2](./README.md#m2-콘텐츠-무료-구간) |
 | 예상 기간 | 약 2~3주 (표지 공개 버킷 커스텀 도메인 외부 왕복 포함) |
 | 완료 기준 | 비로그인 유저가 작품 목록 → 무료 구간(전체 무료 회차 + 부분 유료 회차의 경계 이전 미리보기) 열람, 유료 경계 도달 시 잠금 UI(M3 전이라 placeholder) 노출 (그룹 H 체크리스트) |
@@ -152,7 +152,7 @@ M2 착수 전 확정. presigned·표지·콘텐츠 모델은 기존 결정(DECIS
 
 > 결정 2 적용. 외부 블로커: `dweb-cover` 커스텀 도메인 DNS(버킷은 생성됨).
 
-### D1. 공개 버킷 config + 표지 업로드 전환
+### D1. 공개 버킷 config + 표지 업로드 전환 ✅ (2026-07-20 완료 - 브랜치 `be/feat/m2-public-bucket`)
 - 선행: 없음(admin 표지 업로드는 M1.5 C1/D3 기존). **#81 선반영분 주의**: config `public_asset_base_url`·`.env.example`·URL 조립(`catalog_service._public_url`)·카탈로그 응답의 표지 공개 URL은 이미 main에 있다 - D1 신규는 `r2_public_bucket`과 업로드 전환·admin 표시뿐.
 - 산출물: config `r2_public_bucket`(기본 `dweb-cover`) + `.env.example` 주석(API 토큰이 `dweb`·`dweb-cover` 두 버킷을 커버해야 함), `r2_service` 업로드 대상 버킷 파라미터화(`upload_bytes(key, data, *, bucket=...)`, 기본 `dweb`) + **공개 URL 조립 헬퍼를 r2_service로 단일화**(`catalog_service._public_url`을 이관·재사용 - 조립 지점 이원화 금지), `work_service.set_cover_image` 대상 = 공개 버킷, admin `WorkRead.cover_url`(base 미설정 시 None) + `WorkList` 표지 표시(placeholder 대체)
 - **캐시 버스터**: 공개 키는 고정(`works/{id}/cover.webp`) + 재업로드는 덮어쓰기라, 공개 URL 전환 후 표지를 교체해도 브라우저/CDN이 옛 표지를 계속 보여준다(presigned 시절엔 URL이 매번 달라 없던 문제). 조립 헬퍼가 `?v={updated_at}`을 부여 - 단일 헬퍼라 admin·공개 카탈로그 양쪽에 자동 적용.
@@ -160,11 +160,12 @@ M2 착수 전 확정. presigned·표지·콘텐츠 모델은 기존 결정(DECIS
 - 결정: 표지·썸네일만 공개 버킷 지정. 원고 업로드(D3)는 변경 없음(`dweb` 그대로).
 - ⚠️ 조율: admin 작품 공개 토글 PR(`is_published` 폼 + `generate:types` 재생성)이 `WorkList.tsx`·`api.gen.ts`를 먼저 건드린다 - **그 PR 머지 후 main에서 분기**할 것.
 
-### D2. 에피소드 썸네일 공개 축소본 생성 (BE-only, 2026-07-18 확정)
+### D2. 에피소드 썸네일 공개 축소본 생성 (BE-only, 2026-07-18 확정) ✅ (2026-07-20 완료 - 브랜치 `be/feat/m2-public-bucket`, D1과 같은 브랜치)
 - 선행: D1. **admin 변경 0** - PublishModal이 이미 `thumbnail: <페이지 키>`를 보내고, 컬럼 의미(선택 페이지 키)를 유지하므로(결정 2 개정) 스키마·마이그레이션·검증 재작성도 0.
 - 산출물: `r2_service.download_bytes(key, *, bucket=...)` 신설(현재 put/presign만 있어 서버가 원고를 읽을 경로가 없다 - draft 재진입 시 브라우저엔 원본이 없어 서버 파생이 유일한 길) + `episode_thumb_key()` 헬퍼, `image_service.convert_to_webp(..., target_width=)` 폭 파라미터화 + `THUMB_WIDTH=400`(함수 내부의 `TARGET_WIDTH*2` 배율 로직도 동반 수정), `episode_service` 썸네일 확정 시(**선택이 변경된 경우에만** - 미변경 요청은 R2 왕복 없음) 원고 다운로드 → 축소 → 공개 버킷 업로드, 썸네일 자동 NULL·해제 시 공개 축소본 `delete_object`(원고 파생물이 공개 버킷에 미참조 파일(orphan)로 남지 않게), admin 에피소드 응답 `thumbnail_url`, **공개 카탈로그 배선**: `catalog_service._to_episode_summary`의 `thumbnail_url=None` 하드코딩을 공개 URL 조립으로 교체(`thumbnail IS NOT NULL`일 때 결정적 키 - `schemas/catalog.py` docstring의 "D2 이전" 단서 해제)
 - DoD: 썸네일 선택 → `dweb-cover`에 `.../thumb.webp` 생성(mock의 Bucket 인자 검증) + 미변경 요청은 재생성 없음. admin·공개(`GET /works/{id}`) 응답의 `thumbnail_url`이 공개 URL이고 **응답 어디에도 원고 키 문자열 부재**(공개는 `test_catalog`의 기존 부재-단언 패턴 재사용). 선택 페이지가 정리로 제거되면 기존대로 `thumbnail=NULL` + `thumbnail_url=None` + 공개 축소본 삭제. `target_width=400` 축소 폭 검증 + 기본 호출 800 유지. 마이그레이션 없음(`alembic check`).
 - 결정: 공개 조회의 썸네일 fallback은 **작품 표지 또는 null**(FE placeholder) - 첫 페이지 fallback은 원고 키를 공개 URL로 내보내는 유출 경로라 금지. #81이 공개 경로를 "항상 null"로 이미 못박아 둠 - D2는 그 값을 채우기만 한다.
+- **구현에서 확정(2026-07-20)**: R2 side-effect 순서를 생성(커밋 전)·삭제(커밋 성공 후)로 분리 확정(결정적 키 자가치유 vs 무해한 orphan). 변경 감지(`changes.get("thumbnail", episode.thumbnail) != episode.thumbnail`)로 미변경 요청은 R2 호출 0. dev는 r2.dev(공개 개발 URL), 운영은 커스텀 도메인으로 이원화(`dweb`엔 절대 미적용 - 원고 유출). Opus 코드 리뷰 Critical/Major 0, 실서버 스모크(표지·썸네일 공개 URL GET 200) 통과. 상세: `docs/MODULES/BE/Works/IMPLEMENTATION_PUBLIC_BUCKET.md`.
 
 ---
 

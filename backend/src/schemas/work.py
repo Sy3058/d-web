@@ -15,11 +15,13 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    computed_field,
     field_validator,
     model_validator,
 )
 
 from src.models.work import WorkStatus
+from src.services import r2_service
 
 TITLE_MAX = 200
 TAG_NAME_MAX = 50
@@ -117,6 +119,13 @@ class WorkRead(BaseModel):
     created_at: datetime
     updated_at: datetime
 
+    # computed_field로 스키마 안에서 조립(M2 D1) - admin_works.py의 5개 엔드포인트가
+    # 각자 URL을 조립하면 조립 지점이 흩어진다(D1 결정 "URL 조립은 r2_service로 단일화").
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def cover_url(self) -> str | None:
+        return r2_service.public_url(self.cover_image, version=self.updated_at)
+
 
 # ── 에피소드 ──────────────────────────────────────────────────────────────────
 
@@ -202,6 +211,17 @@ class AdminEpisodeRead(BaseModel):
     published_at: datetime | None
     created_at: datetime
     updated_at: datetime
+
+    # 공개 축소본 URL(M2 D2) - thumbnail(원고 키) 자체는 이 스키마가 이미 노출하므로
+    # (owner 전용) 여기 추가해도 새로운 유출 경로는 아니다. WorkRead.cover_url과 동일 패턴.
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def thumbnail_url(self) -> str | None:
+        if self.thumbnail is None:
+            return None
+        return r2_service.public_url(
+            r2_service.episode_thumb_key(self.work_id, self.id), version=self.updated_at
+        )
 
 
 class EpisodeImageUrl(BaseModel):

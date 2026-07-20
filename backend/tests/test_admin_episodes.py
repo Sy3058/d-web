@@ -72,12 +72,56 @@ async def uploaded_keys(monkeypatch) -> list[str]:
     속성을 런타임 조회(`r2_service.upload_bytes`)하므로 setattr 한 번으로 전 경로 mock."""
     keys: list[str] = []
 
-    async def fake_upload(key: str, data: bytes, content_type: str = "image/webp") -> str:
+    async def fake_upload(
+        key: str,
+        data: bytes,
+        content_type: str = "image/webp",
+        *,
+        bucket: str | None = None,
+    ) -> str:
+        # bucket은 표지 업로드(M2 D1)만 넘긴다 - 여기선 어느 버킷으로 갔는지는
+        # 무시하고 키만 기록한다(버킷 라우팅 자체는 test_upload_cover_uses_public_bucket에서 검증).
         keys.append(key)
         return key
 
+    async def fake_download(key: str, *, bucket: str | None = None) -> bytes:
+        # 썸네일 생성(M2 D2)이 원고를 다시 읽는 경로 - 실제 R2엔 아무것도 없으므로
+        # (upload_bytes도 fake라 진짜 저장이 안 됨) 유효한 PNG를 대신 돌려줘
+        # convert_to_webp가 실제로 동작하게 한다.
+        return _png(800, 1200)
+
+    async def fake_delete(key: str, *, bucket: str | None = None) -> None:
+        return None
+
     monkeypatch.setattr(r2_service, "upload_bytes", fake_upload)
+    monkeypatch.setattr(r2_service, "download_bytes", fake_download)
+    monkeypatch.setattr(r2_service, "delete_object", fake_delete)
     return keys
+
+
+@pytest_asyncio.fixture
+async def r2_calls(monkeypatch) -> dict[str, list[dict]]:
+    """uploaded_keys와 달리 bucket 인자까지 기록(M2 D2 리뷰 보강 - 버킷 라우팅 회귀 방지).
+    upload/download/delete 세 함수 호출 전부를 별도 리스트에 남긴다."""
+    calls: dict[str, list[dict]] = {"upload": [], "download": [], "delete": []}
+
+    async def fake_upload(
+        key: str, data: bytes, content_type: str = "image/webp", *, bucket: str | None = None
+    ) -> str:
+        calls["upload"].append({"key": key, "bucket": bucket})
+        return key
+
+    async def fake_download(key: str, *, bucket: str | None = None) -> bytes:
+        calls["download"].append({"key": key, "bucket": bucket})
+        return _png(800, 1200)
+
+    async def fake_delete(key: str, *, bucket: str | None = None) -> None:
+        calls["delete"].append({"key": key, "bucket": bucket})
+
+    monkeypatch.setattr(r2_service, "upload_bytes", fake_upload)
+    monkeypatch.setattr(r2_service, "download_bytes", fake_download)
+    monkeypatch.setattr(r2_service, "delete_object", fake_delete)
+    return calls
 
 
 async def _create_work_id(client: AsyncClient) -> str:
@@ -490,6 +534,53 @@ async def test_thumbnail_explicit_null_clears(owner_client: AsyncClient, uploade
     assert resp.json()["thumbnail"] is None
 
 
+async def test_thumbnail_select_uploads_to_public_bucket(
+    owner_client: AsyncClient, r2_calls: dict[str, list[dict]]
+):
+    # 리뷰 보강: 썸네일 축소본이 실제로 공개 버킷(dweb-cover)으로 가는지 - 기존
+    # uploaded_keys 픽스처는 bucket 인자를 무시해 이 회귀를 못 잡았다.
+    work_id, episode_id, keys = await _episode_with_pages(owner_client)
+    resp = await _put(owner_client, work_id, episode_id, thumbnail=keys[1])
+    assert resp.status_code == 200
+    thumb_uploads = [c for c in r2_calls["upload"] if c["key"].endswith("thumb.webp")]
+    assert len(thumb_uploads) == 1
+    assert thumb_uploads[0]["bucket"] == r2_service.settings.r2_public_bucket == "dweb-cover"
+
+
+async def test_thumbnail_resend_same_value_no_r2_calls(
+    owner_client: AsyncClient, r2_calls: dict[str, list[dict]]
+):
+    # 리뷰 보강: 동일 키 재전송은 R2 왕복 0(썸네일 "변경" 아님) - 코드는 맞았으나
+    # 이 경로를 직접 단언하는 테스트가 없었다.
+    work_id, episode_id, keys = await _episode_with_pages(owner_client)
+    await _put(owner_client, work_id, episode_id, thumbnail=keys[0])
+    r2_calls["upload"].clear()
+    r2_calls["download"].clear()
+    r2_calls["delete"].clear()
+
+    resp = await _put(owner_client, work_id, episode_id, thumbnail=keys[0])
+
+    assert resp.status_code == 200
+    assert r2_calls["upload"] == []
+    assert r2_calls["download"] == []
+    assert r2_calls["delete"] == []
+
+
+async def test_thumbnail_clear_deletes_from_public_bucket(
+    owner_client: AsyncClient, r2_calls: dict[str, list[dict]]
+):
+    # 리뷰 보강: 해제 시 delete_object가 공개 버킷 인자로 호출되는지.
+    work_id, episode_id, keys = await _episode_with_pages(owner_client)
+    await _put(owner_client, work_id, episode_id, thumbnail=keys[0])
+
+    resp = await _put(owner_client, work_id, episode_id, thumbnail=None)
+
+    assert resp.status_code == 200
+    assert len(r2_calls["delete"]) == 1
+    assert r2_calls["delete"][0]["key"].endswith("thumb.webp")
+    assert r2_calls["delete"][0]["bucket"] == r2_service.settings.r2_public_bucket == "dweb-cover"
+
+
 # ---------------------------------------------------------------------------
 # PUT content: 본문 문서 저장 (F3 재설계)
 # ---------------------------------------------------------------------------
@@ -736,6 +827,32 @@ async def test_upload_cover_sets_cover_image(owner_client: AsyncClient, uploaded
     assert resp.status_code == 200
     assert resp.json()["cover_image"] == f"works/{work_id}/cover.webp"
     assert uploaded_keys == [f"works/{work_id}/cover.webp"]
+
+
+async def test_upload_cover_uses_public_bucket(owner_client: AsyncClient, monkeypatch):
+    # 표지는 원고 버킷(dweb)이 아니라 공개 버킷(dweb-cover)으로 가야 한다(M2 D1) -
+    # 실제 버킷 인자를 검증(uploaded_keys 픽스처는 버킷을 무시하므로 여기선 직접 mock).
+    calls: list[dict] = []
+
+    async def fake_upload(key, data, content_type="image/webp", *, bucket=None):
+        calls.append({"key": key, "bucket": bucket})
+        return key
+
+    monkeypatch.setattr(r2_service, "upload_bytes", fake_upload)
+    monkeypatch.setattr(r2_service.settings, "public_asset_base_url", "https://cover.example.com")
+
+    work_id = await _create_work_id(owner_client)
+    resp = await owner_client.post(
+        f"{WORKS_URL}/{work_id}/cover",
+        files={"image": ("cover.png", _png(1000, 1500), "image/png")},
+    )
+
+    assert resp.status_code == 200
+    assert len(calls) == 1
+    assert calls[0]["bucket"] == r2_service.settings.r2_public_bucket == "dweb-cover"
+    assert resp.json()["cover_url"].startswith(
+        f"https://cover.example.com/works/{work_id}/cover.webp?v="
+    )
 
 
 async def test_upload_cover_nonimage_422(owner_client: AsyncClient, uploaded_keys: list[str]):

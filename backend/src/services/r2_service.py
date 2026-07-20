@@ -19,6 +19,7 @@ aioboto3는 대량 동시 업로드가 필요해질 때 재검토(1인 작가 �
 
 import uuid
 from collections.abc import Sequence
+from datetime import datetime
 from functools import lru_cache, partial
 from urllib.parse import urlparse
 
@@ -54,6 +55,31 @@ def episode_page_key(work_id: uuid.UUID, episode_id: uuid.UUID) -> str:
 def cover_key(work_id: uuid.UUID) -> str:
     """작품 표지 키. 작품당 1개 - 재업로드는 같은 키를 덮어쓴다."""
     return f"works/{work_id}/cover.webp"
+
+
+def episode_thumb_key(work_id: uuid.UUID, episode_id: uuid.UUID) -> str:
+    """에피소드 대표 썸네일(공개 축소본) 키. 회차당 1개 고정 - 재생성은 같은 키를
+    덮어쓴다(M2 D2). 원고 페이지 키(episode_page_key)와 달리 uuid가 아니라 결정적
+    파일명 - 공개 카탈로그가 episodes.thumbnail 유무만으로 URL을 조립할 수 있어야 한다.
+    """
+    return f"works/{work_id}/episodes/{episode_id}/thumb.webp"
+
+
+def public_url(key: str | None, *, version: datetime | None = None) -> str | None:
+    """R2 키를 공개 버킷 URL로 조립(M2 D1). 공개 URL 조립은 이 함수로 단일화한다
+    (catalog_service._public_url을 여기로 이관 - admin·공개 카탈로그 양쪽이 재사용).
+
+    base의 트레일링 슬래시는 정규화한다 - .env에 https://host/ 로 넣는 실수가
+    이중 슬래시 URL(일부 CDN에서 404)로 조용히 번지지 않게. version을 주면
+    캐시 버스터(?v=)를 부여한다 - 표지·썸네일은 고정 키 + 덮어쓰기라, 캐시 버스터
+    없이는 재업로드해도 브라우저/CDN이 옛 이미지를 계속 보여준다.
+    """
+    if not key or not settings.public_asset_base_url:
+        return None
+    base = settings.public_asset_base_url.rstrip("/")
+    if version is None:
+        return f"{base}/{key}"
+    return f"{base}/{key}?v={int(version.timestamp())}"
 
 
 def is_configured() -> bool:
@@ -101,22 +127,58 @@ def _get_client():
     )
 
 
-def _put_object_sync(key: str, data: bytes, content_type: str) -> None:
+def _put_object_sync(key: str, data: bytes, content_type: str, bucket: str) -> None:
     # _get_client()도 이 안에서: 첫 클라이언트 생성(콜드 ~60ms)이 이벤트 루프를
     # 블로킹하지 않도록 획득과 호출을 함께 스레드로 보낸다(리뷰 실측 62.7ms).
-    _get_client().put_object(
-        Bucket=settings.r2_bucket, Key=key, Body=data, ContentType=content_type
-    )
+    _get_client().put_object(Bucket=bucket, Key=key, Body=data, ContentType=content_type)
 
 
-async def upload_bytes(key: str, data: bytes, content_type: str = WEBP_CONTENT_TYPE) -> str:
+async def upload_bytes(
+    key: str,
+    data: bytes,
+    content_type: str = WEBP_CONTENT_TYPE,
+    *,
+    bucket: str | None = None,
+) -> str:
     """바이트를 R2에 업로드하고 저장된 키를 그대로 반환한다.
 
-    같은 키 재업로드는 덮어쓰기(S3 PUT 시맨틱). 다건 업로드의 부분 실패
-    처리(완료분 키 수집 → DB 1회 커밋)는 호출자(D3 episode_service) 책임.
+    같은 키 재업로드는 덮어쓰기(S3 PUT 시맨틱). bucket 생략 시 원고 버킷(r2_bucket) -
+    표지·썸네일 등 공개 자산은 호출자가 settings.r2_public_bucket을 명시한다(M2 D1).
+    다건 업로드의 부분 실패 처리(완료분 키 수집 → DB 1회 커밋)는 호출자(D3 episode_service) 책임.
     """
-    await to_thread.run_sync(partial(_put_object_sync, key, data, content_type))
+    target_bucket = bucket or settings.r2_bucket
+    await to_thread.run_sync(partial(_put_object_sync, key, data, content_type, target_bucket))
     return key
+
+
+def _get_object_sync(key: str, bucket: str) -> bytes:
+    return _get_client().get_object(Bucket=bucket, Key=key)["Body"].read()
+
+
+async def download_bytes(key: str, *, bucket: str | None = None) -> bytes:
+    """R2에서 바이트를 내려받는다. bucket 생략 시 원고 버킷(r2_bucket).
+
+    서버가 원고를 다시 읽어야 하는 유일한 경로(M2 D2 - 썸네일 공개 축소본 파생) - draft
+    재진입 시 브라우저엔 원본이 없어 서버 다운로드가 유일한 수단이다.
+    """
+    target_bucket = bucket or settings.r2_bucket
+    return await to_thread.run_sync(partial(_get_object_sync, key, target_bucket))
+
+
+def _delete_object_sync(key: str, bucket: str) -> None:
+    _get_client().delete_object(Bucket=bucket, Key=key)
+
+
+async def delete_object(key: str, *, bucket: str | None = None) -> None:
+    """R2 객체를 삭제한다(멱등 - 이미 없는 키도 에러 없음, S3 delete 시맨틱).
+    bucket 생략 시 원고 버킷(r2_bucket).
+
+    썸네일 해제·자동 NULL 시 공개 축소본을 정리한다(M2 D2). 실패해도 무해한
+    미참조 파일(orphan)로 남을 뿐이라 호출자는 DB 커밋 **성공 후**에만 호출한다
+    (먼저 지웠다가 DB 갱신이 실패하면 DB가 이미 없는 객체를 가리키게 된다).
+    """
+    target_bucket = bucket or settings.r2_bucket
+    await to_thread.run_sync(partial(_delete_object_sync, key, target_bucket))
 
 
 # 관리자 미리보기용 만료(초). 재배열 작업 중 만료돼도 프론트가 재요청하면 그만이라

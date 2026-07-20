@@ -65,11 +65,15 @@ class Settings(BaseSettings):
     r2_access_key_id: str = ""
     r2_secret_access_key: SecretStr = SecretStr("")
     r2_bucket: str = "dweb"
+    # 공개 버킷(M2 D1) - 표지·회차 썸네일 공개 축소본 전용. 원고(dweb)와 분리해야
+    # 공개 URL이 미공개·유료 원고까지 노출하지 않는다(DECISIONS "표지 서빙").
+    r2_public_bucket: str = "dweb-cover"
     r2_endpoint: str = ""
     r2_signed_url_ttl_seconds: int = 300
-    # 공개 버킷(dweb-cover, M2 결정 2) 커스텀 도메인 기반 URL. 표지·(향후) 회차 썸네일
-    # 공개 축소본 조립에 쓴다. 미설정(빈 값)이어도 부팅은 허용 - 도메인 연결(외부
-    # 블로커) 전까지 표지 URL이 빈 프리픽스로 조립돼 프론트가 404 placeholder로 받는다.
+    # 공개 버킷 커스텀 도메인(또는 dev 한정 r2.dev 공개 개발 URL). 표지·회차 썸네일
+    # 공개 축소본 조립에 쓴다. 미설정(빈 값)이면 r2_service.public_url이 None을 반환해
+    # 프론트가 placeholder로 받는다(도메인 연결 전까지). 운영은 커스텀 도메인만 - r2.dev는
+    # Cloudflare 공식 문서상 rate-limited & non-production 명시(DECISIONS "표지 서빙").
     public_asset_base_url: str = ""
 
     # 이메일 발송 (Resend - M1 E1)

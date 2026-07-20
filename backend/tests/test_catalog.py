@@ -141,11 +141,15 @@ async def test_list_cover_image_url_built_from_public_base(
     from src.config import settings
 
     monkeypatch.setattr(settings, "public_asset_base_url", "https://cover.example.com")
-    await _make_work(db_session, user, cover_image="works/x/cover.webp")
+    work = await _make_work(db_session, user, cover_image="works/x/cover.webp")
 
     resp = await async_client.get(WORKS_URL)
     item = resp.json()["items"][0]
-    assert item["cover_image_url"] == "https://cover.example.com/works/x/cover.webp"
+    expected_version = int(work.updated_at.timestamp())
+    assert (
+        item["cover_image_url"]
+        == f"https://cover.example.com/works/x/cover.webp?v={expected_version}"
+    )
 
 
 async def test_list_cover_image_url_trailing_slash_base_normalized(
@@ -155,11 +159,15 @@ async def test_list_cover_image_url_trailing_slash_base_normalized(
     from src.config import settings
 
     monkeypatch.setattr(settings, "public_asset_base_url", "https://cover.example.com/")
-    await _make_work(db_session, user, cover_image="works/x/cover.webp")
+    work = await _make_work(db_session, user, cover_image="works/x/cover.webp")
 
     resp = await async_client.get(WORKS_URL)
     item = resp.json()["items"][0]
-    assert item["cover_image_url"] == "https://cover.example.com/works/x/cover.webp"
+    expected_version = int(work.updated_at.timestamp())
+    assert (
+        item["cover_image_url"]
+        == f"https://cover.example.com/works/x/cover.webp?v={expected_version}"
+    )
 
 
 async def test_list_cover_image_url_none_when_no_cover(
@@ -204,17 +212,52 @@ async def test_detail_episode_free_locked_purchased_flags(
     assert episodes[2]["is_purchased"] is False
 
 
-async def test_detail_episode_thumbnail_always_null(
-    async_client: AsyncClient, db_session: AsyncSession, user: User
+async def test_detail_episode_thumbnail_url_from_public_bucket(
+    async_client: AsyncClient, db_session: AsyncSession, user: User, monkeypatch
 ):
-    # D2(공개 축소본) 이전 - thumbnail이 원고 키로 세팅돼 있어도 응답엔 노출 금지
+    # M2 D2: thumbnail(원고 키)이 세팅돼 있으면 결정적 공개 축소본 키로 URL이 뜬다 -
+    # 단, 응답에 실리는 건 그 파생 키뿐이고 원고 페이지 키 자체는 절대 노출되면 안 된다.
+    from src.config import settings
+    from src.services import r2_service
+
+    monkeypatch.setattr(settings, "public_asset_base_url", "https://cover.example.com")
     work = await _make_work(db_session, user)
-    await _make_episode(db_session, work, episode_no=1, thumbnail="works/x/episodes/y/abc123.webp")
+    ep = await _make_episode(
+        db_session, work, episode_no=1, thumbnail="works/x/episodes/y/abc123.webp"
+    )
 
     resp = await async_client.get(f"{WORKS_URL}/{work.id}")
-    ep = resp.json()["episodes"][0]
-    assert ep["thumbnail_url"] is None
+    body = resp.json()["episodes"][0]
+    expected_key = r2_service.episode_thumb_key(work.id, ep.id)
+    expected_version = int(ep.updated_at.timestamp())
+    assert body["thumbnail_url"] == f"https://cover.example.com/{expected_key}?v={expected_version}"
     assert "abc123.webp" not in resp.text
+
+
+async def test_detail_episode_thumbnail_falls_back_to_work_cover(
+    async_client: AsyncClient, db_session: AsyncSession, user: User, monkeypatch
+):
+    # 회차 썸네일 미선택 시 작품 표지로 대체(M2 D2 결정) - 원고 첫 페이지 fallback 금지.
+    from src.config import settings
+
+    monkeypatch.setattr(settings, "public_asset_base_url", "https://cover.example.com")
+    work = await _make_work(db_session, user, cover_image="works/x/cover.webp")
+    await _make_episode(db_session, work, episode_no=1)
+
+    resp = await async_client.get(f"{WORKS_URL}/{work.id}")
+    body = resp.json()["episodes"][0]
+    assert body["thumbnail_url"].startswith("https://cover.example.com/works/x/cover.webp?v=")
+
+
+async def test_detail_episode_thumbnail_none_when_no_thumbnail_and_no_cover(
+    async_client: AsyncClient, db_session: AsyncSession, user: User
+):
+    work = await _make_work(db_session, user)
+    await _make_episode(db_session, work, episode_no=1)
+
+    resp = await async_client.get(f"{WORKS_URL}/{work.id}")
+    body = resp.json()["episodes"][0]
+    assert body["thumbnail_url"] is None
 
 
 async def test_detail_excludes_internal_fields(

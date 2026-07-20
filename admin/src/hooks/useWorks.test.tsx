@@ -22,6 +22,7 @@ function makeWork(id: string): Work {
     title: '작품',
     synopsis: null,
     cover_image: null,
+    cover_url: null,
     episode_base_price: 500,
     bundle_discount_rate: '0.000',
     status: 'ongoing',
