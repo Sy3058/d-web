@@ -393,6 +393,11 @@
   → 실제 사고(M1.5 G 검증): dev DB(`dweb`)가 M2 워크트리(`d-web-m2`)의 마이그레이션 `726b16a759b3`으로 앞서 있어 main 워크트리에서 `alembic check`가 `Can't locate revision '726b16a759b3'`로 실패. **main 마이그레이션 자체는 정상**(그 리비전은 main에 없음, head `2a9ae60edceb` 위 정상 체인)
   → 검증은 **신규/스크래치 DB**에서: `docker exec ... psql -c "CREATE DATABASE dweb_scratch"` → `DATABASE_URL=<scratch> uv run alembic upgrade head && alembic check`(→ "No new upgrade operations detected") → `DROP DATABASE dweb_scratch WITH (FORCE)`. 다른 워크스트림이 쓰는 dev DB는 re-stamp 금지
 
+- **스크래치 DB 검증 통과 ≠ dev DB 적용됨 - 그 브랜치 코드로 dev 서버를 돌릴 거면 dev DB에도 `upgrade head`** (#56, 2026-07-22)
+  → 마이그레이션을 스크래치 DB(`dweb_scratch`)에서 `upgrade`+`check`로 검증하고 드롭하면, 모델·pytest(PID 전용 임시 DB)는 새 컬럼을 알지만 **실제 dev DB(`dweb`)는 옛 스키마 그대로**다. 그 상태로 dev 서버를 띄우면 SELECT가 `column ... does not exist`로 500 (실제 사고: `totp_last_step` 추가 후 `/auth/login`이 `UndefinedColumnError`)
+  → 바로 위 "워크트리 공유 dev DB re-stamp 금지"와 충돌 아님: 그건 **검증(`alembic check`)** 은 스크래치에서 하라는 것이고, 이건 그 브랜치로 **dev 서버를 실행**할 거면 dev DB에도 `uv run alembic upgrade head`를 적용해야 한다는 것. 두 DB(pytest 임시·스크래치 vs dev)가 별개라 pytest·check가 다 그린이어도 dev 서버는 깨질 수 있다. nullable 컬럼 추가는 dev DB에 적용해도 안전(락·데이터 손실 없음)
+  → asyncpg는 **prepare 단계에서 터진 statement는 캐시하지 않으므로** 컬럼 추가 후 서버 재시작 없이 다음 요청부터 통과한다. 단 이미 성공 캐시된 statement가 스키마 변경으로 깨지는 경우만 `InvalidCachedStatementError` → 그때만 dev 서버 재시작
+
 ## pytest / 비동기 DB 테스트
 
 - session-scope async 엔진 픽스처를 쓰면 루프 스코프를 **둘 다** 맞춰야 한다
