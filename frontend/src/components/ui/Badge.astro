@@ -1,0 +1,24 @@
+---
+// 상태 배지 (DESIGN.md 무액센트 원칙 - 색은 웹툰 그림에서만, UI 자체는 무채색).
+// neutral: 연재중/완결/휴재 등 메타데이터 텍스트(라벨만, 배경 없음)
+// outline: 무료 - 잉크 아웃라인 pill로 강조
+// locked: 잠금 - 회색 채움 pill, 자물쇠 글리프 슬롯(text 앞에 아이콘 slot 사용 가능)
+interface Props {
+  variant?: 'neutral' | 'outline' | 'locked';
+  class?: string;
+}
+
+const { variant = 'neutral', class: className } = Astro.props;
+
+const base = 'inline-flex items-center gap-1 text-label-md';
+
+const variants = {
+  neutral: 'text-muted',
+  outline: 'rounded-pill border border-ink-strong text-ink-strong px-2.5 py-0.5',
+  locked: 'rounded-pill bg-hover text-muted px-2.5 py-0.5',
+};
+---
+
+<span class:list={[base, variants[variant], className]}>
+  <slot />
+</span>

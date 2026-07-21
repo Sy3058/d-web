@@ -1,0 +1,34 @@
+---
+// 버튼형 요소 (DESIGN.md Buttons). href가 있으면 <a>, 없으면 <button>으로 렌더한다 -
+// 페이지네이션·목록 CTA는 링크, 폼 제출은 버튼이라 하나로 겸용.
+interface Props {
+  variant?: 'primary' | 'secondary' | 'ghost';
+  href?: string;
+  type?: 'button' | 'submit';
+  disabled?: boolean;
+  class?: string;
+}
+
+const { variant = 'primary', href, type = 'button', disabled = false, class: className } = Astro.props;
+
+const base =
+  'inline-flex items-center justify-center gap-2 text-sm font-medium transition-colors disabled:opacity-50 disabled:pointer-events-none';
+
+const variants = {
+  primary: 'rounded-control bg-ink-strong text-paper px-4 py-2.5 hover:bg-ink',
+  secondary: 'rounded-control border border-ink text-ink px-4 py-2.5 hover:bg-hover',
+  ghost: 'text-ink underline-offset-4 hover:underline px-1 py-1',
+};
+---
+
+{
+  href ? (
+    <a href={href} class:list={[base, variants[variant], className]}>
+      <slot />
+    </a>
+  ) : (
+    <button type={type} disabled={disabled} class:list={[base, variants[variant], className]}>
+      <slot />
+    </button>
+  )
+}

@@ -16,6 +16,41 @@
   --radius-control: 0.5rem;
   --radius-surface: 0.75rem;
   --radius-pill: 9999px;
+
+  /* 타이포그래피 스케일 (docs/DESIGN.md). Tailwind v4 컴파운드 토큰 문법
+     (공식 문서 확인, 2026-07-22): --text-{name}에 --text-{name}--line-height,
+     --letter-spacing, --font-weight 접미사를 붙이면 text-{name} 클래스 하나로
+     4개 속성이 전부 적용된다(leading, tracking, font 유틸리티 별도 지정 불요). */
+  --text-display-lg: 3rem;
+  --text-display-lg--line-height: 1.2;
+  --text-display-lg--letter-spacing: -0.02em;
+  --text-display-lg--font-weight: 700;
+
+  --text-headline-lg: 2rem;
+  --text-headline-lg--line-height: 1.3;
+  --text-headline-lg--letter-spacing: -0.01em;
+  --text-headline-lg--font-weight: 600;
+
+  --text-headline-lg-mobile: 1.75rem;
+  --text-headline-lg-mobile--line-height: 1.3;
+  --text-headline-lg-mobile--font-weight: 600;
+
+  --text-headline-md: 1.5rem;
+  --text-headline-md--line-height: 1.4;
+  --text-headline-md--font-weight: 600;
+
+  --text-body-lg: 1.125rem;
+  --text-body-lg--line-height: 1.8;
+  --text-body-lg--font-weight: 400;
+
+  --text-body-md: 1rem;
+  --text-body-md--line-height: 1.7;
+  --text-body-md--font-weight: 400;
+
+  --text-label-md: 0.875rem;
+  --text-label-md--line-height: 1.2;
+  --text-label-md--letter-spacing: 0.02em;
+  --text-label-md--font-weight: 500;
 }
 
 @layer base {
