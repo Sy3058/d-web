@@ -249,6 +249,20 @@ async def test_confirm_malformed_code_422(async_client: AsyncClient, owner: User
         assert response.status_code == 422
 
 
+async def test_setup_resets_stale_last_step(
+    async_client: AsyncClient, owner: User, db_session: AsyncSession
+):
+    # 수동 복구는 totp_last_step까지 NULL이 규칙이지만(models/user.py), 빠뜨려도 setup이
+    # 리셋해 재등록 confirm이 replay로 오거부되지 않는다(#56 자가치유).
+    owner.totp_last_step = 10**10  # 어떤 현재 step보다 큰 잔재(최악 케이스)
+    db_session.add(owner)
+    await db_session.commit()
+
+    secret = await _enroll(async_client, owner)
+    response = await async_client.post(CONFIRM_URL, json={"code": pyotp.TOTP(secret).now()})
+    assert response.status_code == 200
+
+
 # ---------------------------------------------------------------------------
 # rate limit
 # ---------------------------------------------------------------------------

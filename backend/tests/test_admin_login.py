@@ -4,6 +4,7 @@ pending 쿠키는 /admin/login이 발급하고 jar가 자동 운반한다(B2 테
 체이닝). 쿠키를 수동 set할 땐 점 있는 호스트 + domain 명시(MISTAKES pytest 절).
 """
 
+import asyncio
 from datetime import UTC, datetime, timedelta
 
 import jwt
@@ -26,9 +27,10 @@ from src.lib.auth import (
     require_owner,
     require_role,
 )
+from src.lib import totp
 from src.lib.totp import encrypt_secret
 from src.models.user import RefreshToken, RoleEnum, TrustedDevice, User
-from src.services import auth_service
+from src.services import admin_auth_service, auth_service
 from tests.conftest import EXISTING_USER_EMAIL, EXISTING_USER_PASSWORD
 
 LOGIN_URL = "/admin/login"
@@ -239,6 +241,94 @@ async def test_totp_login_demoted_after_stage1_401(
     await db_session.commit()
     resp = await async_client.post(TOTP_URL, json={"code": pyotp.TOTP(secret).now()})
     assert resp.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# TOTP replay 가드 (#56 - totp_last_step 엄격 증가)
+# ---------------------------------------------------------------------------
+
+
+async def test_totp_login_replay_rejected_400(
+    async_client: AsyncClient, active_owner, db_session: AsyncSession
+):
+    # 같은 창의 유효 코드도 재제출이면 거부 - 판정 기준은 코드 유효성이 아니라 step 소모다.
+    owner, secret = active_owner
+    code = pyotp.TOTP(secret).now()
+    await async_client.post(LOGIN_URL, json=_LOGIN)
+    assert (await async_client.post(TOTP_URL, json={"code": code})).status_code == 200
+    await db_session.refresh(owner)
+    assert owner.totp_last_step is not None
+
+    await async_client.post(LOGIN_URL, json=_LOGIN)  # 새 pending 쿠키
+    resp = await async_client.post(TOTP_URL, json={"code": code})
+    assert resp.status_code == 400
+    assert resp.cookies.get(access_cookie_name()) is None
+
+
+async def test_totp_login_next_step_code_passes(
+    async_client: AsyncClient, active_owner, monkeypatch
+):
+    # 엄격 증가 가드가 정상 재로그인(다음 창의 새 코드)까지 막지 않는다.
+    # 서버 검증 시각을 고정해 30s 경계·CI 스톨에 비의존으로 만든다(형제 단위 테스트와 동일
+    # 기법 - async_client는 같은 프로세스라 totp.datetime 몽키패치가 서버 verify_code에 적용됨).
+    _, secret = active_owner
+    otp = pyotp.TOTP(secret)
+    base = datetime(2026, 7, 22, 12, 0, 0, tzinfo=UTC)
+    clock = {"now": base}
+
+    class _FrozenDatetime:
+        @staticmethod
+        def now(tz: object) -> datetime:
+            return clock["now"]
+
+    monkeypatch.setattr(totp, "datetime", _FrozenDatetime)
+
+    await async_client.post(LOGIN_URL, json=_LOGIN)
+    assert (await async_client.post(TOTP_URL, json={"code": otp.at(base)})).status_code == 200
+
+    clock["now"] = base + timedelta(seconds=30)
+    await async_client.post(LOGIN_URL, json=_LOGIN)
+    resp = await async_client.post(TOTP_URL, json={"code": otp.at(clock["now"])})
+    assert resp.status_code == 200
+
+
+async def test_confirm_code_not_reusable_for_login(async_client: AsyncClient, pw_owner: User):
+    # confirm(등록)과 login(2단계)은 같은 totp_last_step을 공유한다 - 등록에 쓴 코드를
+    # 그대로 로그인 2단계에 재사용할 수 없다(cross-endpoint replay).
+    async_client.cookies.set(
+        ADMIN_PENDING_COOKIE_NAME,
+        create_admin_pending_token(str(pw_owner.id), TOTP_SETUP_PENDING),
+        domain="test.example",
+        path="/admin",
+    )
+    setup = await async_client.post("/admin/2fa/setup")
+    secret = pyotp.parse_uri(setup.json()["otpauth_uri"]).secret
+    code = pyotp.TOTP(secret).now()
+    assert (await async_client.post("/admin/2fa/confirm", json={"code": code})).status_code == 200
+
+    await async_client.post(LOGIN_URL, json=_LOGIN)
+    assert (await async_client.post(TOTP_URL, json={"code": code})).status_code == 400
+
+
+async def test_accept_totp_concurrent_single_winner(active_owner, session_factory):
+    # 같은 코드 동시 제출(TOCTOU) - 조건부 UPDATE 선점이 정확히 한쪽만 승자로 만든다.
+    # 두 세션 모두 stale last_step(NULL)을 읽어 코드 검증은 통과하지만, 전진 UPDATE는
+    # 행 락 + READ COMMITTED 재평가로 패자가 rowcount 0을 받는다(refresh 회전 I4와 동일).
+    owner, secret = active_owner
+    code = pyotp.TOTP(secret).now()
+
+    async def attempt() -> bool:
+        async with session_factory() as s:
+            u = (await s.exec(select(User).where(User.id == owner.id))).one()
+            ok = await admin_auth_service._accept_totp(u, code, s)
+            if ok:
+                await s.commit()
+            else:
+                await s.rollback()
+            return ok
+
+    results = await asyncio.gather(attempt(), attempt())
+    assert sorted(results) == [False, True]
 
 
 # ---------------------------------------------------------------------------

@@ -11,6 +11,7 @@ from datetime import UTC, datetime, timedelta
 from typing import NamedTuple
 
 import structlog
+from sqlalchemy import or_, update
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -45,6 +46,43 @@ async def _issue_tokens(user: User, session: AsyncSession) -> tuple[str, str]:
     return access, refresh
 
 
+async def _accept_totp(user: User, code: str, session: AsyncSession) -> bool:
+    """TOTP 코드 검증 + replay 가드(#56). 성공 시 totp_last_step을 매칭 step으로 전진.
+
+    엄격 증가(매칭 step > totp_last_step)만 통과 - valid_window 창 안에서 같은/이전
+    코드를 다시 제출해도 거부된다(RFC 6238 §5.2 verifier 요구). 전진은 조건부 UPDATE로
+    원자화 - 같은 코드 동시 제출은 행 락 + rowcount 판정으로 한쪽만 승자다
+    (auth_service의 refresh 회전 선점과 같은 패턴). commit은 호출자가 토큰 발급과
+    한 트랜잭션으로 묶는다(실패·패자는 커밋 전 반환이라 step 미기록).
+
+    ⚠️ 트레이드오프(의도됨, RFC 수용): 서버 시계가 뒤로 점프(NTP 보정)하거나 인증기가
+    앞선 창(+1) 코드로 로그인해 미래 step이 기록되면, 그 step이 실제 도래하기 전까지
+    현재 코드가 일시 거부될 수 있다(단일 admin·≤30s 자가치유). 이는 replay 차단의 본질적
+    비용이라 가드를 약화하지 않는다 - 미래 step 미기록 설계는 +1 코드 replay를 허용해 더 나쁨.
+    """
+    if user.totp_secret is None:
+        return False
+    step = totp.verify_code(totp.decrypt_secret(user.totp_secret), code)
+    if step is None:
+        return False
+    result = await session.exec(
+        update(User)
+        .where(
+            User.id == user.id,
+            or_(
+                User.totp_last_step.is_(None),  # type: ignore[union-attr]
+                User.totp_last_step < step,
+            ),
+        )
+        .values(totp_last_step=step)
+        .execution_options(synchronize_session=False)
+    )
+    if result.rowcount != 1:  # type: ignore[union-attr]
+        logger.info("auth.admin_totp", outcome="replay_rejected", user_id=str(user.id))
+        return False
+    return True
+
+
 # ---------------------------------------------------------------------------
 # TOTP 등록 (B2)
 # ---------------------------------------------------------------------------
@@ -59,6 +97,9 @@ async def setup_totp(user: User, session: AsyncSession) -> str:
     secret = totp.generate_secret()
     user.totp_secret = totp.encrypt_secret(secret)
     user.totp_confirmed_at = None
+    # 수동 복구(시크릿 분실 - 컬럼 NULL 후 재등록) 잔재 자가치유: step은 시크릿이 아니라
+    # 시각 기반이라 이월되면 복구 직후 첫 confirm이 replay로 오거부될 수 있다(models/user.py).
+    user.totp_last_step = None
     session.add(user)
     await session.commit()
     logger.info("auth.admin_2fa", outcome="setup", user_id=str(user.id))
@@ -73,9 +114,7 @@ async def confirm_totp(
     confirm 시점엔 비번(1단계 pending 쿠키)과 TOTP 코드가 모두 검증된 상태라 2단계
     로그인과 등가 - 재로그인 없이 바로 세션을 연다(ledger 그룹 B 확정결정 1).
     """
-    if user.totp_secret is None:
-        return None
-    if not totp.verify_code(totp.decrypt_secret(user.totp_secret), code):
+    if not await _accept_totp(user, code, session):
         logger.info("auth.admin_2fa", outcome="confirm_fail", user_id=str(user.id))
         return None
     user.totp_confirmed_at = datetime.now(UTC)
@@ -118,9 +157,7 @@ async def login_totp(
 
     활성(totp_confirmed_at NOT NULL) owner 전제 - 게이트는 라우터 소관(B2와 동일 분업).
     """
-    if user.totp_secret is None:
-        return None
-    if not totp.verify_code(totp.decrypt_secret(user.totp_secret), code):
+    if not await _accept_totp(user, code, session):
         logger.info("auth.admin_login", outcome="totp_fail", user_id=str(user.id))
         return None
     access, refresh = await _issue_tokens(user, session)

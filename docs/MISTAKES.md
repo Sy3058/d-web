@@ -198,6 +198,11 @@
   → `defer()`로 불필요 컬럼 로딩을 막음 → **MissingGreenlet 잠재 위험**(지연 컬럼을 나중에 누가 읽으면 async 밖 lazy load). 필요한 컬럼만 `select`하는 쪽이 지연 속성 자체를 안 만든다
   → 둘 다 다음 리뷰 라운드에서 잡혔다. 수정은 "지적이 사라졌는가"가 아니라 **"무엇을 대가로 지불했는가"**까지 보고 끝낸다
 
+- **open 이슈를 "미구현"의 증거로 삼지 말 것** (M2, 2026-07-22)
+  → PR 본문에 `Closes #N` 키워드가 없으면 구현이 머지돼도 이슈가 열린 채 남는다. 이슈 목록만 보고 착수하면 이미 있는 기능을 재구현하게 됨
+  → 실제 니어미스: #82(공개 태그 API)·#83(실효가)이 PR #81로 구현·머지됐는데 open으로 남아 "지금 당장 처리"로 추천 - 마일스톤 문서의 ✅ 마킹과 코드 grep 대조로 착수 직전에 발견
+  → 착수 전 확인: 관련 마일스톤 문서 완료 마킹 + 코드 심볼 grep. 예방: pr_body.md에 해결하는 이슈의 `Closes #N`을 반드시 포함
+
 ## Claude 작업 효율 (셸/검증 패턴)
 
 - env 값 존재 확인에 `sed 's/=.*/=<값 있음>/'` 식 마스킹을 쓰지 말 것 - **빈 값(`KEY=`)도 `=<값 있음>`으로 치환**돼 "채워짐"으로 오판
@@ -387,6 +392,11 @@
 - 여러 워크트리가 **같은 dev DB를 공유**하면 한 브랜치의 마이그레이션이 dev DB를 스탬프해 다른 브랜치의 `alembic check`가 깨진다
   → 실제 사고(M1.5 G 검증): dev DB(`dweb`)가 M2 워크트리(`d-web-m2`)의 마이그레이션 `726b16a759b3`으로 앞서 있어 main 워크트리에서 `alembic check`가 `Can't locate revision '726b16a759b3'`로 실패. **main 마이그레이션 자체는 정상**(그 리비전은 main에 없음, head `2a9ae60edceb` 위 정상 체인)
   → 검증은 **신규/스크래치 DB**에서: `docker exec ... psql -c "CREATE DATABASE dweb_scratch"` → `DATABASE_URL=<scratch> uv run alembic upgrade head && alembic check`(→ "No new upgrade operations detected") → `DROP DATABASE dweb_scratch WITH (FORCE)`. 다른 워크스트림이 쓰는 dev DB는 re-stamp 금지
+
+- **스크래치 DB 검증 통과 ≠ dev DB 적용됨 - 그 브랜치 코드로 dev 서버를 돌릴 거면 dev DB에도 `upgrade head`** (#56, 2026-07-22)
+  → 마이그레이션을 스크래치 DB(`dweb_scratch`)에서 `upgrade`+`check`로 검증하고 드롭하면, 모델·pytest(PID 전용 임시 DB)는 새 컬럼을 알지만 **실제 dev DB(`dweb`)는 옛 스키마 그대로**다. 그 상태로 dev 서버를 띄우면 SELECT가 `column ... does not exist`로 500 (실제 사고: `totp_last_step` 추가 후 `/auth/login`이 `UndefinedColumnError`)
+  → 바로 위 "워크트리 공유 dev DB re-stamp 금지"와 충돌 아님: 그건 **검증(`alembic check`)** 은 스크래치에서 하라는 것이고, 이건 그 브랜치로 **dev 서버를 실행**할 거면 dev DB에도 `uv run alembic upgrade head`를 적용해야 한다는 것. 두 DB(pytest 임시·스크래치 vs dev)가 별개라 pytest·check가 다 그린이어도 dev 서버는 깨질 수 있다. nullable 컬럼 추가는 dev DB에 적용해도 안전(락·데이터 손실 없음)
+  → asyncpg는 **prepare 단계에서 터진 statement는 캐시하지 않으므로** 컬럼 추가 후 서버 재시작 없이 다음 요청부터 통과한다. 단 이미 성공 캐시된 statement가 스키마 변경으로 깨지는 경우만 `InvalidCachedStatementError` → 그때만 dev 서버 재시작
 
 ## pytest / 비동기 DB 테스트
 

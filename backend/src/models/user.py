@@ -11,6 +11,7 @@ from datetime import datetime
 from enum import StrEnum
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     Column,
     DateTime,
@@ -93,10 +94,14 @@ class User(SQLModel, table=True):
     # TOTP 2FA (M1.5 B). totp_secret IS NULL = 미등록. 등록 시 Fernet 암호문 저장(원문 아님,
     # lib/totp.py). totp_confirmed_at IS NULL = 미확인(첫 코드 검증 전), 값 존재 = 활성 ->
     # 관리자 로그인 2단계(TOTP)를 요구한다.
+    # totp_last_step = 마지막 성공 검증된 time-step(#56 replay 가드 - admin_auth_service가
+    # 엄격 증가만 통과). 시크릿 분실 수동 복구 시 위 두 컬럼과 함께 NULL로 되돌릴 것
+    # (step은 시크릿이 아니라 시각 기반이라 새 시크릿에도 이월된다).
     totp_secret: str | None = Field(default=None, sa_column=Column(String(255), nullable=True))
     totp_confirmed_at: datetime | None = Field(
         default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
     )
+    totp_last_step: int | None = Field(default=None, sa_column=Column(BigInteger, nullable=True))
     created_at: datetime | None = Field(default=None, sa_column=_created_at_column())
     updated_at: datetime | None = Field(
         default=None,

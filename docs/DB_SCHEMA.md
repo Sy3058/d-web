@@ -32,12 +32,16 @@ users
 ├── role            VARCHAR(16) NOT NULL DEFAULT 'reader'  -- reader | owner | moderator (RBAC)
 ├── is_email_verified BOOLEAN DEFAULT FALSE
 ├── email_verified_at TIMESTAMPTZ
+├── totp_secret     VARCHAR(255)          -- 2FA TOTP 시크릿(Fernet 암호문), NULL = 미등록
+├── totp_confirmed_at TIMESTAMPTZ         -- 첫 코드 검증 시각, NULL = 미확인(비활성)
+├── totp_last_step  BIGINT                -- 마지막 성공 검증 time-step (#56 replay 가드)
 ├── created_at      TIMESTAMPTZ DEFAULT now()
 ├── updated_at      TIMESTAMPTZ DEFAULT now()
 └── deleted_at      TIMESTAMPTZ           -- soft delete, NULL = 유효
 ```
 > - 탈퇴 시 `deleted_at` 기록, `nickname` → "알 수 없음" 익명화
 > - 결제 내역은 user 삭제 후에도 5년 보관 (전자상거래법)
+> - TOTP 3컬럼(M1.5 B, #56): 검증은 매칭 step 엄격 증가(`totp_last_step` - replay 차단, DECISIONS "2FA"). 시크릿 분실 수동 복구 시 **3컬럼 함께 NULL**(step은 시각 기반이라 새 시크릿에 이월됨)
 > - `role`: 권한(RBAC). `reader`(일반)/`owner`(작가-매출·정산·환불·콘텐츠+모더레이션)/`moderator`(게시글 삭제·문의 답변만, M4 owner가 부여). VARCHAR이라 후속 역할 추가는 앱 코드만(DB 마이그레이션 0). authz는 DB `user.role` 기준(JWT 미포함). M1.5는 `owner`만 빌드, B1 마이그레이션에서 `is_admin`→`role` 이관(true→owner). 개발자는 product 역할이 아님(매출 차단은 인프라/자격증명 계층 - M7). 상세 DECISIONS "관리자 권한 분리"
 
 ### oauth_accounts

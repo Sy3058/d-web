@@ -11,8 +11,11 @@ Fernet/pyotp 연산은 HMAC/AES라 CPU 경량 - bcrypt와 달리 이벤트 루�
 to_thread 오프로드가 불필요하다.
 """
 
+from datetime import UTC, datetime
+
 import pyotp
 from cryptography.fernet import Fernet
+from pyotp import utils
 
 from src.config import settings
 
@@ -45,6 +48,18 @@ def provisioning_uri(secret: str, account_email: str) -> str:
     return pyotp.TOTP(secret).provisioning_uri(name=account_email, issuer_name=settings.totp_issuer)
 
 
-def verify_code(secret: str, code: str) -> bool:
-    """제출된 6자리 코드가 유효한지 검증. valid_window=1로 ±30s 시계 드리프트 허용."""
-    return pyotp.TOTP(secret).verify(code, valid_window=1)
+def verify_code(secret: str, code: str) -> int | None:
+    """제출된 코드가 매칭된 time-step(int)을 반환, 무효면 None. ±1 step(±30s) 드리프트 허용.
+
+    pyotp verify(valid_window=1)와 같은 창 순회지만 bool 대신 매칭 step을 반환한다 -
+    replay 가드(#56, 같은 step 재사용 거부 - 판정은 admin_auth_service)가 step 값을
+    필요로 해서다. 비교는 pyotp와 동일한 상수시간 strings_equal. now는 aware UTC 고정 -
+    naive를 넘기면 timecode가 mktime(로컬 시각 해석) 경로로 빠져 서버 TZ만큼 step이 밀린다.
+    """
+    otp = pyotp.TOTP(secret)
+    now = datetime.now(UTC)
+    step = otp.timecode(now)
+    for offset in (-1, 0, 1):
+        if utils.strings_equal(str(code), str(otp.at(now, offset))):
+            return step + offset
+    return None
