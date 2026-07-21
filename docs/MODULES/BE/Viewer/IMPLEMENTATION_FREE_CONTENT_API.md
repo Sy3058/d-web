@@ -5,7 +5,7 @@
 | 모듈 | Backend / Viewer |
 | 관련 마일스톤 | [M2](../../../milestones/M2_foundation.md) 그룹 B - B1, B2 |
 | 작성 시점 | M2 B (2026-07-21) |
-| 상태 | Opus 계획 → 구현(보안 그룹) → 인라인 리뷰 → `/code-review` xhigh 2회(1차 10건 중 7건, 2차 8건 중 4건 반영). `pytest` 391 passed(신규 41), ruff·`alembic check` 클린. **마이그레이션 없음** |
+| 상태 | Opus 계획 → 구현(보안 그룹) → 인라인 리뷰 → `/code-review` xhigh 2회(1차 10건 중 7건, 2차 8건 중 4건 반영) → **실서버 스모크 통과**(presigned 실물 200 image/webp, §4). `pytest` 391 passed(신규 41), ruff·`alembic check` 클린. **마이그레이션 없음** |
 | 관련 문서 | M2_foundation.md 그룹 B·결정 1, IMPLEMENTATION_EPISODE_CONTENT_MODEL.md(#76), IMPLEMENTATION_VIEWER_PROGRESS.md(C1), study `derived-column-not-security-gate` |
 
 독자에게 회차 본문을 내보내는 유일한 경로. 유료 경계(paywall) 이전만 잘라서, 이미지 키를 presigned URL로 치환해 반환한다. 결제는 없다(M3) - M2는 전원이 미구매라 구매 검사 없이 절단만 한다.
@@ -117,7 +117,27 @@ M2 계획 B2의 DoD (c)는 "응답 JSON 어디에도 원본 R2 키 문자열 부
 
 ---
 
-## 4. 이연 / 후속
+## 4. 실서버 스모크 (2026-07-21)
+
+pytest는 presign을 전량 mock하므로, presigned 발급→실 이미지 수신을 실서버 + 실 R2로 별도 검증했다. 무료 이미지 1장 + 유료 이미지 1장(경계 앞/뒤)인 공개 회차로 `GET /episodes/{id}/content` 실측:
+
+| 검증 | 결과 |
+|------|------|
+| 응답 코드·헤더 | 200, `Cache-Control: no-store` |
+| 절단 | 무료 이미지 노드 1개만, 유료 이미지·paragraph·paywall 전부 잘림, `has_paid_part=true` |
+| image attrs | `{"src"}`만 (원본 `key` 미노출) |
+| 유료 키 유출 | 경계 뒤 키가 응답에 부재 |
+| **presigned 실물** | 응답 `src`를 실제 GET → **200 `image/webp` 53,558 bytes, 실 WebP 800×10682** |
+
+서명 경로 자체의 정상성도 확인됐다: 없는 키를 서명해 GET하면 R2가 **403(SignatureDoesNotMatch)이 아니라 404(NoSuchKey)**를 준다 - 서명은 통과했고 객체만 없다는 뜻.
+
+⚠️ **dev `dweb` 버킷 드리프트 발견**: 옛 시드 회차(ep4/ep5 등)의 `image_keys`가 가리키는 원고가 R2에 없다(버킷에 원고 0개 - D1 표지 이관 때 정리된 것으로 추정). 새로 업로드한 회차만 실물이 있다. **F 개발 시 이미지 테스트는 새 회차로** 할 것(옛 회차는 404). admin draft 재진입 미리보기·D2 썸네일 재생성도 옛 회차에선 깨질 수 있다(미검증 추정 - 같은 presign/download 경로).
+
+**F1에 남는 것**: 회차당 총 전송 바이트·장수 실측(다수 이미지, M2 결정 6 재검토 조건 - 5MB 크게 초과 시 서명 쿠키를 M3로).
+
+---
+
+## 5. 이연 / 후속
 
 | 항목 | 이동처 | 근거 |
 |------|--------|------|
