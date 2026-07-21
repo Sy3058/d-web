@@ -5,7 +5,7 @@
 | 모듈 | Backend / Auth |
 | 관련 마일스톤 | [M1.5](../../../milestones/M1.5_foundation.md) 그룹 B - B2(등록)·B3(로그인·가드) |
 | 작성 시점 | 2026-07-10 (구현은 2026-07-05~08, PR #58 - 사후 작성) |
-| 상태 | 구현 완료·머지(#58). 테스트 신규 45개(전체 148) 그린, 강 모델 보안 리뷰 통과(Critical/Major 0). 후속: TOTP replay 방지 #56, 죽은 토큰 정리 잡 #57 |
+| 상태 | 구현 완료·머지(#58). 테스트 신규 45개(전체 148) 그린, 강 모델 보안 리뷰 통과(Critical/Major 0). 후속: 죽은 토큰 정리 잡 #57 (TOTP replay 방지 #56은 2026-07-22 구현 완료 - §3 해당 절) |
 | 관련 문서 | DECISIONS.md "2FA"(신뢰 기기 포함), [IMPLEMENTATION_RBAC_TOTP_FOUNDATION.md](./IMPLEMENTATION_RBAC_TOTP_FOUNDATION.md)(B1 기반), study `trusted-device-2fa` |
 
 B1의 role·TOTP 컬럼 위에 얹은 관리자 로그인 플로우 전체. "owner의 유효 세션 = 전부 TOTP 통과" 불변식이 이 모듈의 핵심 설계 목표다.
@@ -70,11 +70,19 @@ confirm 시점엔 비번(1단계 pending 쿠키)과 TOTP 코드가 모두 검증
 
 ---
 
+### TOTP replay 방지 = totp_last_step 엄격 증가 + 조건부 UPDATE (#56, 2026-07-22 추가)
+
+- `users.totp_last_step`(BIGINT NULL)에 성공 검증된 time-step을 기록, **매칭 step > last_step(엄격 증가)만 통과**. valid_window(±30s) 창 안에서 같은/이전 코드를 다시 제출하면 거부된다(RFC 6238 verifier 요구). confirm(등록)과 login(2단계)이 같은 컬럼을 공유 - 등록에 쓴 코드로 곧장 로그인 재사용 불가.
+- `lib/totp.verify_code`를 **매칭 step(int) | None 반환**으로 재구현(pyotp `verify()`는 bool만 반환). 같은 창 순회 + 상수시간 `strings_equal`, ⚠️ 시각은 **aware UTC 고정**(naive를 넘기면 pyotp `timecode`가 `mktime` 로컬 해석 경로로 빠져 서버 TZ만큼 step이 밀린다).
+- step 전진은 **조건부 UPDATE**(`WHERE last_step IS NULL OR last_step < :step`, rowcount 판정 - refresh 회전 선점 I1과 같은 패턴)로 원자화. 같은 코드 **동시 제출**(실시간 릴레이 race)도 행 락 + READ COMMITTED 재평가로 한쪽만 승자 - read-compare-write였다면 둘 다 통과하는 TOCTOU가 남는다.
+- `setup_totp`가 `totp_last_step`을 리셋: step은 시크릿이 아니라 **시각 기반**이라 수동 복구(시크릿 분실 - 컬럼 NULL 후 재등록) 때 잔재가 이월되면 새 시크릿의 첫 confirm이 replay로 오거부될 수 있다(자가치유). 수동 복구 시엔 totp 3컬럼(secret·confirmed_at·last_step)을 함께 NULL(models/user.py 주석).
+- 검증(2026-07-22): pytest 전체 397 그린(신규 6: matched-step 창 단위 + replay 400·다음 창 통과·cross-endpoint 재사용 거부·동시 단일 승자·setup 리셋), ruff·alembic check(스크래치 DB) 클린. 마이그레이션 `e8ce7c708538`(nullable 컬럼 추가 1개).
+
 ## 4. 후속 (의도적 보류)
 
 | 항목 | 상태 |
 |------|------|
-| TOTP 코드 replay(같은 30s 창 재사용) 방지 | #56 - 1관리자 저위협이라 보류 |
+| TOTP 코드 replay(같은 30s 창 재사용) 방지 | ✅ 2026-07-22 구현 완료(#56) - §3 해당 절 |
 | 만료 `trusted_devices` 행 정리 | #57 죽은 토큰 정리 잡에 합류 |
 | TOTP 백업 코드 | 미도입 - 분실 복구는 운영자 DB 조작(DECISIONS) |
 
