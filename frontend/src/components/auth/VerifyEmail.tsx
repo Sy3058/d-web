@@ -3,7 +3,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { loginSchema } from '../../lib/validation';
 import { api, ApiError } from '../../lib/api';
-import { TextField, SubmitButton, FormError, FormNotice } from './ui';
+import { TextField, SubmitButton, FormError, FormNotice } from '../ui/forms';
 
 // 재발송 폼은 이메일만 필요 - 공용 loginSchema에서 email 규칙만 재사용.
 const resendSchema = loginSchema.pick({ email: true });
