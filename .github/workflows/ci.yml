@@ -1,6 +1,6 @@
 name: CI
 
-# main 대상 PR과 main 직접 푸시에서 백엔드 검사를 돌린다.
+# main 대상 PR과 main 직접 푸시에서 백엔드·프론트엔드 검사를 돌린다.
 # (CD/배포는 범위 밖 - 이 워크플로는 검증만 한다.)
 on:
   push:
@@ -83,3 +83,40 @@ jobs:
 
       - name: Pytest
         run: uv run pytest
+
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15      # 설치·빌드 행(hang) 시 무한 점유 방지
+
+    steps:
+      - uses: actions/checkout@v6
+
+      # pnpm을 setup-node보다 먼저 설치한다 - setup-node의 cache: pnpm이
+      # 'pnpm store path'를 실행하려면 pnpm이 이미 PATH에 있어야 한다.
+      # packageManager 필드가 없어 version 명시(로컬 pnpm 10과 일치, lockfile 9.0).
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10
+
+      - name: Install Node (frontend engines >=24)
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: pnpm
+
+      # 워크스페이스 루트에서 설치(shared는 TS 소스 직접 export라 별도 빌드 불요).
+      # frozen-lockfile: lockfile과 package.json 불일치 시 실패 = 재현성 게이트.
+      - name: Install dependencies (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+
+      # 게이트 3종은 frontend PR 템플릿 검증 체크와 일치.
+      # Sentry는 auth token 미설정 시 경고만 내고 릴리스/소스맵 업로드를 건너뜀(실측).
+      - name: Astro check
+        run: pnpm --filter frontend astro check
+
+      - name: Build
+        run: pnpm --filter frontend build
+
+      - name: Vitest
+        run: pnpm --filter frontend test
