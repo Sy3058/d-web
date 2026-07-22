@@ -79,4 +79,24 @@ describe('_auth 라우트 가드', () => {
     expect(isRedirect(err)).toBe(true);
     expect(redirectTarget(err)).toBe('/login');
   });
+
+  it('401로 리다이렉트할 때 캐시된 유저 정보를 비운다 (#91)', async () => {
+    // 직전 로그인에서 남은 캐시. 비우지 않으면 /login에서도 useMe 구독 UI가 이전 로그인
+    // 상태로 남고, 다른 계정으로 재로그인 시 직전 계정 데이터가 잠깐 비친다.
+    queryClient.setQueryData(ME_QUERY_KEY, user('owner'));
+    mockGet.mockRejectedValueOnce(new ApiError(401, '{"detail":"인증이 필요합니다"}'));
+
+    await runGuard(queryClient).catch(() => undefined);
+
+    expect(queryClient.getQueryData(ME_QUERY_KEY)).toBeUndefined();
+  });
+
+  it('reader로 리다이렉트할 때도 캐시를 비운다', async () => {
+    // fetchQuery가 reader를 캐시에 채운 뒤 role 체크에서 튕긴다 - 그 캐시도 남기지 않는다.
+    mockGet.mockResolvedValueOnce(user('reader'));
+
+    await runGuard(queryClient).catch(() => undefined);
+
+    expect(queryClient.getQueryData(ME_QUERY_KEY)).toBeUndefined();
+  });
 });

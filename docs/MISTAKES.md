@@ -92,6 +92,7 @@
   -> undefined를 "업데이트 안 함" 신호로 보고 bail-out한다. `null`은 타입 에러라 undefined로 바꾸기 쉬운데 그게 함정
   -> 로그아웃에서 이걸 쓰면 유저가 캐시에 남아 **뒤로가기 시 라우트 가드가 통과**한다(실측 재현)
   -> 캐시를 비우려면 `removeQueries({ queryKey })` 또는 `clear()`
+  -> clear는 **로그아웃 버튼만이 아니라 인증 영역을 떠나는 모든 경로**에 걸어야 한다 - 라우트 가드의 401 자동 리다이렉트·권한 부족 bounce도 포함(#91). 한 곳만 clear하면 나머지 경로에 잔상·계정 간 캐시 누수가 남는다
 
 - **`ensureQueryData`는 staleTime을 무시하고 캐시를 무조건 반환한다** (M1.5 F1)
   -> `if (cachedData !== undefined) return Promise.resolve(cachedData)` - `revalidateIfStale`을 주지 않으면 배경 재검증도 안 한다
