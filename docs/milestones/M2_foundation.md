@@ -176,17 +176,19 @@ M2 착수 전 확정. presigned·표지·콘텐츠 모델은 기존 결정(DECIS
 
 > 결정 3 적용: 페이지별 `prerender=false` SSR + `Cache-Control`. 부분 유료 회차는 잠금 배지 + 미리보기 진입 가능.
 
-### E1. 작품 목록 페이지
+### E1. 작품 목록 페이지 ✅ (2026-07-22 완료 - 브랜치 fe/feat/m2-catalog-pages)
 - 선행: A1, **A3**(태그 필터의 데이터 소스), D1
 - 산출물: `frontend/src/pages/works/index.astro`(SSR), `lib/api.ts` 카탈로그 fetch, 카드 그리드(표지 공개 URL·제목·태그)
 - ⚠️ 쿼리 파라미터(`?page=`·`?tag=`)를 서버에서 읽으므로 **SSR이 강제**된다 - 프리렌더 페이지의 `request.url`에는 search params가 없다(Astro 공식 문서 확인, GUIDE_ASTRO "확인된 델타"). 결정 3의 신선도 근거와 독립된 두 번째 근거.
 - ⚠️ 표지: `cover_image_url`은 `public_asset_base_url` 미설정(D1 전) 시 `/works/{id}/cover.webp`라는 **상대 경로**가 되어 Astro 서버로 요청이 간다. null 체크만으로 부족하고 `<img onerror>` 폴백이 필수.
 - DoD: `pnpm build` 통과, 목록 렌더 + 페이지네이션/태그 필터 동작, 미공개 작품 미노출.
 
-### E2. 작품 상세 + 회차목록 페이지
+### E2. 작품 상세 + 회차목록 페이지 ✅ (2026-07-22 완료)
 - 선행: A2, B1
 - 산출물: `pages/works/[id].astro`(SSR) - 작품 메타 + 회차 리스트(번호·제목·부제목·썸네일·무료/잠금 배지). 잠금 회차(`is_locked`)도 **뷰어 진입은 가능**(경계 이전 미리보기가 있으므로) - 배지로 유료 구간 존재만 표시.
 - DoD: 목록→상세 네비게이션, 무료/잠금 배지 정확, 미공개 회차 미노출.
+
+- **구현에서 확정(2026-07-22, E1+E2)**: ① 결정 3 캐시 정책은 `lib/http.ts applyCatalogCache`로 단일화(index/[id] 공용, 그룹 F 뷰어 셸도 재사용). ② fail-closed: `getWorkDetail`이 404·**422(무효 UUID)**를 null→404로 매핑, 5xx만 loadError 승격. ③ 목록/태그는 `Promise.allSettled`로 독립(태그 실패가 카탈로그를 안 무너뜨림). ④ 범위 밖 page는 마지막 페이지로 302, page 가드는 `isSafeInteger`(1e21 지수표기 누출 차단). ⑤ 회차 링크 = F1 계획값 `/works/{id}/{episode_no}` - 뷰어(F) 전까지 404가 의도된 상태. ⑥ WorkCard 태그는 중첩 앵커 회피로 링크 아님(상세 페이지 태그만 링크). workflow `/code-review` xhigh 실수정 5+1 반영, 오탐 2건 기각(v4 preflight `[hidden] !important`로 flex 미오버라이드 / F1 라우트 일치). 상세: `docs/MODULES/FE/Catalog/IMPLEMENTATION_CATALOG_PAGES.md`.
 
 ---
 
