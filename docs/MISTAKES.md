@@ -157,6 +157,14 @@
   -> `Controller`로 양방향을 명시한다: `value={field.value ? 'true' : 'false'}` + `onChange={e => field.onChange(e.target.value === 'true')}`
   -> 회귀 테스트는 "`defaultValues`에 `true`를 주고 아무 조작 없이 제출 -> `true`가 그대로 나오는가"로 고정(이 케이스가 실제로 실패를 잡았다)
 
+- **CSS 주석 안에서 `*` 바로 뒤 `/`가 오면 주석이 조기 종료된다** (M2 E, globals.css, 2026-07-22)
+  -> `/* leading-*/tracking-* ... */`처럼 설명에 `-*/`를 쓰면 앞의 `*/`가 주석 종료 토큰이라 주석이 거기서 끊긴다. 남은 텍스트(`tracking-* ... */`)가 CSS 규칙으로 파싱돼 Tailwind가 `Missing opening (` 에러를 내는데, **스택트레이스가 tailwindcss 내부라** 실제 소스 줄을 안 가리켜 원인 추적이 오래 걸린다
+  -> 이분 탐색으로 격리(주석 전량 제거 후 하나씩 복원 -> 토큰이 아니라 주석이 원인). 주석에 유틸리티 클래스 나열 시 슬래시 대신 쉼표(`leading, tracking, font`)를 쓴다
+
+- **Tailwind v4는 `.flex`가 `[hidden]` 속성을 안 덮는다(v3와 다름)** (M2 E, 2026-07-22)
+  -> "`<div hidden class="flex">`는 flex가 이겨 안 숨겨진다"는 v3의 유명한 함정인데, v4 preflight는 `[hidden]:where(...) { display: none !important }`로 `!important`를 붙여 utilities 레이어의 일반 `display:flex`를 이긴다(`node_modules/tailwindcss/preflight.css`)
+  -> v3 지식으로 "hidden 대신 .hidden 클래스 써야 한다"고 단정하지 말 것. v4에선 `hidden` 속성이 정상 동작한다(코드 리뷰가 이걸 v3 기준으로 오탐한 사례)
+
 ## 공통
 
 - pnpm workspace에서 `@tailwindcss/vite` peer dep 충돌

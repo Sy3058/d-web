@@ -170,8 +170,8 @@ M4 (커뮤니티 - 후원 제외)
 - [ ] 작가 소개는 Astro 마크다운 확정(백엔드 API 없음 - M2_foundation 결정 4)
 
 ### 프론트엔드 (Astro)
-- [ ] 작품 목록 페이지 (SSR `prerender=false` + 짧은 Cache-Control - M2_foundation 결정 3)
-- [ ] 작품 상세 + 에피소드 목록 페이지 (SSR)
+- [x] 작품 목록 페이지 (SSR `prerender=false` + 짧은 Cache-Control - M2_foundation 결정 3) *(그룹 E1 완료 2026-07-22: 태그 필터·페이지네이션·표지 onerror 폴백. IMPLEMENTATION_CATALOG_PAGES.md)*
+- [x] 작품 상세 + 에피소드 목록 페이지 (SSR) *(그룹 E2 완료 2026-07-22: 무료/잠금 배지·회차 링크(F1 라우트 선점). /code-review xhigh 반영)*
 - [ ] **뷰어 - 콘텐츠 문서 렌더러** (React 아일랜드, `@tiptap/core generateHTML`)
   - 글+이미지 혼합 렌더, **이미지 즉시 전량 요청 + `fetchpriority`**(lazy 아님 - M2_foundation 결정 6), 이전/다음 화 이동, 경계 지점 잠금 placeholder
   - 드래그/복사/우클릭/저장 차단 (UX 우선, 완벽 차단 아님)

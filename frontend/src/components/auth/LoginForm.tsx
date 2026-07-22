@@ -3,7 +3,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { loginSchema, type LoginInput } from '../../lib/validation';
 import { api, ApiError, extractDetail } from '../../lib/api';
-import { TextField, SubmitButton, FormError } from './ui';
+import { TextField, SubmitButton, FormError } from '../ui/forms';
 
 export default function LoginForm() {
   const {

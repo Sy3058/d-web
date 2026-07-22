@@ -1,0 +1,13 @@
+---
+// 카드 표면 (DESIGN.md Cards): 흰 배경 + 1px 보더 + control 라운드, 그림자 없음.
+// 깊이는 보더와 여백으로만 표현한다(무액센트·no-shadow 원칙).
+interface Props {
+  class?: string;
+}
+
+const { class: className } = Astro.props;
+---
+
+<div class:list={['bg-paper border border-line rounded-control p-8', className]}>
+  <slot />
+</div>

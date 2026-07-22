@@ -1,0 +1,27 @@
+---
+// 태그 필터 칩 (DESIGN.md Chips/Tags): pill + 회색(hover 토큰) 채움, 테두리 없음.
+// href가 있으면 필터 링크(<a>), 없으면 표시 전용(<span>) - WorkCard의 태그 나열은
+// 클릭 불가라 후자를 쓴다.
+interface Props {
+  href?: string;
+  active?: boolean;
+  class?: string;
+}
+
+const { href, active = false, class: className } = Astro.props;
+
+const base = 'inline-flex items-center rounded-pill px-3 py-1 text-sm font-medium transition-colors';
+const state = active ? 'bg-ink-strong text-paper' : 'bg-hover text-ink hover:bg-line';
+---
+
+{
+  href ? (
+    <a href={href} class:list={[base, state, className]}>
+      <slot />
+    </a>
+  ) : (
+    <span class:list={[base, state, className]}>
+      <slot />
+    </span>
+  )
+}

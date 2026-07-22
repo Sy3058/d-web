@@ -1,0 +1,22 @@
+---
+import Chip from '../ui/Chip.astro';
+import { buildWorksUrl, type PublicTag } from '../../lib/catalog';
+
+interface Props {
+  tags: PublicTag[];
+  activeTag?: string;
+}
+
+const { tags, activeTag } = Astro.props;
+---
+
+<nav class="flex flex-wrap gap-2" aria-label="태그 필터">
+  <Chip href={buildWorksUrl({})} active={!activeTag}>전체</Chip>
+  {
+    tags.map((tag) => (
+      <Chip href={buildWorksUrl({ tag: tag.name })} active={activeTag === tag.name}>
+        {tag.name} ({tag.work_count})
+      </Chip>
+    ))
+  }
+</nav>
