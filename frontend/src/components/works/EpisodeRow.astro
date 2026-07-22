@@ -1,0 +1,52 @@
+---
+// 회차 목록 행 (E2). 잠금 회차도 뷰어 진입은 가능하다(경계 이전 미리보기가 있음) -
+// 배지는 유료 구간 존재만 표시하고 링크 자체는 항상 활성화한다.
+import Badge from '../ui/Badge.astro';
+import { formatPrice, type EpisodeSummary } from '../../lib/catalog';
+
+interface Props {
+  workId: string;
+  episode: EpisodeSummary;
+  first?: boolean;
+}
+
+const { workId, episode, first = false } = Astro.props;
+---
+
+<a
+  href={`/works/${workId}/${episode.episode_no}`}
+  class:list={['flex items-center gap-4 py-4 hover:bg-hover -mx-4 px-4', !first && 'border-t border-line']}
+>
+  <div class="h-16 w-16 shrink-0 overflow-hidden rounded-control bg-hover">
+    {
+      episode.thumbnail_url && (
+        <img
+          src={episode.thumbnail_url}
+          alt=""
+          loading="lazy"
+          class="h-full w-full object-cover"
+          onerror="this.remove();"
+        />
+      )
+    }
+  </div>
+  <div class="min-w-0 flex-1">
+    <div class="flex items-center gap-2">
+      <span class="text-label-md text-muted tabular-nums">{episode.episode_no}화</span>
+      <span class="text-body-md text-ink truncate">{episode.title}</span>
+    </div>
+    {episode.subtitle && <p class="text-sm text-muted truncate">{episode.subtitle}</p>}
+  </div>
+  <div class="flex shrink-0 items-center gap-2">
+    {
+      episode.is_free ? (
+        <Badge variant="outline">무료</Badge>
+      ) : (
+        <>
+          <Badge variant="locked">잠금</Badge>
+          <span class="text-label-md text-ink tabular-nums">{formatPrice(episode.price)}</span>
+        </>
+      )
+    }
+  </div>
+</a>

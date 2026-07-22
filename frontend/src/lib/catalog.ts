@@ -10,6 +10,12 @@ export const WORK_STATUS_LABEL: Record<WorkStatus, string> = {
   hiatus: '휴재',
 };
 
+// 백엔드가 프론트에 미러링되지 않은 새 WorkStatus를 보내면 라벨 조회가 undefined가 돼
+// 배지가 빈 값으로 렌더된다 - 원값이라도 노출해 상태가 통째로 사라지지 않게 폴백한다.
+export function statusLabel(status: WorkStatus): string {
+  return WORK_STATUS_LABEL[status] ?? status;
+}
+
 export interface Tag {
   id: string;
   name: string;
@@ -72,14 +78,15 @@ export async function getTags(): Promise<PublicTag[]> {
   return api.get<PublicTag[]>('/tags');
 }
 
-// 404는 "작품 없음"(정상 흐름)이라 null 반환 - lib/auth.ts의 getMe 패턴과 동일.
+// 404(작품 없음)·422(무효 UUID 등 경로 파라미터 검증 실패)는 모두 "이 id로는 작품을
+// 찾을 수 없음"(영구·정상 흐름)이라 null 반환 - lib/auth.ts의 getMe 패턴과 동일.
 // 그 외 에러(5xx 등)는 그대로 던진다 - 여기서 삼키면 실제 장애가 "작품 없음"으로
 // 위장돼 my/index.astro의 401 vs 5xx 구분과 같은 이유로 fail-closed를 유지한다.
 export async function getWorkDetail(id: string): Promise<WorkDetail | null> {
   try {
     return await api.get<WorkDetail>(`/works/${id}`);
   } catch (e) {
-    if (e instanceof ApiError && e.status === 404) return null;
+    if (e instanceof ApiError && (e.status === 404 || e.status === 422)) return null;
     throw e;
   }
 }

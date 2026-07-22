@@ -1,0 +1,42 @@
+---
+import Button from '../ui/Button.astro';
+import { buildWorksUrl } from '../../lib/catalog';
+
+interface Props {
+  page: number;
+  totalPages: number;
+  tag?: string;
+}
+
+const { page, totalPages, tag } = Astro.props;
+const hasPrev = page > 1;
+const hasNext = page < totalPages;
+---
+
+{
+  totalPages > 1 && (
+    <nav class="flex items-center justify-center gap-4" aria-label="페이지 이동">
+      {hasPrev ? (
+        <Button variant="secondary" href={buildWorksUrl({ page: page - 1, tag })}>
+          이전
+        </Button>
+      ) : (
+        <Button variant="secondary" disabled>
+          이전
+        </Button>
+      )}
+      <span class="text-label-md text-muted tabular-nums">
+        {page} / {totalPages}
+      </span>
+      {hasNext ? (
+        <Button variant="secondary" href={buildWorksUrl({ page: page + 1, tag })}>
+          다음
+        </Button>
+      ) : (
+        <Button variant="secondary" disabled>
+          다음
+        </Button>
+      )}
+    </nav>
+  )
+}

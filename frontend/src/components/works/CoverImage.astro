@@ -1,0 +1,33 @@
+---
+// 표지 이미지. cover_image_url이 null(표지 미업로드)이거나 로드 실패(404 등, 실서버
+// 스모크에서 dev 버킷 드리프트 발견)해도 깨진 이미지 대신 중립 placeholder를 보인다.
+interface Props {
+  src: string | null;
+  alt: string;
+  class?: string;
+}
+
+const { src, alt, class: className } = Astro.props;
+---
+
+<div
+  class:list={[
+    'relative aspect-[3/4] w-full overflow-hidden rounded-surface bg-hover',
+    className,
+  ]}
+>
+  {
+    src && (
+      <img
+        src={src}
+        alt={alt}
+        loading="lazy"
+        class="h-full w-full object-cover"
+        onerror="this.style.display='none'; this.nextElementSibling.removeAttribute('hidden');"
+      />
+    )
+  }
+  <div class="absolute inset-0 flex items-center justify-center text-label-md text-muted" hidden={!!src}>
+    표지 준비 중
+  </div>
+</div>
