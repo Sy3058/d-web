@@ -120,3 +120,34 @@ jobs:
 
       - name: Vitest
         run: pnpm --filter frontend test
+
+  admin:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15      # 설치·빌드 행(hang) 시 무한 점유 방지
+
+    # 셋업 구성·순서·버전 근거는 frontend job 주석 참조(동일 구성).
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10
+
+      - name: Install Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: pnpm
+
+      - name: Install dependencies (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+
+      - name: ESLint
+        run: pnpm --filter admin lint
+
+      - name: Build (tsc + vite)
+        run: pnpm --filter admin build
+
+      - name: Vitest
+        run: pnpm --filter admin test
