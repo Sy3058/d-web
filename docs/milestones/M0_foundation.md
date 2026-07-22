@@ -218,6 +218,8 @@
 - 결정 (2026-06-22): `paths` 필터 **미적용** - required check면 path-skip이 pending으로 머지를 막고, 1인 저PR 볼륨이라 분 절약 한계효용 낮음.
 - 메모: 린트는 ESLint로 통일(biome 미채택, DECISIONS "린트/포맷"). frontend는 ESLint 미설정이라 F1 전 `eslint-plugin-astro` 셋업이 선행 필요.
 - **부분 구현 (백엔드분, 2026-06-22, PR `common/ci/backend-ci`)**: `.github/workflows/ci.yml` 백엔드 job = `postgres:16` 서비스 + `uv sync --locked` + `ruff check src/` + `ruff format --check src/ tests/` + `pytest`(81). 범위는 be.md 게이트와 일치(migrations 제외). 상세 결정은 DECISIONS "CI/CD 결정". **FE/admin(eslint+tsc)은 frontend ESLint 셋업 선행 → 후속.** ⚠️ branch protection에 `backend` required check 등록이 게이트 효력의 전제(GHA 그린 확인 후 P0). 그린 확인 후 그룹 G "PR 푸시 시 CI 통과" 마킹.
+- **부분 구현 (프론트엔드분, 2026-07-23, PR `common/chore/frontend-ci`)**: frontend job = `pnpm/action-setup@v6`(pnpm 10, setup-node보다 선행 - cache가 pnpm 요구) + `setup-node@v7`(Node 24, cache: pnpm) + `pnpm install --frozen-lockfile` + `astro check` + `build` + `vitest run`(12). Sentry는 auth token 미설정 시 경고만(소스맵 업로드 skip, 실측).
+- **부분 구현 (admin분, 2026-07-23, 동일 PR `common/chore/frontend-ci`)**: admin job = frontend job과 동일 셋업 + `eslint .` + `tsc -b && vite build` + `vitest run`(54). admin은 ESLint 기설정이라 "FE/admin 후속" 중 admin은 선행 조건이 없었음을 확인하고 편입. `.env` 제거 상태 build·test 그린 실측. **남은 후속 = frontend ESLint job(`eslint-plugin-astro` 셋업 선행)·CD.**
 
 ### F2. build + push 워크플로우
 - 선행: F1, D3
