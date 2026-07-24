@@ -427,6 +427,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/works/{work_id}/episodes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Work Episodes
+         * @description 공개 회차 목록 (M2 B1). GET /works/{id}(A2)의 episodes와 같은 배열을, 작품 메타
+         *     없이 필요한 소비자(뷰어 네비 등)를 위해 단독으로 낸다.
+         */
+        get: operations["list_work_episodes_works__work_id__episodes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/tags": {
         parameters: {
             query?: never;
@@ -437,6 +458,44 @@ export interface paths {
         /** List Tags */
         get: operations["list_tags_tags_get"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/episodes/{episode_id}/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Episode Content
+         * @description 무료 구간 본문(유료 경계 이전)을 presigned URL로 치환해 반환한다.
+         */
+        get: operations["get_episode_content_episodes__episode_id__content_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/episodes/{episode_id}/progress": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Progress */
+        get: operations["read_progress_episodes__episode_id__progress_get"];
+        /** Update Progress */
+        put: operations["update_progress_episodes__episode_id__progress_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -498,6 +557,7 @@ export interface components {
             content: {
                 [key: string]: unknown;
             };
+            draft: components["schemas"]["EpisodeDraft"] | null;
             /** Image Keys */
             image_keys: string[];
             /** Is Published */
@@ -536,6 +596,23 @@ export interface components {
             image: string;
         };
         /**
+         * EpisodeContent
+         * @description 무료 구간 본문 응답 (M2 B2). 회차 메타·네비는 GET /works/{id}(A2)가 담당한다.
+         */
+        EpisodeContent: {
+            /**
+             * Episode Id
+             * Format: uuid
+             */
+            episode_id: string;
+            /** Content */
+            content: {
+                [key: string]: unknown;
+            };
+            /** Has Paid Part */
+            has_paid_part: boolean;
+        };
+        /**
          * EpisodeCreate
          * @description draft 생성(is_published=false). 이미지·본문은 이후 요청(D3 구조 A + F3 에디터 PUT).
          *
@@ -562,6 +639,24 @@ export interface components {
             price?: number | null;
             /** Published At */
             published_at?: string | null;
+        };
+        /**
+         * EpisodeDraft
+         * @description 편집본 봉투(#86) - episodes.draft JSONB에 통째로 저장된다.
+         *
+         *     본문만 담으면 공개 회차의 제목·부제 수정이 여전히 임시저장 즉시 라이브 반영되는
+         *     반쪽 분리가 되므로 메타까지 스냅샷한다. content 검증(화이트리스트·상한·키 소유)은
+         *     image_keys가 필요해 service(lib/content_doc)가 수행한다.
+         */
+        EpisodeDraft: {
+            /** Title */
+            title: string;
+            /** Subtitle */
+            subtitle?: string | null;
+            /** Content */
+            content: {
+                [key: string]: unknown;
+            };
         };
         /**
          * EpisodeImageUrl
@@ -604,7 +699,7 @@ export interface components {
         /**
          * EpisodeUpdate
          * @description 부분 수정. 생략 = 미변경, 명시적 null은 nullable 컬럼(subtitle·price·thumbnail·
-         *     published_at)만.
+         *     published_at·draft)만.
          *
          *     - content: 본문(TipTap JSON - lib/content_doc 화이트리스트·상한·이미지 키 소유 검증).
          *       유료 경계(paywall 노드) 위치가 곧 무료/유료 분량이고 is_free는 서버가 파생한다
@@ -618,6 +713,9 @@ export interface components {
          *       무관하게 항상 NULL 초기화**(E1 부활 차단 - stale 에코 방어. 재예약은 is_published
          *       없이 published_at만 별도 요청). published_at 과거값 = 다음 틱 공개(E1).
          *       naive 시각은 422(AwareDatetime).
+         *     - draft: 편집본 봉투(#86). content(발행본)와 **동시 전송 불가**(422) - "임시저장"과
+         *       "발행"은 다른 액션이다. 명시적 null = 편집본 버리기. content가 오는 요청은 서버가
+         *       draft를 NULL로 비운다(발행 = 편집본 소진).
          */
         EpisodeUpdate: {
             /** Episode No */
@@ -640,6 +738,7 @@ export interface components {
             content?: {
                 [key: string]: unknown;
             } | null;
+            draft?: components["schemas"]["EpisodeDraft"] | null;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -660,6 +759,26 @@ export interface components {
         MessageResponse: {
             /** Message */
             message: string;
+        };
+        /** ProgressRead */
+        ProgressRead: {
+            /**
+             * Episode Id
+             * Format: uuid
+             */
+            episode_id: string;
+            /** Page No */
+            page_no: number;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** ProgressUpdate */
+        ProgressUpdate: {
+            /** Page No */
+            page_no: number;
         };
         /** PublicTag */
         PublicTag: {
@@ -1711,6 +1830,37 @@ export interface operations {
             };
         };
     };
+    list_work_episodes_works__work_id__episodes_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                work_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EpisodeSummary"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_tags_tags_get: {
         parameters: {
             query?: never;
@@ -1727,6 +1877,103 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PublicTag"][];
+                };
+            };
+        };
+    };
+    get_episode_content_episodes__episode_id__content_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                episode_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EpisodeContent"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_progress_episodes__episode_id__progress_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                episode_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProgressRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_progress_episodes__episode_id__progress_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                episode_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProgressUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProgressRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

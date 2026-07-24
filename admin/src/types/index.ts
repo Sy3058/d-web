@@ -24,6 +24,8 @@ export type WorkUpdate = components['schemas']['WorkUpdate'];
 export type Episode = components['schemas']['AdminEpisodeRead'];
 export type EpisodeCreate = components['schemas']['EpisodeCreate'];
 export type EpisodeUpdate = components['schemas']['EpisodeUpdate'];
+// 편집본 봉투(#86) - 공개 회차의 임시저장은 content 대신 이걸 PUT한다.
+export type EpisodeDraft = components['schemas']['EpisodeDraft'];
 export type EpisodeImageUrl = components['schemas']['EpisodeImageUrl'];
 
 // 본문(TipTap/ProseMirror JSON 문서). 백엔드 content는 dict[str, Any]라 codegen이

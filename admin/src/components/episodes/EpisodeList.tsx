@@ -60,6 +60,11 @@ export function EpisodeList({ workId, episodes, basePrice }: EpisodeListProps) {
                 <span className={`rounded px-2 py-0.5 text-xs ${badge.className}`}>
                   {badge.label}
                 </span>
+                {episode.draft != null && (
+                  <span className="ml-1 rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-700">
+                    임시저장본
+                  </span>
+                )}
               </td>
             </tr>
           );
