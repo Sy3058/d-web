@@ -142,9 +142,13 @@ episodes
 ├── is_free      BOOLEAN DEFAULT FALSE     -- ⚠️ 파생 컬럼: content의 paywall 경계에서
 │               -- 서버가 계산(직접 입력 폐지) - 목록·무료구간 SQL용 비정규화
 ├── content      JSONB NOT NULL DEFAULT '{"type": "doc", "content": []}'
-│               -- 본문 = TipTap/ProseMirror JSON 문서(글+이미지+유료 경계 paywall 노드)
+│               -- 본문(발행본) = TipTap/ProseMirror JSON 문서(글+이미지+유료 경계 paywall 노드)
 │               -- 표시 순서·구성의 진실. 검증은 lib/content_doc (화이트리스트·상한·키 소유)
 │               -- 유의미 내용 없으면 EMPTY_DOC으로 정규화(스케줄러 SQL 가드 성립 조건)
+├── draft        JSONB                     -- 편집본 봉투 {"title","subtitle","content"} (#86)
+│               -- NULL = 편집본 없음. 공개 회차의 임시저장은 여기에만 쓰고, content(발행본)는
+│               -- 발행 액션(is_published 동반 요청)만 덮는다. content 쓰기 시 자동 NULL(소진).
+│               -- owner 전용(AdminEpisodeRead) - 독자 DTO 노출 금지(미발행 원고)
 ├── image_keys   JSONB NOT NULL DEFAULT '[]'
 │               -- 업로드 매니페스트: 이 회차에 업로드된 R2 키 전량(50장 가드·미참조 추적)
 │               -- content의 image 키는 이 배열의 부분집합이어야 함 (F3 재설계로

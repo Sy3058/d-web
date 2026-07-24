@@ -133,6 +133,9 @@
 - **기본값(default)이 있는 요청 필드를 openapi-typescript가 required(`?` 없음)로 뽑는다** (M1.5 F3, 2026-07-17)
   → Pydantic `title: str = Field(default="무제")`는 서버에선 생략 가능인데 생성된 TS는 `title: string`(필수)이 돼 `mutateAsync({})`가 TS 에러
   → 호출부에서 값을 명시해 넘기거나(예: 현재 입력값) 생략이 정말 필요하면 스키마/codegen을 조정. "서버 기본값 = 클라 선택"이 자동으로 성립하지 않는다
+- **응답 스키마 필드를 `dict`(무형 JSON)로 두면 codegen이 `{[key: string]: unknown}`으로 뽑아 클라 속성 접근이 전부 tsc 에러** (M2 #86, 2026-07-23)
+  → `AdminEpisodeRead.draft: dict | None`로 뒀더니 admin에서 `draft.title` 접근이 "Property 'title' does not exist" 5건(실측)
+  → 클라이언트가 내부 구조를 읽는 필드는 Pydantic 정타입 모델(예: `EpisodeDraft`)로 선언 - 쓰기 경로가 같은 스키마로 검증하면 저장 형태도 보장돼 타입이 거짓말하지 않는다
 
 ## 폼 / CSS
 
