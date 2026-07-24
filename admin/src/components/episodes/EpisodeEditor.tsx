@@ -45,10 +45,15 @@ export function EpisodeEditor({ initialWorkId, episode }: EpisodeEditorProps) {
   // 별도 BE 작업). 편집 모드는 episode.work_id로 고정.
   const [workId, setWorkId] = useState<string | null>(episode?.work_id ?? initialWorkId ?? null);
   const [episodeId, setEpisodeId] = useState<string | null>(episode?.id ?? null);
+  // 편집 진입: 편집본(draft)이 있으면 그걸 연다(#86). 발행본(content)은 '수정 반영' 전까지
+  // 독자에게 그대로 보인다.
+  const storedDraft = episode?.draft ?? null;
+  const initialTitle = storedDraft?.title ?? episode?.title;
   const [title, setTitle] = useState(
-    episode && episode.title !== TITLE_FALLBACK ? episode.title : '',
+    initialTitle && initialTitle !== TITLE_FALLBACK ? initialTitle : '',
   );
-  const [subtitle, setSubtitle] = useState(episode?.subtitle ?? '');
+  const [subtitle, setSubtitle] = useState(storedDraft?.subtitle ?? episode?.subtitle ?? '');
+  const [hasDraft, setHasDraft] = useState(storedDraft !== null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
@@ -66,7 +71,7 @@ export function EpisodeEditor({ initialWorkId, episode }: EpisodeEditorProps) {
 
   const editor = useEditor({
     extensions: buildEditorExtensions(imageStore),
-    content: ensurePaywall(episode?.content as JSONContent | undefined),
+    content: ensurePaywall((storedDraft?.content ?? episode?.content) as JSONContent | undefined),
     immediatelyRender: false,
     editorProps: {
       attributes: { class: 'min-h-[300px] py-3 focus:outline-none' },
@@ -92,6 +97,9 @@ export function EpisodeEditor({ initialWorkId, episode }: EpisodeEditorProps) {
   const workLocked = episode !== undefined || episodeId !== null || initialWorkId !== undefined;
   const workName = works.data?.find((work) => work.id === workId)?.title ?? '';
   const canPersist = !!workId && !!editor;
+  // 공개 중인 회차 = 임시저장/발행의 의미가 달라지는 모드(#86). 로드 시점 스냅샷이라
+  // 편집 중 스케줄러가 공개 전환하면 어긋날 수 있는데, 그 창은 서버 409가 잡는다.
+  const isLive = episode?.is_published === true;
 
   const summary = editor
     ? summarizeContent(editor.state.doc)
@@ -144,14 +152,44 @@ export function EpisodeEditor({ initialWorkId, episode }: EpisodeEditorProps) {
     setSaving(true);
     setError(null);
     try {
-      const saved = await save({});
-      // 신규(작품 경로/글로벌)에서 저장했으면 URL이 draft를 가리키게 편집 라우트로 이동.
-      if (!episode) {
-        navigate({
-          to: '/works/$workId/episodes/$episodeId',
-          params: { workId: saved.work_id, episodeId: saved.id },
+      if (isLive) {
+        // 공개 회차: 발행본(content)이 아니라 편집본(draft)에만 저장한다(#86 - 독자 무접촉).
+        // 이 분기는 UX일 뿐 방어선이 아니다 - 서버가 공개 회차의 content 단독 쓰기를 409로
+        // 거부하므로(스케줄러 전환 race 포함) 여기서 틀려도 라이브는 안 덮인다.
+        const content = (editor?.getJSON() as ContentDoc | undefined) ?? EMPTY_DOC;
+        await updateEpisode.mutateAsync({
+          episodeId: episode.id,
+          body: { draft: { title: title.trim(), subtitle: subtitle.trim() || null, content } },
         });
+        setHasDraft(true);
+      } else {
+        const saved = await save({});
+        // 신규(작품 경로/글로벌)에서 저장했으면 URL이 draft를 가리키게 편집 라우트로 이동.
+        if (!episode) {
+          navigate({
+            to: '/works/$workId/episodes/$episodeId',
+            params: { workId: saved.work_id, episodeId: saved.id },
+          });
+        }
       }
+    } catch (err) {
+      setError(describeAuthError(err));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // 편집본 버리기: 서버의 draft를 비우고 에디터를 발행본 상태로 되돌린다.
+  const onDiscardDraft = async () => {
+    if (!episode) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await updateEpisode.mutateAsync({ episodeId: episode.id, body: { draft: null } });
+      setHasDraft(false);
+      setTitle(episode.title !== TITLE_FALLBACK ? episode.title : '');
+      setSubtitle(episode.subtitle ?? '');
+      editor?.commands.setContent(ensurePaywall(episode.content as JSONContent | undefined));
     } catch (err) {
       setError(describeAuthError(err));
     } finally {
@@ -316,6 +354,20 @@ export function EpisodeEditor({ initialWorkId, episode }: EpisodeEditorProps) {
         className="border-b border-gray-100 pb-1 text-lg text-gray-600 focus:border-gray-300 focus:outline-none"
       />
 
+      {isLive && hasDraft && (
+        <div className="flex items-center justify-between gap-2 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          <span>발행본과 별도의 임시저장본이 있어요. '수정 반영'을 눌러야 독자에게 반영됩니다.</span>
+          <button
+            type="button"
+            onClick={onDiscardDraft}
+            disabled={saving}
+            className="shrink-0 rounded border border-amber-300 px-2 py-1 text-xs hover:bg-amber-100 disabled:opacity-50"
+          >
+            임시저장본 버리기
+          </button>
+        </div>
+      )}
+
       <div
         data-testid="editor-dropzone"
         onDragOver={onEditorDragOver}
@@ -381,14 +433,16 @@ export function EpisodeEditor({ initialWorkId, episode }: EpisodeEditorProps) {
           disabled={saving || !canPersist}
           className="rounded bg-gray-900 px-4 py-2 text-sm text-white disabled:opacity-50"
         >
-          발행하기
+          {isLive ? '수정 반영' : '발행하기'}
         </button>
       </div>
       {!workId && (
         <p className="text-xs text-amber-600">저장·발행하려면 먼저 시리즈(작품)를 선택하세요.</p>
       )}
       <p className="text-xs text-gray-500">
-        임시저장은 비공개로 남고, 발행하기에서 지금 공개하거나 원하는 시각으로 예약할 수 있어요.
+        {isLive
+          ? '공개 중인 회차예요. 임시저장은 독자에게 보이지 않고, 수정 반영을 눌러야 발행본에 반영돼요.'
+          : '이 회차는 아직 발행 전이라 독자에게 보이지 않아요. 임시저장으로 이어서 쓰고, 발행하기에서 지금 공개하거나 예약할 수 있어요.'}
       </p>
 
       {publishOpen && (
@@ -399,6 +453,7 @@ export function EpisodeEditor({ initialWorkId, episode }: EpisodeEditorProps) {
           defaultPrice={episode?.price ?? null}
           hasPaidContent={hasPaidContent}
           canPublish={hasAnyContent}
+          isLive={isLive}
           saving={saving}
           error={error}
           onCancel={() => setPublishOpen(false)}

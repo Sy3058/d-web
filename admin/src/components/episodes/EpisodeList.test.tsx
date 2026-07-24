@@ -21,6 +21,7 @@ function makeEpisode(overrides: Partial<Episode>): Episode {
     price: null,
     is_free: false,
     content: { type: 'doc', content: [] },
+    draft: null,
     image_keys: [],
     is_published: false,
     published_at: null,
@@ -66,5 +67,23 @@ describe('EpisodeList', () => {
   it('에피소드가 없으면 빈 상태 안내를 보여준다', () => {
     render(<EpisodeList workId="w1" episodes={[]} />);
     expect(screen.getByText(/아직 에피소드가 없습니다/)).toBeInTheDocument();
+  });
+
+  it('편집본(draft)이 있는 회차에 임시저장본 배지를 붙인다(#86)', () => {
+    render(
+      <EpisodeList
+        workId="w1"
+        episodes={[
+          makeEpisode({
+            id: 'e1',
+            is_published: true,
+            published_at: '2026-07-01T00:00:00Z',
+            draft: { title: '고친 제목', subtitle: null, content: { type: 'doc', content: [] } },
+          }),
+          makeEpisode({ id: 'e2', episode_no: 2 }),
+        ]}
+      />,
+    );
+    expect(screen.getAllByText('임시저장본')).toHaveLength(1);
   });
 });

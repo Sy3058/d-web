@@ -45,6 +45,7 @@ function makeEpisode(overrides: Partial<Episode> = {}): Episode {
     price: null,
     is_free: true,
     content: { type: 'doc', content: [] },
+    draft: null,
     image_keys: [],
     is_published: false,
     published_at: null,
@@ -303,5 +304,100 @@ describe('EpisodeEditor', () => {
     expect(await screen.findByText('제목을 작성해 주세요.')).toBeInTheDocument();
     // 모달 전용 '공개 시점'이 없으면 모달이 열리지 않은 것.
     expect(screen.queryByText('공개 시점')).toBeNull();
+  });
+
+  it('공개 회차 임시저장: content 대신 draft 봉투만 PUT한다(#86)', async () => {
+    const episode = makeEpisode({
+      id: 'e1',
+      title: '1화',
+      is_published: true,
+      published_at: '2026-07-20T00:00:00Z',
+      content: {
+        type: 'doc',
+        content: [{ type: 'paragraph', content: [{ type: 'text', text: '발행본' }] }],
+      },
+    });
+    vi.mocked(api.put).mockResolvedValueOnce(episode);
+    renderEditor({ episode });
+
+    fireEvent.click(await screen.findByRole('button', { name: '임시저장' }));
+
+    await waitFor(() => expect(vi.mocked(api.put)).toHaveBeenCalled());
+    const [putPath, putBody] = vi.mocked(api.put).mock.calls[0] as [
+      string,
+      Record<string, unknown>,
+    ];
+    expect(putPath).toBe('/admin/works/w1/episodes/e1');
+    expect(putBody).toHaveProperty('draft');
+    expect(putBody).not.toHaveProperty('content');
+    expect(putBody).not.toHaveProperty('is_published');
+    expect((putBody.draft as Record<string, unknown>).title).toBe('1화');
+    // 공개 회차 임시저장은 목록으로 이동하지 않고 계속 편집한다.
+    expect(navigateMock).not.toHaveBeenCalled();
+    expect(await screen.findByText(/별도의 임시저장본이 있어요/)).toBeInTheDocument();
+  });
+
+  it('편집본이 있으면 draft를 열고 배너를 보여주며, 버리기는 draft:null만 PUT한다', async () => {
+    const episode = makeEpisode({
+      id: 'e1',
+      title: '발행 제목',
+      is_published: true,
+      published_at: '2026-07-20T00:00:00Z',
+      content: {
+        type: 'doc',
+        content: [{ type: 'paragraph', content: [{ type: 'text', text: '발행본' }] }],
+      },
+      draft: {
+        title: '고친 제목',
+        subtitle: null,
+        content: {
+          type: 'doc',
+          content: [{ type: 'paragraph', content: [{ type: 'text', text: '편집본' }] }],
+        },
+      },
+    });
+    vi.mocked(api.put).mockResolvedValueOnce(makeEpisode({ id: 'e1', is_published: true }));
+    renderEditor({ episode });
+
+    expect(await screen.findByText(/별도의 임시저장본이 있어요/)).toBeInTheDocument();
+    // 편집본 우선 로드 - 제목 입력칸에 draft 제목이 들어 있다.
+    expect(screen.getByDisplayValue('고친 제목')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '임시저장본 버리기' }));
+
+    await waitFor(() => expect(vi.mocked(api.put)).toHaveBeenCalled());
+    const [, putBody] = vi.mocked(api.put).mock.calls[0] as [string, Record<string, unknown>];
+    expect(putBody).toEqual({ draft: null });
+    // 버리면 발행본 상태로 복귀한다.
+    await waitFor(() => expect(screen.getByDisplayValue('발행 제목')).toBeInTheDocument());
+    expect(screen.queryByText(/별도의 임시저장본이 있어요/)).toBeNull();
+  });
+
+  it('공개 회차: 발행 버튼이 수정 반영이고, 반영은 content+is_published를 PUT한다', async () => {
+    const episode = makeEpisode({
+      id: 'e1',
+      title: '1화',
+      is_published: true,
+      published_at: '2026-07-20T00:00:00Z',
+      content: {
+        type: 'doc',
+        content: [{ type: 'paragraph', content: [{ type: 'text', text: '발행본' }] }],
+      },
+    });
+    vi.mocked(api.put).mockResolvedValueOnce(makeEpisode({ id: 'e1', is_published: true }));
+    renderEditor({ episode });
+
+    fireEvent.click(await screen.findByRole('button', { name: '수정 반영' }));
+    // 수정 반영 모드에선 공개 시점(지금/예약) 선택이 없다 - 이미 공개 중.
+    expect(screen.queryByText('공개 시점')).toBeNull();
+    const buttons = await screen.findAllByRole('button', { name: '수정 반영' });
+    fireEvent.click(buttons[buttons.length - 1]);
+
+    await waitFor(() => expect(vi.mocked(api.put)).toHaveBeenCalled());
+    const [, putBody] = vi.mocked(api.put).mock.calls[0] as [string, Record<string, unknown>];
+    expect(putBody).toHaveProperty('content');
+    expect(putBody.is_published).toBe(true);
+    expect(putBody).not.toHaveProperty('draft');
+    expect(putBody).not.toHaveProperty('published_at');
   });
 });

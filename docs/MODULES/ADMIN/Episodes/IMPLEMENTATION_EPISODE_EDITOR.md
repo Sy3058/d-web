@@ -61,6 +61,9 @@ paywall은 **항상 정확히 1개** 존재한다. 로드 시 없으면 `ensureP
 ### is_published 취급 (F3/F4 경계 이동)
 발행하기 = 즉시 공개(`is_published=true`)가 **F3로 들어왔다**. 임시저장 등 draft 경로는 is_published를 싣지 않는다(에코 시 published_at NULL로 예약 풀림 - E1 계약).
 
+### 발행본/편집본 분리 (#86, 2026-07-23 개정)
+공개 회차의 임시저장은 `content`가 아니라 **`draft` 봉투**(`{title, subtitle, content}`)를 PUT한다 - 발행본·공개 상태 무접촉. 편집 진입은 `draft ?? content`, 배너 + "임시저장본 버리기"(`draft: null`), 발행 버튼은 "수정 반영"(`content` + `is_published: true`, 서버가 draft 소진), PublishModal은 `isLive` 모드에서 공개 시점 토글을 숨긴다. 공개 회차에 `is_published` 없이 `content`를 보내면 서버 409(스케줄러 전환 race까지 WHERE 가드로 봉쇄). 이 절의 상세·BE 불변식: `../../BE/Episodes/IMPLEMENTATION_EPISODE_DRAFT_SEPARATION.md`. 하단 안내 문구는 공개/발행 전 분기로 교체(기존 단일 문구는 발행된 회차에서 거짓이었음 - 이슈 본문).
+
 ### 공개 예약 (F4, 2026-07-17)
 발행 모달에 **지금 공개 / 예약 공개** 토글 + `datetime-local`을 추가. 예약이면 로컬 datetime을 `new Date(v).toISOString()`(offset 포함 aware ISO)로 변환해 **`published_at`만 PUT**하고 `is_published`는 **키 자체를 싣지 않는다**(false 에코 시 서버가 published_at을 NULL로 밀어 예약이 풀림 - E1 계약). BE(`episode_service`)는 `is_published`가 페이로드에 없으면 published_at 초기화 블록을 건너뛰어 예약이 그대로 저장되고, E1 스케줄러가 시각 도달 시 공개한다. **예약은 미래 시각만 허용**(과거는 서버가 다음 틱에 즉시 공개해 "지금"과 구분 불가 - 클라 `episodePublishSchema.superRefine`으로 차단). 예약 상태는 `EpisodeList`가 `published_at`으로 "예약" 배지 표시(기존, 무변경). **BE 변경 0.** RHF `watch()`는 React Compiler 경고(stale UI)라 `useWatch`로 구독.
 

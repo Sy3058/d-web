@@ -24,6 +24,7 @@ function makeEpisode(id: string, imageKeys: string[] = []): Episode {
     price: null,
     is_free: false,
     content: { type: 'doc', content: [] },
+    draft: null,
     image_keys: imageKeys,
     is_published: false,
     published_at: null,

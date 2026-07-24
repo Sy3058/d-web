@@ -205,6 +205,11 @@ class Episode(SQLModel, table=True):
             server_default=text('\'{"type": "doc", "content": []}\'::jsonb'),
         ),
     )
+    # 편집본 스냅샷(#86): {"title", "subtitle", "content": <TipTap doc>} 봉투. NULL = 없음.
+    # 공개 회차의 임시저장은 여기에만 쓰고 content(발행본)는 명시적 발행 액션만 덮는다
+    # (episode_service.update_episode 불변식). 독자 응답에 실으면 안 된다 - owner 전용
+    # AdminEpisodeRead에만 노출.
+    draft: dict | None = Field(default=None, sa_column=Column(JSONB, nullable=True))
     # 업로드 매니페스트: 이 회차에 업로드된 R2 키 전량(50장 가드·미참조 추적).
     # content의 image 키는 이 배열의 부분집합이어야 한다. 페이지 순서 의미는
     # F3 재설계로 content에 이관됨(배열 순서는 더 이상 표시 순서가 아님).

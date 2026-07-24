@@ -35,6 +35,11 @@ from src.services.image_service import MAX_IMAGES_PER_EPISODE, THUMB_WIDTH, conv
 
 _DUPLICATE_EPISODE_NO = "이미 존재하는 회차 번호입니다"
 _STALE_EPISODE = "회차가 다른 요청으로 먼저 변경되었습니다 - 새로고침 후 다시 시도하세요"
+_PUBLISHED_CONTENT_GUARD = (
+    "공개 회차의 본문은 발행 액션(is_published 동반)으로만 수정할 수 있습니다"
+    " - 임시저장은 draft를 사용하세요"
+)
+_DRAFT_KEYS_REMOVED = "image_keys 축소가 임시저장본(draft)이 참조하는 키를 제거합니다"
 
 
 async def create_episode(work_id: uuid.UUID, data: EpisodeCreate, session: AsyncSession) -> Episode:
@@ -180,10 +185,18 @@ async def update_episode(episode: Episode, data: EpisodeUpdate, session: AsyncSe
     (E1 재공개 차단 - 재예약은 별도 요청). 공개 결과 상태는 본문에 유의미
     콘텐츠(글/이미지) 필요(빈 draft 공개·공개 회차 본문 전삭제 차단 - 리뷰 ④
     계승. 예약만 걸린 draft는 허용, E1이 공개 전환 시점에 재검사).
+
+    편집본 분리(#86): draft(봉투 {title, subtitle, content})는 발행본과 별개로
+    저장·버리기(null)만 되고 content·is_published·is_free를 건드리지 않는다.
+    **공개 회차의 content는 is_published를 동반한 요청만 덮을 수 있다** - 위반은
+    409. 로드 시점엔 비공개였다가 스케줄러가 공개 전환한 race는 조건부 UPDATE의
+    is_published=false 가드가 원자적으로 닫는다(#86 사고의 race 재발 경로).
+    content 쓰기는 draft를 항상 NULL로 비운다(발행 = 편집본 소진).
     """
     changes = data.model_dump(exclude_unset=True)
     new_keys: list[str] | None = changes.pop("image_keys", None)
     expected_len = len(episode.image_keys)
+    draft_sent = "draft" in changes
 
     if new_keys is not None:
         _validate_reorder(episode.image_keys, new_keys)
@@ -193,10 +206,26 @@ async def update_episode(episode: Episode, data: EpisodeUpdate, session: AsyncSe
     if "content" in changes or new_keys is not None:
         validate_content(final_content, set(final_keys))
     if "content" in changes:
+        if episode.is_published and "is_published" not in changes:
+            raise EpisodeConflictError(_PUBLISHED_CONTENT_GUARD)
         if not has_meaningful_content(final_content):
             final_content = empty_doc()
             changes["content"] = final_content
         changes["is_free"] = derive_is_free(final_content)
+        changes["draft"] = None
+
+    if draft_sent and changes["draft"] is not None:
+        # 봉투 형태(title 등)는 스키마(EpisodeDraft)가 보장, 문서 검증은 발행본과 동일
+        # 기준 - 임시저장이라고 임의 키 주입·상한 초과가 허용되면 발행 시점 검증이
+        # 뚫리는 게 아니라 "검증 안 된 문서가 DB에 산다"가 이미 사고다.
+        validate_content(changes["draft"]["content"], set(final_keys))
+    elif not draft_sent and "content" not in changes and new_keys is not None:
+        stored_draft = episode.draft
+        if stored_draft is not None:
+            try:
+                validate_content(stored_draft.get("content"), set(final_keys))
+            except EpisodeValidationError as exc:
+                raise EpisodeValidationError(_DRAFT_KEYS_REMOVED) from exc
 
     if "thumbnail" in changes:
         if changes["thumbnail"] is not None and changes["thumbnail"] not in final_keys:
@@ -237,16 +266,21 @@ async def update_episode(episode: Episode, data: EpisodeUpdate, session: AsyncSe
             bucket=settings.r2_public_bucket,
         )
 
-    if new_keys is not None or "content" in changes:
+    if new_keys is not None or "content" in changes or changes.get("draft") is not None:
         if new_keys is not None:
             changes["image_keys"] = new_keys
+        conditions = [
+            Episode.id == episode.id,
+            func.jsonb_array_length(Episode.image_keys) == expected_len,
+        ]
+        if "content" in changes and "is_published" not in changes:
+            # 위 409 가드의 원자 버전: 로드 시점엔 비공개였어도 커밋 순간 공개 상태면
+            # (스케줄러 전환 race) 이 행이 매칭되지 않아 임시저장이 라이브를 못 덮는다.
+            conditions.append(Episode.is_published.is_(False))
         try:
             result = await session.exec(
                 update(Episode)
-                .where(
-                    Episode.id == episode.id,
-                    func.jsonb_array_length(Episode.image_keys) == expected_len,
-                )
+                .where(*conditions)
                 .values(**changes)
                 .execution_options(synchronize_session=False)
             )

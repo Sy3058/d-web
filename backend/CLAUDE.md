@@ -65,6 +65,7 @@ backend/src/
   - 유료 구간(M3): 구매 검증 통과 후에만
 - 매 요청마다 생성 (캐시 안 함 - 응답은 `Cache-Control: no-store`)
 - 무료 공개분 외 이미지 키는 클라이언트에 절대 노출 금지
+- 편집본(`episodes.draft`)·미공개 원고는 독자 DTO에 절대 포함 금지 - owner 전용 `AdminEpisodeRead`만 (#86)
 
 ### N+1 방지
 - 관계 데이터 필요 시 `selectinload` 명시 (lazy loading 기본값 믿지 말 것)

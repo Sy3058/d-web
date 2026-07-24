@@ -116,6 +116,9 @@ TanStack Router beforeLoad에서
 ⚠️ **클라이언트가 R2로 직접 올리지 않는다** (M1.5 결정 1: 서버가 바이트를 봐야 변환·규격 보장 가능).
 ⚠️ **순수 메타 수정 PUT에 `is_published`를 에코하지 말 것** - `false`가 실리면 서버가 `published_at`을
 무조건 NULL로 밀어 미래 예약이 조용히 풀린다. 예약 설정은 `published_at`만 전송(E1 인계 계약).
+⚠️ **공개 회차의 임시저장은 `content`가 아니라 `draft` 봉투(`{title, subtitle, content}`)를 PUT** (#86).
+공개 회차에 `is_published` 없이 `content`를 보내면 서버가 409로 거부한다(발행본은 발행 액션만 덮는다).
+수정 반영 = `content` + `is_published: true` (서버가 남은 draft를 소진). draft와 content 동시 전송은 422.
 
 **예약 공개**
 ```

@@ -15,6 +15,8 @@ interface PublishModalProps {
   hasPaidContent: boolean;
   /** 본문에 유의미 내용(글/이미지)이 있는가 - 없으면 발행 불가(서버도 거부). */
   canPublish: boolean;
+  /** 공개 중인 회차의 수정 반영 모드(#86) - 이미 공개라 공개 시점(지금/예약) 선택이 없다. */
+  isLive: boolean;
   saving: boolean;
   error: string | null;
   onCancel: () => void;
@@ -41,6 +43,7 @@ export function PublishModal({
   defaultPrice,
   hasPaidContent,
   canPublish,
+  isLive,
   saving,
   error,
   onCancel,
@@ -86,7 +89,7 @@ export function PublishModal({
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
     >
       <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-lg bg-white p-5 shadow-lg">
-        <h2 className="mb-4 text-lg font-bold">발행하기</h2>
+        <h2 className="mb-4 text-lg font-bold">{isLive ? '수정 반영' : '발행하기'}</h2>
         <form onSubmit={handleSubmit(submit)} noValidate className="flex flex-col gap-4">
           <div className="flex flex-col gap-1">
             <span className="text-sm font-medium">시리즈</span>
@@ -143,6 +146,14 @@ export function PublishModal({
             </label>
           )}
 
+          {isLive && (
+            <p className="text-sm text-gray-600">
+              반영하면 지금 독자가 보는 발행본이 이 내용으로 바뀌어요. 남아 있던 임시저장본은
+              지워집니다.
+            </p>
+          )}
+
+          {!isLive && (
           <div className="flex flex-col gap-1">
             <span className="text-sm font-medium">공개 시점</span>
             <div className="flex gap-2">
@@ -180,6 +191,7 @@ export function PublishModal({
               </div>
             )}
           </div>
+          )}
 
           {!canPublish && (
             <p className="text-sm text-amber-600">
@@ -202,13 +214,17 @@ export function PublishModal({
               disabled={saving || !canPublish}
               className="rounded bg-gray-900 px-4 py-2 text-sm text-white disabled:opacity-50"
             >
-              {saving
-                ? mode === 'schedule'
-                  ? '예약 중...'
-                  : '발행 중...'
-                : mode === 'schedule'
-                  ? '예약하기'
-                  : '발행하기'}
+              {isLive
+                ? saving
+                  ? '반영 중...'
+                  : '수정 반영'
+                : saving
+                  ? mode === 'schedule'
+                    ? '예약 중...'
+                    : '발행 중...'
+                  : mode === 'schedule'
+                    ? '예약하기'
+                    : '발행하기'}
             </button>
           </div>
         </form>
