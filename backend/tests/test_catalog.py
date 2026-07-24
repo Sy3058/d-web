@@ -274,6 +274,16 @@ async def test_detail_excludes_internal_fields(
             "type": "doc",
             "content": [{"type": "paragraph", "content": [{"type": "text", "text": "비밀내용"}]}],
         },
+        draft={
+            "title": "비밀 제목",
+            "subtitle": None,
+            "content": {
+                "type": "doc",
+                "content": [
+                    {"type": "paragraph", "content": [{"type": "text", "text": "비밀편집본"}]}
+                ],
+            },
+        },
     )
 
     resp = await async_client.get(f"{WORKS_URL}/{work.id}")
@@ -283,10 +293,13 @@ async def test_detail_excludes_internal_fields(
     ep = body["episodes"][0]
     assert "content" not in ep
     assert "image_keys" not in ep
+    # 편집본(#86)은 owner 전용 - 공개 상세에 필드도 내용도 실리면 안 된다.
+    assert "draft" not in ep
     # price는 #83부터 실효 판매가로 의도적 공개(내부값 은닉 대상에서 제외) - 위 오버라이드 값
     assert ep["price"] == 1234
     assert "secret-key.webp" not in resp.text
     assert "비밀내용" not in resp.text
+    assert "비밀편집본" not in resp.text
 
 
 async def test_detail_404_when_unpublished(

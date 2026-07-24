@@ -741,13 +741,16 @@ async def test_publish_pages_without_content_422(
     assert resp.status_code == 422
 
 
-async def test_published_episode_cannot_clear_content_422(
+async def test_published_episode_cannot_clear_content(
     owner_client: AsyncClient, uploaded_keys: list[str]
 ):
-    # 리뷰 ④ 계승: 공개 상태에서 본문 전삭제 불가.
+    # 리뷰 ④ 계승: 공개 상태에서 본문 전삭제 불가. #86부터 is_published 없는 content
+    # 쓰기는 그보다 앞선 발행 액션 가드(409)에 걸리고, 발행 액션으로 와도 전삭제는 422.
     work_id, episode_id, keys = await _episode_with_content(owner_client, count=1)
     await _put(owner_client, work_id, episode_id, is_published=True)
     resp = await _put(owner_client, work_id, episode_id, content=_doc())
+    assert resp.status_code == 409
+    resp = await _put(owner_client, work_id, episode_id, content=_doc(), is_published=True)
     assert resp.status_code == 422
 
 
@@ -796,6 +799,148 @@ async def test_update_naive_published_at_422(owner_client: AsyncClient):
     work_id = await _create_work_id(owner_client)
     episode = await _create_episode(owner_client, work_id)
     resp = await _put(owner_client, work_id, episode["id"], published_at="2026-07-15T10:00:00")
+    assert resp.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# 편집본(draft) 분리 (#86) - 공개 회차의 임시저장이 라이브를 못 덮는다
+# ---------------------------------------------------------------------------
+
+
+def _draft(*nodes: dict, title: str = "고친 제목") -> dict:
+    return {"title": title, "subtitle": None, "content": _doc(*nodes)}
+
+
+async def _published_episode(
+    owner_client: AsyncClient, count: int = 1
+) -> tuple[str, str, list[str], dict]:
+    work_id, episode_id, keys = await _episode_with_content(owner_client, count)
+    resp = await _put(owner_client, work_id, episode_id, is_published=True)
+    assert resp.status_code == 200
+    return work_id, episode_id, keys, resp.json()
+
+
+async def test_draft_save_leaves_live_untouched(
+    owner_client: AsyncClient, uploaded_keys: list[str]
+):
+    # #86 본체: 공개 회차의 임시저장(draft)은 발행본·공개 상태·is_free를 건드리지 않는다.
+    work_id, episode_id, _keys, published = await _published_episode(owner_client)
+    resp = await _put(owner_client, work_id, episode_id, draft=_draft(_para("수정 중 원고")))
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["draft"] == _draft(_para("수정 중 원고"))
+    assert body["content"] == published["content"]
+    assert body["is_published"] is True
+    assert body["published_at"] == published["published_at"]
+    assert body["is_free"] == published["is_free"]
+
+
+async def test_draft_with_content_422(owner_client: AsyncClient, uploaded_keys: list[str]):
+    work_id, episode_id, _keys = await _episode_with_content(owner_client)
+    resp = await _put(
+        owner_client,
+        work_id,
+        episode_id,
+        content=_doc(_para("발행본")),
+        draft=_draft(_para("편집본")),
+    )
+    assert resp.status_code == 422
+
+
+async def test_content_write_consumes_draft(owner_client: AsyncClient, uploaded_keys: list[str]):
+    # 수정 발행 = 에디터가 든 최신 문서를 content로 승격 - 남은 편집본은 소진된다.
+    work_id, episode_id, _keys, _published = await _published_episode(owner_client)
+    await _put(owner_client, work_id, episode_id, draft=_draft(_para("고친 원고")))
+    resp = await _put(
+        owner_client, work_id, episode_id, content=_doc(_para("고친 원고")), is_published=True
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["draft"] is None
+    assert body["content"] == _doc(_para("고친 원고"))
+
+
+async def test_draft_discard_with_explicit_null(
+    owner_client: AsyncClient, uploaded_keys: list[str]
+):
+    work_id, episode_id, _keys, published = await _published_episode(owner_client)
+    await _put(owner_client, work_id, episode_id, draft=_draft(_para("버릴 원고")))
+    resp = await _put(owner_client, work_id, episode_id, draft=None)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["draft"] is None
+    assert body["content"] == published["content"]
+
+
+async def test_draft_foreign_image_key_422(owner_client: AsyncClient, uploaded_keys: list[str]):
+    # 임시저장이어도 검증은 발행본과 동일 - 임의 키 주입 문서가 DB에 살면 안 된다.
+    work_id, episode_id, _keys = await _episode_with_content(owner_client)
+    resp = await _put(
+        owner_client, work_id, episode_id, draft=_draft(_img("works/x/episodes/y/z.webp"))
+    )
+    assert resp.status_code == 422
+
+
+async def test_published_content_without_publish_action_409(
+    owner_client: AsyncClient, uploaded_keys: list[str]
+):
+    # #86 사고 경로 봉쇄: 공개 회차에 is_published 없는 content 쓰기는 거부 + 라이브 무접촉.
+    work_id, episode_id, _keys, published = await _published_episode(owner_client)
+    resp = await _put(owner_client, work_id, episode_id, content=_doc(_para("작성 중 원고")))
+    assert resp.status_code == 409
+    listed = await owner_client.get(_episodes_url(work_id))
+    assert listed.json()[0]["content"] == published["content"]
+
+
+async def test_republish_content_keeps_published_at(
+    owner_client: AsyncClient, uploaded_keys: list[str]
+):
+    # 수정 발행(is_published 동반)은 허용되고 원 공개 시각은 재스탬프되지 않는다.
+    work_id, episode_id, _keys, published = await _published_episode(owner_client)
+    resp = await _put(
+        owner_client, work_id, episode_id, content=_doc(_para("고침")), is_published=True
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["content"] == _doc(_para("고침"))
+    assert body["published_at"] == published["published_at"]
+
+
+async def test_publish_flip_race_guarded(
+    owner: User, uploaded_keys: list[str], db_session: AsyncSession
+):
+    """로드 시점 비공개(예약 등) -> 커밋 전 스케줄러가 공개 전환한 race: 조건부 UPDATE의
+    is_published=false 가드가 rowcount 0으로 잡는다. 인메모리 409 검사만으로는 이 창이
+    안 닫힌다(#86 사고의 race 재발 경로)."""
+    work = await work_service.create_work(WorkCreate(title="race"), owner.id, db_session)
+    episode = await episode_service.create_episode(
+        work.id, EpisodeCreate(episode_no=1, title="1화"), db_session
+    )
+    await episode_service.update_episode(
+        episode, EpisodeUpdate(content=_doc(_para("본문"))), db_session
+    )
+    # 스케줄러 전환을 직접 UPDATE로 재현 - 인메모리 episode는 여전히 is_published=False
+    await db_session.exec(
+        update(Episode)
+        .where(Episode.id == episode.id)
+        .values(is_published=True)
+        .execution_options(synchronize_session=False)
+    )
+    await db_session.commit()
+    with pytest.raises(EpisodeConflictError):
+        await episode_service.update_episode(
+            episode, EpisodeUpdate(content=_doc(_para("작성 중"))), db_session
+        )
+
+
+async def test_manifest_delete_breaking_draft_reference_422(
+    owner_client: AsyncClient, uploaded_keys: list[str]
+):
+    # 축소된 매니페스트가 편집본 참조 키를 지우면 승격 시점 깨진 참조 - 즉시 거부.
+    work_id, episode_id, keys = await _episode_with_pages(owner_client)
+    resp = await _put(owner_client, work_id, episode_id, draft=_draft(_img(keys[0])))
+    assert resp.status_code == 200
+    resp = await _put(owner_client, work_id, episode_id, image_keys=[keys[1], keys[2]])
     assert resp.status_code == 422
 
 

@@ -439,3 +439,22 @@ async def test_anonymous_reader_can_fetch_free_content(
     assert not async_client.cookies
     resp = await async_client.get(_content_url(ep.id))
     assert resp.status_code == 200
+
+
+async def test_draft_never_in_public_response(
+    async_client: AsyncClient, db_session: AsyncSession, user: User
+):
+    # 편집본(#86)은 미발행 원고다 - 독자 응답에 필드도 내용도 실리면 안 된다.
+    work = await _make_work(db_session, user)
+    ep = await _make_episode(
+        db_session,
+        work,
+        content=_doc(_para("발행 원고")),
+        draft={"title": "비밀 제목", "subtitle": None, "content": _doc(_para("비밀편집본"))},
+    )
+
+    resp = await async_client.get(_content_url(ep.id))
+    assert resp.status_code == 200
+    assert "비밀편집본" not in resp.text
+    assert "비밀 제목" not in resp.text
+    assert "draft" not in resp.json()
