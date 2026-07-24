@@ -57,7 +57,11 @@
 
 ## Astro / React
 
-<!-- 실수 발생 시 여기에 추가 -->
+- **`@tiptap/core`의 `generateHTML`은 브라우저 전용 - Node(vitest 기본 `environment: node`) 환경에서 `ReferenceError: window is not defined`** (M2 F1, 2026-07-25)
+  → ProseMirror `DOMSerializer.serializeFragment`가 실제 DOM을 요구한다(공식 문서의 "browser-only" 서술과 실측 일치). 서버(Node)에서도 렌더해야 하면 `@tiptap/html`(브라우저+Node 겸용)을 쓴다
+  → 렌더 스키마 회귀 테스트에서 `generateHTML`을 직접 호출하려면 그 테스트 파일에만 `// @vitest-environment jsdom` 지정 + devDep `jsdom` 추가(전역 환경은 그대로 `node`로 두고 파일 단위로만 예외)
+  → 이 제약은 뷰어 아일랜드를 `client:load`가 아니라 `client:only="react"`로 마운트해야 하는 이유와 같은 뿌리다 - 서버가 이 컴포넌트를 미리 렌더 시도하면 그 자리에서 죽는다
+
 <!-- 예시:
 - React 아일랜드에 client: 지시자 누락 → hydration 안 됨
 - Signed URL 만료 시간 너무 짧게 설정 → 뷰어 로딩 중 만료
