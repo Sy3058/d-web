@@ -150,9 +150,22 @@ class EpisodeCreate(BaseModel):
     published_at: AwareDatetime | None = None
 
 
+class EpisodeDraft(BaseModel):
+    """편집본 봉투(#86) - episodes.draft JSONB에 통째로 저장된다.
+
+    본문만 담으면 공개 회차의 제목·부제 수정이 여전히 임시저장 즉시 라이브 반영되는
+    반쪽 분리가 되므로 메타까지 스냅샷한다. content 검증(화이트리스트·상한·키 소유)은
+    image_keys가 필요해 service(lib/content_doc)가 수행한다.
+    """
+
+    title: str = Field(min_length=1, max_length=TITLE_MAX)
+    subtitle: str | None = Field(default=None, max_length=TITLE_MAX)
+    content: dict[str, Any]
+
+
 class EpisodeUpdate(BaseModel):
     """부분 수정. 생략 = 미변경, 명시적 null은 nullable 컬럼(subtitle·price·thumbnail·
-    published_at)만.
+    published_at·draft)만.
 
     - content: 본문(TipTap JSON - lib/content_doc 화이트리스트·상한·이미지 키 소유 검증).
       유료 경계(paywall 노드) 위치가 곧 무료/유료 분량이고 is_free는 서버가 파생한다
@@ -166,6 +179,9 @@ class EpisodeUpdate(BaseModel):
       무관하게 항상 NULL 초기화**(E1 부활 차단 - stale 에코 방어. 재예약은 is_published
       없이 published_at만 별도 요청). published_at 과거값 = 다음 틱 공개(E1).
       naive 시각은 422(AwareDatetime).
+    - draft: 편집본 봉투(#86). content(발행본)와 **동시 전송 불가**(422) - "임시저장"과
+      "발행"은 다른 액션이다. 명시적 null = 편집본 버리기. content가 오는 요청은 서버가
+      draft를 NULL로 비운다(발행 = 편집본 소진).
     """
 
     episode_no: int | None = Field(default=None, ge=1)
@@ -177,6 +193,7 @@ class EpisodeUpdate(BaseModel):
     published_at: AwareDatetime | None = None
     image_keys: list[str] | None = None
     content: dict[str, Any] | None = None
+    draft: EpisodeDraft | None = None
 
     # WorkUpdate와 같은 규칙: `X | None`의 None은 "생략" 표현이지 null 대입 허용이 아니다.
     _NON_NULLABLE = frozenset({"episode_no", "title", "is_published", "image_keys", "content"})
@@ -186,6 +203,12 @@ class EpisodeUpdate(BaseModel):
         for name in self.model_fields_set & self._NON_NULLABLE:
             if getattr(self, name) is None:
                 raise ValueError(f"{name}에는 null을 지정할 수 없습니다 (생략 = 미변경)")
+        return self
+
+    @model_validator(mode="after")
+    def _draft_excludes_content(self) -> "EpisodeUpdate":
+        if {"draft", "content"} <= self.model_fields_set:
+            raise ValueError("draft와 content는 한 요청에 함께 보낼 수 없습니다")
         return self
 
 
@@ -206,6 +229,12 @@ class AdminEpisodeRead(BaseModel):
     price: int | None
     is_free: bool
     content: dict[str, Any]
+    # 편집본 봉투(#86) - 에디터가 draft ?? content로 열기 위한 owner 전용 노출.
+    # dict가 아니라 EpisodeDraft로 두는 이유: openapi codegen이 봉투 필드(title 등)를
+    # 정타입으로 뽑아야 admin이 캐스팅 없이 쓴다(쓰기 경로가 같은 스키마로 검증하므로
+    # 저장된 봉투는 항상 이 형태다). 독자용 DTO(schemas/catalog·viewer)에는 절대
+    # 추가하지 말 것(미발행 원고 유출).
+    draft: EpisodeDraft | None
     image_keys: list[str]
     is_published: bool
     published_at: datetime | None
