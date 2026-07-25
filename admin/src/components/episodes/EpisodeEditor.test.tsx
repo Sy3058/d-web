@@ -178,6 +178,37 @@ describe('EpisodeEditor', () => {
     expect(vi.mocked(api.post).mock.calls[1][0]).toBe('/admin/works/w1/episodes/e1/images');
   });
 
+  it('이미지 여러 장 삽입: 전부 본문에 순서대로 남는다 (마지막 장이 이전 장을 덮어쓰지 않는다)', async () => {
+    vi.mocked(api.post).mockResolvedValueOnce(makeEpisode({ id: 'e1' }));
+    vi.mocked(api.post).mockResolvedValueOnce(makeEpisode({ id: 'e1', image_keys: ['k1'] }));
+    vi.mocked(api.post).mockResolvedValueOnce(makeEpisode({ id: 'e1', image_keys: ['k1', 'k2'] }));
+    vi.mocked(api.post).mockResolvedValueOnce(
+      makeEpisode({ id: 'e1', image_keys: ['k1', 'k2', 'k3'] }),
+    );
+    vi.mocked(api.put).mockResolvedValueOnce(makeEpisode({ id: 'e1' }));
+    const { container } = renderEditor({ initialWorkId: 'w1' });
+
+    await screen.findByRole('button', { name: '이미지' });
+    fireEvent.change(screen.getByPlaceholderText(/제목/), { target: { value: '1화 제목' } });
+    const files = [1, 2, 3].map(
+      (n) => new File(['x'], `p${n}.png`, { type: 'image/png' }),
+    );
+    fireEvent.change(screen.getByTestId('image-input'), { target: { files } });
+
+    await waitFor(() => expect(container.querySelectorAll('img')).toHaveLength(3));
+
+    fireEvent.click(screen.getByRole('button', { name: '임시저장' }));
+    await waitFor(() => expect(vi.mocked(api.put)).toHaveBeenCalled());
+    const [, putBody] = vi.mocked(api.put).mock.calls[0] as [
+      string,
+      { content: { content: { type: string; attrs?: { key?: string } }[] } },
+    ];
+    const imageKeys = putBody.content.content
+      .filter((node) => node.type === 'image')
+      .map((node) => node.attrs?.key);
+    expect(imageKeys).toEqual(['k1', 'k2', 'k3']);
+  });
+
   it('발행하기: 모달에서 즉시 공개하면 is_published=true PUT 후 목록으로 이동', async () => {
     const episode = makeEpisode({
       id: 'e1',

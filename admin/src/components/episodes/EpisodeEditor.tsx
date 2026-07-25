@@ -257,17 +257,26 @@ export function EpisodeEditor({ initialWorkId, episode }: EpisodeEditorProps) {
     if (accepted.length === 0) return;
 
     setSaving(true);
+    // 업로드 중에는 본문 편집을 잠근다: 삽입 위치가 동시 편집으로 어긋나 엉뚱한 자리(유료 경계
+    // 반대편 등)에 들어가거나 문서 범위를 벗어나 throw 되는 것을 막는다. finally에서 되돌린다.
+    editor.setEditable(false);
     try {
       const id = await ensureDraft();
       setProgress({ done: 0, total: accepted.length });
+      // insertContent는 현재 selection을 "대체"한다. 이미지 atom 삽입 직후 selection은 방금 넣은
+      // 노드의 NodeSelection이 되므로 그대로 반복하면 2장째부터 직전 장을 덮어쓰고, 첫 장은 편집 중
+      // 잡혀 있던 선택 영역(기존 이미지·텍스트)을 지운다. 매 삽입 직전 selection.to(대체가 아닌 그
+      // 지점)에 insertContentAt으로 넣어 선택을 지우지 않고 순서대로 이어붙인다.
       for (const [index, file] of accepted.entries()) {
         const blobUrl = URL.createObjectURL(file);
         try {
           const updated = await uploadImage.mutateAsync({ episodeId: id, file });
           const newKey = updated.image_keys[updated.image_keys.length - 1];
+          if (!newKey) throw new Error('서버가 이미지 키를 반환하지 않았습니다.');
           blobUrlsRef.current.push(blobUrl);
           imageStore.set([[newKey, blobUrl]]); // optimistic: 응답엔 presigned URL이 없어 즉시 표시용 blob
-          editor.chain().focus().insertContent({ type: 'image', attrs: { key: newKey } }).run();
+          const node = { type: 'image', attrs: { key: newKey } };
+          editor.chain().focus().insertContentAt(editor.state.selection.to, node).run();
         } catch (err) {
           URL.revokeObjectURL(blobUrl);
           setFileError(describeAuthError(err));
@@ -277,6 +286,7 @@ export function EpisodeEditor({ initialWorkId, episode }: EpisodeEditorProps) {
       }
       void imageUrls.refetch(); // optimistic blob → 실 presigned URL로 교체
     } finally {
+      editor.setEditable(true);
       setSaving(false);
       setProgress(null);
     }

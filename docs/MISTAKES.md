@@ -131,6 +131,9 @@
 - **`editor.view.posAtCoords`는 레이아웃(`document.elementFromPoint`)에 의존해 jsdom 테스트에서 던진다** (M1.5 F4, 2026-07-17)
   → 이미지 드롭 지점 계산에 posAtCoords를 쓰면 jsdom엔 `elementFromPoint`가 없어 `TypeError`로 테스트가 깨진다(실제 브라우저에서도 좌표 해석은 상황에 따라 실패 가능)
   → try/catch로 감싸 실패 시 현재 커서 위치로 폴백(프로덕션 견고성 겸용) - 좌표를 못 구해도 삽입 자체는 되게 둔다
+- **`insertContent`는 현재 selection을 "대체"한다 - atom 노드를 넣으면 삽입 직후 selection이 그 노드의 NodeSelection이 된다** (M2 admin fix, 2026-07-26)
+  → 이미지(atom) 여러 장을 루프에서 `insertContent`로 넣으면 삽입 직후 selection이 방금 넣은 노드를 잡아 다음 장이 직전 장을 덮어써 **마지막 1장만** 남는다. 편집 모드에서 선택 영역(기존 이미지·텍스트)이 잡혀 있으면 첫 장이 그 선택을 지운다
+  → 삽입 지점을 명시하는 `insertContentAt(pos, node)`로 넣고(대체가 아니라 그 지점 삽입), 위치는 매 삽입 직전 `editor.state.selection.to`를 라이브로 읽는다. await(업로드) 중 절대 위치를 캐시하면 동시 편집으로 stale·범위초과(throw)가 나므로 업로드 동안 `editor.setEditable(false)`로 본문 편집을 잠근다(유료 경계 반대편 삽입 방지 겸용)
 
 ## openapi-typescript codegen
 
