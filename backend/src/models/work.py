@@ -41,6 +41,9 @@ class WorkStatus(StrEnum):
     후속 상태 추가는 이 enum 값만 늘리면 되고 DB 마이그레이션이 필요 없다.
     """
 
+    # 노출 여부는 works.is_published가 별개 축으로 결정한다 - preparing이어도 공개(커밍순
+    # 티저) 가능, ongoing이어도 비공개(긴급 하차) 가능. 서버 상호 검증을 추가하지 말 것(#84).
+    PREPARING = "preparing"
     ONGOING = "ongoing"
     COMPLETED = "completed"
     HIATUS = "hiatus"

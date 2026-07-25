@@ -112,6 +112,30 @@ async def test_create_work_ignores_client_author_id(owner_client: AsyncClient, o
     assert resp.json()["author_id"] == str(owner.id)
 
 
+async def test_create_work_status_preparing(owner_client: AsyncClient):
+    # 연재 준비중(#84). VARCHAR(20)+StrEnum이라 enum 값 추가만으로 검증·저장·직렬화가
+    # 끝나야 한다(마이그레이션 0건). 쓰기 응답은 요청 본문에서 만든 enum 멤버를 그대로
+    # 돌려주므로(expire_on_commit=False) GET으로 재조회해 DB 읽기 경로까지 함께 고정한다.
+    work_id = await _create_work(owner_client, title="준비중 작품", status="preparing")
+
+    resp = await owner_client.get(f"{WORKS_URL}/{work_id}")
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "preparing"
+
+
+async def test_create_work_preparing_can_be_published(owner_client: AsyncClient):
+    # status와 is_published는 별개 축이다(#84). "준비중인데 공개"는 커밍순 티저라 정상
+    # 조합이고 서버는 둘을 상호 강제하지 않는다. 조합이 저장·재조회를 살아남는지 고정해,
+    # 이후 누군가 스키마·서비스에 상호 검증을 넣으면 여기서 깨지게 한다.
+    work_id = await _create_work(
+        owner_client, title="커밍순", status="preparing", is_published=True
+    )
+
+    body = (await owner_client.get(f"{WORKS_URL}/{work_id}")).json()
+    assert body["status"] == "preparing"
+    assert body["is_published"] is True
+
+
 # ---------------------------------------------------------------------------
 # 검증 실패 (422)
 # ---------------------------------------------------------------------------
@@ -156,6 +180,22 @@ async def test_get_work_404(owner_client: AsyncClient):
 # ---------------------------------------------------------------------------
 # 수정
 # ---------------------------------------------------------------------------
+
+
+async def test_update_work_status_to_preparing_keeps_published(owner_client: AsyncClient):
+    # 상태만 바꾸는 PUT은 공개 여부를 건드리지 않는다(#84 - 별개 축). 공개 중인 작품을
+    # 준비중으로 내려도 is_published는 그대로다. 숨길지 말지는 어드민 폼의 기본값 연동이나
+    # 명시적인 공개 설정이 정하고, 서버가 상태를 근거로 대신 정하지 않는다.
+    work_id = await _create_work(owner_client, is_published=True)
+
+    resp = await owner_client.put(f"{WORKS_URL}/{work_id}", json={"status": "preparing"})
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "preparing"
+    assert resp.json()["is_published"] is True
+
+    body = (await owner_client.get(f"{WORKS_URL}/{work_id}")).json()
+    assert body["status"] == "preparing"
+    assert body["is_published"] is True
 
 
 async def test_update_partial_preserves_other_fields(owner_client: AsyncClient):
