@@ -29,7 +29,7 @@ DB_SCHEMA §2 "작품/에피소드 도메인"을 코드로 옮긴 것. M1.5 모�
 ## 2. 테이블 구조 (DB_SCHEMA §2)
 
 - **공통**: PK 전 테이블 UUID + `gen_random_uuid()` server_default, 시각 전부 TIMESTAMPTZ. 서버 사이드 기본값(M1 A1 패턴).
-- **`works`**: `author_id` FK→users(**CASCADE 없음** - 작가 계정은 soft delete가 기본이라 작품 하드 삭제가 딸려가면 안 됨. 1인 작가라 값은 role=owner 유저 id, FK는 확장 대비 유지), `title` VARCHAR(200), `episode_base_price` default 500, `bundle_discount_rate` NUMERIC(4,3) default 0.1(저장만 - 할인 적용은 M3), `status` VARCHAR(20)(ongoing/completed/hiatus), `deleted_at` soft delete.
+- **`works`**: `author_id` FK→users(**CASCADE 없음** - 작가 계정은 soft delete가 기본이라 작품 하드 삭제가 딸려가면 안 됨. 1인 작가라 값은 role=owner 유저 id, FK는 확장 대비 유지), `title` VARCHAR(200), `episode_base_price` default 500, `bundle_discount_rate` NUMERIC(4,3) default 0.1(저장만 - 할인 적용은 M3), `status` VARCHAR(20)(preparing/ongoing/completed/hiatus - preparing은 #84, 2026-07-26 추가), `deleted_at` soft delete.
 - **`tags`**: `name` VARCHAR(50) UNIQUE. UNIQUE가 name 조회 인덱스 겸용이라 별도 `idx_tags_name` 안 둠(중복 인덱스). 이 UNIQUE가 C1 get-or-create의 충돌 방어선.
 - **`works_tags`**: `PK(work_id, tag_id)` 복합, 양쪽 FK CASCADE.
 - **`episodes`**: `UNIQUE(work_id, episode_no)`, `work_id` FK CASCADE, `price` **nullable**(NULL이면 런타임에 `works.episode_base_price` 참조 - 금액 하드코딩 금지), `is_free`(“무료 회차 수”의 단일 진실 - 별도 컬럼 없음, 관리자 UI가 앞 N화 토글), `image_keys` JSONB `DEFAULT '[]'`(배열 인덱스 = 페이지 순서, R2 **키** 저장 - 공개 URL 아님), `is_published` + `published_at`(예약 공개 - 그룹 E).
@@ -45,7 +45,14 @@ DB_SCHEMA §2 "작품/에피소드 도메인"을 코드로 옮긴 것. M1.5 모�
 ## 3. 구현 결정
 
 ### StrEnum + VARCHAR (네이티브 PG enum 미사용)
-`WorkStatus`는 StrEnum(str 서브클래스)이라 String 컬럼에 멤버 값이 그대로 저장된다. 상태 추가는 앱 enum 값만 늘리면 되고 **DB 마이그레이션 0**. `users.role`(B1)과 같은 패턴.
+`WorkStatus`는 StrEnum(str 서브클래스)이라 String 컬럼에 멤버 값이 그대로 저장된다. 상태 추가는 앱 enum 값만 늘리면 되고 **DB 마이그레이션 0**. `users.role`(B1)과 같은 패턴. 실제로 `preparing`(#84, 2026-07-26)이 이 경로로 추가됐다.
+
+### `status`와 `is_published`는 별개 축 - 서버 상호 검증을 넣지 말 것 (#84)
+"준비중인데 공개"는 모순이 아니라 **커밍순 티저**(2026-07-17 결정)이고, "연재중인데 비공개"는 **긴급 하차**다. 그래서 `WorkCreate`/`WorkUpdate`/`work_service` 어디에도 두 필드를 엮는 검증(`model_validator` 등)을 두지 않는다 - 넣으면 위 두 조합이 422로 막혀 어드민 저장이 깨진다.
+
+숨김/노출을 상태에 맞춰 바꾸는 편의는 **어드민 폼의 기본값**으로만 제공한다(admin `WorkForm`). 그중에서도 자동으로 **공개를 켜는** 방향은 두지 않는다 - 노출은 한 번 일어나면 되돌릴 수 없어서, 폼 기본값과 규칙이 어긋나는 순간 빈 작품이 공개로 생성됐다(2026-07-26 리뷰 실측). 경위는 [ADMIN IMPLEMENTATION_WORK_CRUD_SCREENS.md](../../ADMIN/Works/IMPLEMENTATION_WORK_CRUD_SCREENS.md) §7 참조.
+
+이 규칙은 `tests/test_admin_works.py`의 `test_create_work_preparing_can_be_published` / `test_update_work_status_to_preparing_keeps_published`가 고정한다 - 상호 검증을 넣으면 이 두 건이 깨진다.
 
 ### sa_column 헬퍼
 `_pk_column()`/`_created_at_column()`/`_updated_at_column()`으로 UUID PK·타임스탬프 정의 통일(M1 A1 패턴 답습). `updated_at`은 `onupdate=func.now()`.

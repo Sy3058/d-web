@@ -147,3 +147,23 @@ M2 A(공개 카탈로그 API, #81)가 `works.is_published`를 신설하면서 **
 - **Opus 리뷰 반영 3건**(Critical/Major 0): ① 테스트 주석이 `setValueAs`를 가리켜 `Controller`를 되돌리도록 유도하던 것 정정, ② 도움말 문구가 `<label>` 안에 있어 select 접근성 이름이 "공개 상태 공개로 두면 독자 사이트..."로 읽히던 것 → 도움말을 label 밖으로 빼고 `aria-describedby`로 분리(`getByRole('combobox', { name: '공개 상태' })` 정확 매칭으로 실측 확인), ③ `SelectArrow`가 부모 `relative`에 의존한다는 제약을 주석에 명시.
 - **드롭다운 전환에서 실제 버그를 하나 잡았다**: boolean을 `<select>`로 받으며 `register`+`setValueAs`를 쓰면 입력(문자열 -> boolean) 방향만 처리돼, **수정 폼이 서버의 `is_published=true`를 반영하지 못하고 늘 "비공개"로 뜬다**(그대로 저장하면 공개가 꺼진다). `Controller`로 양방향을 명시해 해결했고, "`defaultValues`에 `true`를 주고 무조작 제출" 테스트가 이 실패를 잡았다(MISTAKES "폼 / CSS").
 - ⚠️ 이 작업 중 `tsc -b --noEmit false`를 잘못 실행해 `src/`에 컴파일된 `.js`가 쏟아지면서, 이후 `.tsx` 수정이 전부 무시되는 사고가 있었다(캐시 문제로 위장). 진단·예방은 MISTAKES "Vite / Astro" 참조.
+
+### 연재 준비중(preparing) 상태 + 공개 기본값 연동 (#84, 2026-07-26)
+
+`WorkStatus`에 `preparing` 추가(BE는 enum 한 줄 - VARCHAR(20)+StrEnum 패턴이라 마이그레이션 0건, 도메인 모델 문서 참조) + status 선택 시 `is_published` **기본값만** 연동. 강제 검증은 서버·클라 모두 두지 않는다(이슈 #84 확정) - 준비중 강제 비공개는 **커밍순 티저**(0회차 공개, 2026-07-17 결정)를, 연재중 강제 공개는 **긴급 하차**를 막기 때문.
+
+**연동은 숨기는 방향에만 건다**: `preparing` -> 비공개, 나머지 상태 -> 공개 여부를 건드리지 않음.
+
+처음엔 `ongoing` -> 공개도 넣었다가 리뷰에서 걷어냈다. 이 폼의 기본값이 `status=ongoing` + `is_published=false`(새 작품은 명시적으로 켜기 전까지 비공개 - BE `WorkCreate` 기본값과 동일)인데, "ongoing이면 공개"라는 규칙이 그 기본값과 정면으로 모순된다. 그래서 **등록 화면에서 연재 상태를 골랐다 되돌리기만 해도** 공개 상태를 한 번도 건드리지 않은 채 회차 없는 빈 작품이 공개로 생성됐다(2026-07-26 리뷰에서 vitest로 실측). 최종 선택이 같은 두 관리자가 드롭다운을 흔들었는지 여부만으로 반대 결과를 얻는 상태였다. 노출은 한 번 일어나면 되돌릴 수 없으니, 자동 연동은 fail-closed 방향에만 두고 공개는 작가가 직접 켜게 한다.
+
+남은 트레이드오프: 공개 상태를 먼저 켠 뒤 상태를 준비중으로 바꾸면 그 선택이 비공개로 되돌아간다. 방향이 fail-closed(숨김)이고 화면에서 즉시 보이므로 가드를 더 넣지 않았다. 커밍순 티저는 "준비중 선택 -> 공개로 되돌리기" 순서로 만들면 된다(테스트로 고정).
+
+| 파일 | 변경 |
+|------|------|
+| `lib/workStatus.ts` | LABEL `preparing: '준비중'` + BADGE `rose`. amber/orange 불채택 - preparing의 기본 짝이 비공개 배지(노랑)라 나란히 붙으면 축 구분이 무너진다. 커밍순이면 공개(초록)와도 붙어 green 계열(teal)도 배제. (미결: rose는 이 어드민에서 에러 신호로 쓰는 red 계열과 가까워 오인 여지가 있다 - 2026-07-26 리뷰 지적, 색은 유지하고 보류) |
+| `components/works/WorkForm.tsx` | status select의 `register(..., { onChange })`에 `syncPublishDefault` 연결. `useEffect`+`watch` 대신 change 이벤트를 쓴 이유: 수정 폼 초기 로드(서버 값 주입)에서 절대 발화하면 안 되는 규칙이라, 렌더 사이클이 아닌 사용자 행동에만 반응하는 지점이 구조적으로 맞다(초기-렌더 skip ref 불필요) |
+| `frontend/src/lib/catalog.ts` | 수동 미러 계약에 union 값+라벨 추가. `statusLabel`이 `?? status` 폴백이라 누락 시 독자 배지에 원시값 "preparing" 노출(컴파일 에러로 안 잡힘 - union에 값을 안 늘리면 Record 검사가 발화하지 않는다). FE 쪽 기록은 [FE Catalog 문서](../../FE/Catalog/IMPLEMENTATION_CATALOG_PAGES.md) 참조 |
+| `types/api.gen.ts` | `generate:types` 재생성(WorkStatus union 1줄) |
+| `components/works/WorkForm.test.tsx` | 신설 6건: preparing -> 비공개 / ongoing으로 바꿔도 공개를 켜지 않음 / **등록 폼 왕복해도 비공개 유지**(위 사고의 회귀 가드) / 완결(공개 유지)·휴재(비공개 유지) **양방향** / 연동 후 수동 복구가 제출까지 생존 / 초기 마운트 미발동. status도 함께 단언한다 |
+
+테스트 판별력은 변이 실험으로 확인했다 - `ongoing -> 공개`를 되살리면 2건이, 완결·휴재까지 공개시키면 3건이 빨강이 된다. 직전 버전의 "완결/휴재 유지" 테스트는 `is_published=true`에서 시작해 `true`를 단언해서 두 회귀를 모두 통과시켰다(시작값=기대값이면 어떤 구현이든 그린이다).
