@@ -3,6 +3,7 @@ import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { TAG_NAME_MAX, workSchema, type WorkInput } from '../../lib/validation';
 import { WORK_STATUS_OPTIONS } from '../../lib/workStatus';
+import type { WorkStatus } from '../../types';
 import { TagInput } from './TagInput';
 import { CoverCropModal } from './CoverCropModal';
 
@@ -56,6 +57,7 @@ export function WorkForm({
     register,
     handleSubmit,
     control,
+    setValue,
     formState: { errors },
   } = useForm<WorkInput>({
     resolver: zodResolver(workSchema),
@@ -101,6 +103,19 @@ export function WorkForm({
   const clearCover = () => setCover(null);
 
   const submit = (data: WorkInput) => onSubmit(data, coverFile);
+
+  // 준비중을 고르면 공개 상태의 "기본값"도 비공개로 내린다(#84 - 강제 아님, 이후 수동으로
+  // 공개로 되돌리면 그 값이 유지된다). 나머지 상태는 공개 상태를 건드리지 않는다.
+  //
+  // 자동으로 공개를 켜는 방향(ongoing->공개)은 의도적으로 두지 않는다. 이 폼의 기본값이
+  // status=ongoing + is_published=false라 그 규칙과 모순되고, 등록 화면에서 상태를 골랐다
+  // 되돌리기만 해도 회차 없는 새 작품이 공개로 생성됐다(위 defaultValues 주석의 계약 위반).
+  // 노출은 한 번 일어나면 되돌릴 수 없으니 자동 연동은 안전한 방향(숨김)에만 건다.
+  //
+  // 수정 폼의 초기 로드(서버 값 주입)에서는 절대 발화하면 안 되는 규칙이다.
+  const syncPublishDefault = (next: WorkStatus) => {
+    if (next === 'preparing') setValue('is_published', false, { shouldDirty: true });
+  };
 
   return (
     <form onSubmit={handleSubmit(submit)} noValidate className="flex flex-col gap-4">
@@ -185,7 +200,12 @@ export function WorkForm({
           <label className="flex flex-col gap-1">
             <span className="text-sm font-medium">연재 상태</span>
             <div className="relative">
-              <select {...register('status')} className={SELECT_CLASS}>
+              <select
+                {...register('status', {
+                  onChange: (e) => syncPublishDefault(e.target.value as WorkStatus),
+                })}
+                className={SELECT_CLASS}
+              >
                 {WORK_STATUS_OPTIONS.map((opt) => (
                   <option key={opt.value} value={opt.value}>
                     {opt.label}
