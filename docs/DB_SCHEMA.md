@@ -107,7 +107,11 @@ works
 ├── episode_base_price   INTEGER DEFAULT 500  -- 에피소드 기본가 (원)
 ├── bundle_discount_rate NUMERIC(4,3) DEFAULT 0.1  -- 전편 할인율 (0.1 = 10%)
 ├── status               VARCHAR(20) DEFAULT 'ongoing'
-│                        -- 'ongoing' | 'completed' | 'hiatus'
+│                        -- 'preparing' | 'ongoing' | 'completed' | 'hiatus'
+│                        -- 노출 여부는 is_published 별개 축 (#84 - 상호 강제 없음)
+├── is_published         BOOLEAN NOT NULL DEFAULT false
+│                        -- 독자 카탈로그 노출 게이트. status와 독립이라 준비중+공개
+│                        -- (커밍순 티저)도, 연재중+비공개(긴급 하차)도 정상 조합이다
 ├── created_at           TIMESTAMPTZ DEFAULT now()
 ├── updated_at           TIMESTAMPTZ DEFAULT now()
 └── deleted_at           TIMESTAMPTZ

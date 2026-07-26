@@ -1,10 +1,11 @@
 import { api, ApiError } from './api';
 
 // backend/src/schemas/catalog.py의 타입을 손으로 옮긴 계약. models/work.py의
-// WorkStatus(StrEnum)과 값이 일치해야 한다(ongoing/completed/hiatus).
-export type WorkStatus = 'ongoing' | 'completed' | 'hiatus';
+// WorkStatus(StrEnum)과 값이 일치해야 한다(preparing/ongoing/completed/hiatus).
+export type WorkStatus = 'preparing' | 'ongoing' | 'completed' | 'hiatus';
 
 export const WORK_STATUS_LABEL: Record<WorkStatus, string> = {
+  preparing: '준비중',
   ongoing: '연재중',
   completed: '완결',
   hiatus: '휴재',

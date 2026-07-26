@@ -1018,7 +1018,7 @@ export interface components {
          *     후속 상태 추가는 이 enum 값만 늘리면 되고 DB 마이그레이션이 필요 없다.
          * @enum {string}
          */
-        WorkStatus: "ongoing" | "completed" | "hiatus";
+        WorkStatus: "preparing" | "ongoing" | "completed" | "hiatus";
         /**
          * WorkUpdate
          * @description 부분 수정. 필드 생략 = 미변경(exclude_unset). None 허용은 컬럼 nullability를 따른다.

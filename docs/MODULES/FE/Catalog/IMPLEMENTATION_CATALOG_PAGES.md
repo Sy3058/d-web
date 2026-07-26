@@ -63,6 +63,11 @@ M2_foundation F1 산출물이 `pages/works/[id]/[episodeNo].astro`(episode_no �
 ### `statusLabel` 폴백
 `WORK_STATUS_LABEL[status]`는 백엔드가 미러링 안 된 새 `WorkStatus`(예: 예약공개)를 보내면 `undefined` → 빈 배지. `statusLabel(status) = WORK_STATUS_LABEL[status] ?? status`로 원값이라도 노출.
 
+#### 미러 갱신은 상태 추가 때마다 수동 (2026-07-26, `preparing` 추가 - #84)
+`catalog.ts`의 `WorkStatus` union은 `catalog.py`를 손으로 옮긴 계약이라 **컴파일러가 백엔드와의 어긋남을 잡아주지 못한다**. union에 값을 안 늘리면 `Record<WorkStatus, string>` 완전성 검사 자체가 발화하지 않아서, 라벨 누락이 조용히 통과하고 독자 배지에 원시 영문값(`preparing`)이 뜬다 - 위 폴백은 배지가 통째로 비는 것만 막을 뿐 한국어 라벨을 만들어주진 않는다.
+
+그래서 **백엔드에 `WorkStatus` 값을 추가하면 이 파일도 같은 PR에서 고친다**(union + `WORK_STATUS_LABEL` 두 곳). `preparing`이 그 첫 사례이며, 이를 강제하는 테스트·CI 가드는 아직 없다(현재는 이 문서와 `catalog.ts` 상단 주석이 유일한 방어선). 어드민 쪽 경위와 배지 색 결정은 [ADMIN IMPLEMENTATION_WORK_CRUD_SCREENS.md](../../ADMIN/Works/IMPLEMENTATION_WORK_CRUD_SCREENS.md) §7 참조.
+
 ### 표지 = placeholder 배경 레이어 + `onerror`
 `cover_image_url`은 `null` 가능(D1 base 미설정 시). placeholder("표지 준비 중")를 항상 배경에 깔고 `<img>`를 그 위에 얹어, 이미지가 없거나 로드 실패(`onerror`)면 placeholder가 드러난다.
 
