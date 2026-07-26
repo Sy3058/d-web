@@ -72,14 +72,27 @@ applyCatalogCache(Astro.response, { error: loadError, notFound: !work || !episod
 
           <nav class="flex items-center justify-between mt-10 pt-6 border-t border-line text-sm">
             {prevEpisode ? (
-              <a href={`/works/${work.id}/${prevEpisode.episode_no}`} class="text-ink hover:underline">
+              // data-astro-reload: ClientRouter의 클라이언트 사이드 라우팅을 건너뛰고 전체
+              // 페이지를 새로고침한다. Viewer는 client:only="react" 아일랜드라, 뷰 트랜지션
+              // morph가 이 자리의 astro-island를 DOM에서 제거·재생성하지 않고 attrs만 갈아
+              // 끼우면 React 루트가 이전 회차 상태로 남을 위험이 있다 - 회차 간 이동에서
+              // 가장 값싸게 그 위험을 차단하는 방법이 전체 새로고침이다.
+              <a
+                href={`/works/${work.id}/${prevEpisode.episode_no}`}
+                class="text-ink hover:underline"
+                data-astro-reload
+              >
                 ← {prevEpisode.episode_no}화
               </a>
             ) : (
               <span />
             )}
             {nextEpisode ? (
-              <a href={`/works/${work.id}/${nextEpisode.episode_no}`} class="text-ink hover:underline">
+              <a
+                href={`/works/${work.id}/${nextEpisode.episode_no}`}
+                class="text-ink hover:underline"
+                data-astro-reload
+              >
                 {nextEpisode.episode_no}화 →
               </a>
             ) : (

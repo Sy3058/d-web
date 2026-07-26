@@ -26,6 +26,13 @@ interface Block {
 // 조용히 무시하는 부가 기능이라 과도한 요청을 낼 이유가 없다).
 const PROGRESS_SAVE_DEBOUNCE_MS = 800;
 
+// 복원 위치보다 위쪽 이미지 로드 대기 상한(F1 계획검증 결정 - CLS/복원오차 완화). 상한
+// 없이 기다리면 이미지 하나가 영영 안 끝나 복원 자체가 멈춘다 - 무기한 대기가 아니라,
+// 이 타임아웃 이후에도 이미지가 계속 로드될 수 있으므로 그 뒤늦은 load 이벤트를 버리지
+// 않고 재-앵커에 활용한다. 타임아웃 후 포기해도 이미지 자체는 어차피 로드되지만(리스너
+// 유무와 무관), 그때 레이아웃이 자라며 스크롤 위치만 문서 위치와 어긋난 채로 남는다.
+const RESTORE_IMAGE_TIMEOUT_MS = 2000;
+
 function buildBlocks(nodes: ContentDocNode[]): Block[] {
   let imageOrdinal = 0;
   return nodes.map((node) => {
@@ -61,6 +68,11 @@ export default function Viewer({ episodeId }: Props) {
   const topVisibleRef = useRef(0);
   const hasObservedRef = useRef(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 복원 스크롤과 무관하게 마운트 즉시부터 켜둔다 - 복원 effect 안에서만 감지를 시작하면
+  // getProgress 응답을 기다리는 동안(특히 느린 연결) 이미 시작된 독자의 스크롤을 놓쳐,
+  // 나중에 복원 스크롤이 그 위치를 되돌려버린다.
+  const userScrolledRef = useRef(false);
+  const programmaticScrollRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -71,6 +83,20 @@ export default function Viewer({ episodeId }: Props) {
       cancelled = true;
     };
   }, [episodeId]);
+
+  useEffect(() => {
+    const onUserScroll = () => {
+      if (!programmaticScrollRef.current) userScrolledRef.current = true;
+    };
+    window.addEventListener('scroll', onUserScroll, { passive: true });
+    window.addEventListener('wheel', onUserScroll, { passive: true });
+    window.addEventListener('touchmove', onUserScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', onUserScroll);
+      window.removeEventListener('wheel', onUserScroll);
+      window.removeEventListener('touchmove', onUserScroll);
+    };
+  }, []);
 
   const blocks = useMemo(() => (content ? buildBlocks(content.content.content) : []), [content]);
 
@@ -89,9 +115,57 @@ export default function Viewer({ episodeId }: Props) {
 
   useEffect(() => {
     if (restoredIndex === null) return;
-    // 알려진 한계: 이미지 로딩으로 레이아웃이 이 시점 이후에도 자라 정확한 위치가 아닐 수
-    // 있다(이미지 전량 즉시 요청이라 대부분 빠르게 안정되지만 완벽한 보장은 아님).
-    blockRefs.current.get(restoredIndex)?.scrollIntoView({ block: 'start' });
+    const target = blockRefs.current.get(restoredIndex);
+    if (!target) return;
+
+    let cancelled = false;
+
+    const scrollToTarget = () => {
+      if (userScrolledRef.current) return;
+      programmaticScrollRef.current = true;
+      target.scrollIntoView({ block: 'start' });
+      requestAnimationFrame(() => {
+        programmaticScrollRef.current = false;
+      });
+    };
+
+    // 복원 위치까지(포함) 등장하는 이미지 전부 - 이 중 하나라도 로드 전에 스크롤하면
+    // 그만큼 레이아웃이 덜 자란 상태라 위치가 밀린다.
+    const imagesAbove: HTMLImageElement[] = [];
+    for (let i = 0; i <= restoredIndex; i += 1) {
+      const el = blockRefs.current.get(i);
+      if (el) imagesAbove.push(...Array.from(el.querySelectorAll('img')));
+    }
+
+    // 재-앵커: img.complete가 이미 true여도(또는 decode()가 성공으로 착각해도) 나중에
+    // src가 바뀌어(예: onError 폴백의 콘텐츠 재요청) 실제로 다시 로드되면 'load'가 다시
+    // 발생한다 - 그 사실 하나에만 의존해 이 effect가 정리될 때까지 계속 듣는다. once로
+    // 한 번만 듣거나 이미 완료된 이미지를 건너뛰면, 재요청으로 뒤늦게 바뀐 이미지의
+    // 레이아웃 변화를 못 잡는다.
+    const detachFns = imagesAbove.map((img) => {
+      const onLoad = () => {
+        if (!cancelled) scrollToTarget();
+      };
+      img.addEventListener('load', onLoad);
+      return () => img.removeEventListener('load', onLoad);
+    });
+
+    const waitForImage = (img: HTMLImageElement) =>
+      img.complete
+        ? Promise.resolve()
+        : Promise.race([
+            img.decode().catch(() => undefined),
+            new Promise<void>((resolve) => setTimeout(resolve, RESTORE_IMAGE_TIMEOUT_MS)),
+          ]);
+
+    Promise.all(imagesAbove.map(waitForImage)).then(() => {
+      if (!cancelled) scrollToTarget();
+    });
+
+    return () => {
+      cancelled = true;
+      detachFns.forEach((detach) => detach());
+    };
   }, [restoredIndex]);
 
   // 뷰포트에 여러 블록이 걸쳐 있으면 "보이는 인덱스 중 최솟값"을 진행 위치로 삼는다 - 최댓값이나
