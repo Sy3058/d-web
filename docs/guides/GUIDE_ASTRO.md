@@ -72,6 +72,13 @@
 - `transition:persist`, `transition:name` 등 디렉티브는 그대로. 뷰 트랜지션 스캐폴딩 시 옛 이름 쓰지 말 것.
 - 출처: https://docs.astro.build/en/guides/view-transitions/
 
+### 5. 뷰 트랜지션 건너뛰기 - `data-astro-reload` (검증 2026-07-26)
+
+- `<a>` 또는 `<form>`에 `data-astro-reload` 속성을 붙이면 `<ClientRouter />`가 그 탐색을 무시하고 **브라우저 기본 전체 페이지 새로고침**을 강제한다(공식 문서 원문 확인).
+- `client:only` 아일랜드가 있는 페이지 사이를 이동할 때, ClientRouter의 DOM morph가 그 자리의 `astro-island`를 제거·재생성하지 않고 attrs만 갈아 끼울 가능성을 실측 없이 배제할 수 없다면(React 루트가 새 props로 재마운트되지 않아 이전 페이지 상태가 새 페이지로 새어 들어갈 위험), 그 이동 경로의 링크에 `data-astro-reload`를 붙이는 것이 가장 값싼 구조적 예방책이다 - 트레이드오프는 그 이동이 SPA 전환보다 느려진다는 것.
+- **이 프로젝트 적용**: `works/[id]/[episodeNo].astro`의 이전/다음 화 네비 `<a>` - `Viewer`가 `client:only="react"` 아일랜드라 회차 간 이동에서 위 위험을 차단하기 위해 사용(M2 F1 후속 보완, 2026-07-26).
+- 출처: https://docs.astro.build/en/guides/view-transitions/
+
 ---
 
 ## 이 프로젝트 Astro 컨벤션 (공식 문서에 없음)
