@@ -5,8 +5,9 @@ import type { Work, WorkCreate, WorkUpdate } from '../types';
 // 키는 서로 prefix가 되지 않게 세그먼트로 나눈다. TanStack Query의 무효화·제거는 기본이
 // prefix 매칭이라, 목록 키가 ['admin','works']였다면 목록 하나를 무효화할 때 상세까지
 // 전부 재요청된다.
-const worksListKey = ['admin', 'works', 'list'] as const;
-const workDetailKey = (workId: string) => ['admin', 'works', 'detail', workId] as const;
+// 회차 변경이 작품의 episode_count를 바꾸므로 useEpisodes도 이 키로 무효화한다(#85).
+export const worksListKey = ['admin', 'works', 'list'] as const;
+export const workDetailKey = (workId: string) => ['admin', 'works', 'detail', workId] as const;
 
 export const worksQueryOptions = queryOptions({
   queryKey: worksListKey,
