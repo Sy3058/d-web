@@ -39,6 +39,16 @@ def create_access_token(user_id: str) -> str:
     return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
 
+# 시계 역점프 허용 오차(초) - 이 모듈의 모든 jwt.decode에 leeway로 전달한다.
+# 발급·검증이 같은 서버여도 시계는 단조가 아니다: NTP/WSL2 보정으로 시계가 뒤로 점프하면
+# 방금 발급한 토큰의 iat가 "미래"가 되고 PyJWT(2.6+)가 ImmatureSignatureError로 거부한다.
+# 실제로 테스트 스위트 도중 ~1.9초 역점프가 관측돼(2026-07-27, PG 로그 타임스탬프 역행 -
+# 상세는 MISTAKES) 임의 테스트 1개가 401로 죽는 간헐 실패를 만들었다. 10초 = 실측 점프의
+# 5배 여유. exp 판정도 같이 10초 관대해지지만 최단 수명 토큰(pending·oauth_tx 600초)
+# 대비 1.7%라 수용한다.
+JWT_LEEWAY_SECONDS = 10
+
+
 def decode_token(token: str) -> dict[str, Any]:
     """JWT 검증 후 payload 반환.
 
@@ -50,6 +60,7 @@ def decode_token(token: str) -> dict[str, Any]:
             token,
             settings.jwt_secret,
             algorithms=[settings.jwt_algorithm],
+            leeway=JWT_LEEWAY_SECONDS,
         )
     except jwt.ExpiredSignatureError as e:
         raise TokenError("expired") from e
@@ -219,7 +230,12 @@ def read_oauth_tx(request: Request) -> dict[str, str] | None:
     if not raw:
         return None
     try:
-        payload = jwt.decode(raw, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+        payload = jwt.decode(
+            raw,
+            settings.jwt_secret,
+            algorithms=[settings.jwt_algorithm],
+            leeway=JWT_LEEWAY_SECONDS,
+        )
     except jwt.InvalidTokenError:
         return None
     if payload.get("typ") != "oauth_tx":
@@ -300,7 +316,12 @@ def read_admin_pending(request: Request, expected_typ: str) -> str | None:
     if not raw:
         return None
     try:
-        payload = jwt.decode(raw, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+        payload = jwt.decode(
+            raw,
+            settings.jwt_secret,
+            algorithms=[settings.jwt_algorithm],
+            leeway=JWT_LEEWAY_SECONDS,
+        )
     except jwt.InvalidTokenError:
         return None
     if payload.get("typ") != expected_typ:

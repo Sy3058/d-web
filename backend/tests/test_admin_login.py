@@ -6,6 +6,7 @@ pending 쿠키는 /admin/login이 발급하고 jar가 자동 운반한다(B2 테
 
 import asyncio
 from datetime import UTC, datetime, timedelta
+from unittest.mock import patch
 
 import jwt
 import pyotp
@@ -228,6 +229,25 @@ async def test_totp_login_with_setup_cookie_401(async_client: AsyncClient, activ
     )
     resp = await async_client.post(TOTP_URL, json={"code": pyotp.TOTP(secret).now()})
     assert resp.status_code == 401
+
+
+async def test_totp_login_survives_backward_clock_jump(async_client: AsyncClient, active_owner):
+    """pending 쿠키 발급 직후 시계가 뒤로 점프해도 2단계가 통과해야 한다 (JWT leeway).
+
+    실측 사고(2026-07-27): 스위트 도중 WSL2/NTP 보정으로 시계가 ~1.9초 역행하자 stage1이
+    발급한 pending JWT의 iat가 "미래"가 돼 PyJWT가 ImmatureSignatureError로 거부, stage2가
+    무작위 401이 됐다. iat를 5초 미래로 박은 쿠키(= 역점프 후 검증하는 상황)로 그 사고를
+    결정적으로 재현한다.
+    """
+    owner, secret = active_owner
+    with patch("src.lib.auth.datetime") as mock_dt:
+        mock_dt.now.return_value = datetime.now(UTC) + timedelta(seconds=5)
+        pending = create_admin_pending_token(str(owner.id), TOTP_PENDING)
+    async_client.cookies.set(
+        ADMIN_PENDING_COOKIE_NAME, pending, domain="test.example", path="/admin"
+    )
+    resp = await async_client.post(TOTP_URL, json={"code": pyotp.TOTP(secret).now()})
+    assert resp.status_code == 200
 
 
 async def test_totp_login_demoted_after_stage1_401(
