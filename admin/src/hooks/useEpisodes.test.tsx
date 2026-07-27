@@ -2,7 +2,12 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { useUpdateEpisode, useUploadEpisodeImage } from './useEpisodes';
+import {
+  useDeleteEpisode,
+  useUnpublishEpisode,
+  useUpdateEpisode,
+  useUploadEpisodeImage,
+} from './useEpisodes';
 import type { Episode } from '../types';
 
 vi.mock('../lib/api', async () => ({
@@ -10,7 +15,7 @@ vi.mock('../lib/api', async () => ({
   api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() },
 }));
 
-const { api } = await import('../lib/api');
+const { ApiError, api } = await import('../lib/api');
 
 function makeEpisode(id: string, imageKeys: string[] = []): Episode {
   return {
@@ -72,6 +77,67 @@ describe('useEpisodes 캐시 키', () => {
     expect(queryClient.getQueryState(listKey('w1'))?.isInvalidated).toBe(true);
     expect(queryClient.getQueryState(listKey('w2'))?.isInvalidated).toBe(false);
     expect(queryClient.getQueryState(imageUrlsKey('w1', 'e1'))?.isInvalidated).toBe(false);
+  });
+});
+
+// 작품 캐시 키도 리터럴로 고정한다 - useWorks에서 import해 오면 양쪽이 같이 틀려도 통과한다.
+const worksListKey = ['admin', 'works', 'list'];
+const workDetailKey = (workId: string) => ['admin', 'works', 'detail', workId];
+
+describe('회차 삭제·비공개 전환 캐시 (#85)', () => {
+  let queryClient: QueryClient;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    queryClient = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
+    queryClient.setQueryData(listKey('w1'), [makeEpisode('e1')]);
+    queryClient.setQueryData(worksListKey, []);
+    queryClient.setQueryData(workDetailKey('w1'), {});
+  });
+
+  it('삭제는 회차 목록과 작품 목록·상세까지 무효화한다(총 N화가 줄어든다)', async () => {
+    vi.mocked(api.delete).mockResolvedValueOnce(undefined);
+
+    const { result } = renderHook(() => useDeleteEpisode('w1'), {
+      wrapper: makeWrapper(queryClient),
+    });
+    result.current.mutate('e1');
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(api.delete).toHaveBeenCalledWith('/admin/works/w1/episodes/e1');
+    expect(queryClient.getQueryState(listKey('w1'))?.isInvalidated).toBe(true);
+    expect(queryClient.getQueryState(worksListKey)?.isInvalidated).toBe(true);
+    expect(queryClient.getQueryState(workDetailKey('w1'))?.isInvalidated).toBe(true);
+  });
+
+  it('삭제가 404로 실패해도 목록을 무효화한다(이미 지워진 회차 = 목록이 낡았다는 신호)', async () => {
+    vi.mocked(api.delete).mockRejectedValueOnce(new ApiError(404, '에피소드를 찾을 수 없습니다'));
+
+    const { result } = renderHook(() => useDeleteEpisode('w1'), {
+      wrapper: makeWrapper(queryClient),
+    });
+    result.current.mutate('e1');
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    // onSuccess에만 걸면 두 번 누른 사용자 화면에 없는 회차가 계속 남는다.
+    expect(queryClient.getQueryState(listKey('w1'))?.isInvalidated).toBe(true);
+  });
+
+  it('비공개 전환은 is_published:false만 보내고 작품 캐시는 건드리지 않는다', async () => {
+    vi.mocked(api.put).mockResolvedValueOnce(makeEpisode('e1'));
+
+    const { result } = renderHook(() => useUnpublishEpisode('w1'), {
+      wrapper: makeWrapper(queryClient),
+    });
+    result.current.mutate('e1');
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    // content가 실리면 공개 회차 발행본 보호(#86)에 걸려 409가 난다.
+    expect(api.put).toHaveBeenCalledWith('/admin/works/w1/episodes/e1', { is_published: false });
+    expect(queryClient.getQueryState(listKey('w1'))?.isInvalidated).toBe(true);
+    // 공개 여부는 episode_count를 바꾸지 않는다(삭제분만 제외) - 위 삭제 케이스와의 짝.
+    expect(queryClient.getQueryState(worksListKey)?.isInvalidated).toBe(false);
+    expect(queryClient.getQueryState(workDetailKey('w1'))?.isInvalidated).toBe(false);
   });
 });
 

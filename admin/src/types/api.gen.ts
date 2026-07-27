@@ -311,7 +311,7 @@ export interface paths {
         };
         /**
          * List Episodes
-         * @description episode_no 순 목록. image_keys 포함(F3 재배열 UI 소비)이라 상세 GET은 없다.
+         * @description episode_no 순 목록(삭제분 제외). image_keys 포함(F3 재배열 UI 소비)이라 상세 GET은 없다.
          */
         get: operations["list_episodes_admin_works__work_id__episodes_get"];
         put?: never;
@@ -363,7 +363,15 @@ export interface paths {
          */
         put: operations["update_episode_admin_works__work_id__episodes__episode_id__put"];
         post?: never;
-        delete?: never;
+        /**
+         * Delete Episode
+         * @description 회차 soft delete (#85). 공개 중인 회차도 지울 수 있고, 삭제와 동시에 공개가 풀린다.
+         *
+         *     이미 삭제된 회차는 404다(_episode_or_404가 deleted_at을 본다) - DELETE를 멱등하게
+         *     두지 않은 건 "지웠는데 204가 또 온다"보다 "그 회차는 이미 없다"가 관리자에게
+         *     정확한 정보이기 때문. 되살리는 엔드포인트는 두지 않는다.
+         */
+        delete: operations["delete_episode_admin_works__work_id__episodes__episode_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1722,6 +1730,36 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["AdminEpisodeRead"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_episode_admin_works__work_id__episodes__episode_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                work_id: string;
+                episode_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

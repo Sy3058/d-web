@@ -364,6 +364,30 @@ async def test_unpublished_episode_404(
     assert PAID_TEXT not in resp.text
 
 
+async def test_soft_deleted_episode_404(
+    async_client: AsyncClient, db_session: AsyncSession, user: User
+):
+    """삭제된 회차(#85)는 ID 직접 접근으로도 본문이 나가면 안 된다.
+
+    회차를 is_published=true인 채로 삭제 표시한다. soft_delete_episode는 실제로
+    둘 다 세우지만, 그렇게 만들면 위 test_unpublished_episode_404와 같은 조건이라
+    deleted_at 가드가 빠져도 초록이다 - 여기서 고정하려는 건 "불변식이 깨진
+    상태에서도 독자 경로가 막히는가"다.
+    """
+    work = await _make_work(db_session, user)
+    ep = await _make_episode(
+        db_session,
+        work,
+        is_published=True,
+        deleted_at=datetime.now(UTC),
+        content=_doc(_para(PAID_TEXT)),
+    )
+
+    resp = await async_client.get(_content_url(ep.id))
+    assert resp.status_code == 404
+    assert PAID_TEXT not in resp.text
+
+
 async def test_hidden_work_episode_404(
     async_client: AsyncClient, db_session: AsyncSession, user: User
 ):

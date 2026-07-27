@@ -230,6 +230,13 @@ class Episode(SQLModel, table=True):
     )
     created_at: datetime | None = Field(default=None, sa_column=_created_at_column())
     updated_at: datetime | None = Field(default=None, sa_column=_updated_at_column())
+    # 회차 soft delete (#85). 불변식: deleted_at IS NOT NULL이면 is_published=false이고
+    # published_at IS NULL이다(episode_service.soft_delete_episode가 한 UPDATE로 보장).
+    # 행이 남는 이유는 UNIQUE(work_id, episode_no) - 삭제된 회차의 번호는 소진되고
+    # 재사용하지 않는다(독자 URL /works/{id}/{회차번호}가 다른 내용을 가리키면 안 됨).
+    deleted_at: datetime | None = Field(
+        default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
+    )
 
 
 # 관리자 목록의 "총 N화". 새 컬럼이 아니라 Work SELECT에 얹히는 상관 서브쿼리라
@@ -241,7 +248,7 @@ class Episode(SQLModel, table=True):
 # 그래서 create_work는 commit 후 이 속성만 명시적으로 refresh한다(work_service).
 Work.episode_count = column_property(  # type: ignore[attr-defined]
     select(func.count(Episode.id))
-    .where(Episode.work_id == Work.id)
+    .where(Episode.work_id == Work.id, Episode.deleted_at.is_(None))
     .correlate_except(Episode)
     .scalar_subquery()
 )

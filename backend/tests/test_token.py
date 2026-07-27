@@ -50,6 +50,22 @@ async def test_expired_token_raises():
         decode_token(token)
 
 
+async def test_backward_clock_jump_within_leeway_accepted():
+    """iat가 약간 미래인 토큰(= 발급 직후 시계 역점프)은 leeway 안에서 통과해야 한다.
+
+    같은 서버라도 NTP/WSL2 보정으로 시계가 뒤로 점프할 수 있다(2026-07-27 스위트 도중
+    ~1.9초 역행 실측 - PG 로그 타임스탬프 역전). leeway가 없으면 PyJWT가
+    ImmatureSignatureError로 거부해, 방금 발급된 토큰을 쓰는 요청 하나가 무작위로
+    401이 된다. JWT_LEEWAY_SECONDS(auth.py)가 이를 흡수한다.
+    """
+    user_id = str(uuid.uuid4())
+    with patch("src.lib.auth.datetime") as mock_dt:
+        # 발급 시각을 5초 미래로 - 역점프 직후 검증하는 상황의 재현(leeway 10초 이내)
+        mock_dt.now.return_value = datetime.now(UTC) + timedelta(seconds=5)
+        token = create_access_token(user_id)
+    assert decode_token(token)["sub"] == user_id
+
+
 async def test_forged_signature_raises():
     user_id = str(uuid.uuid4())
     token = create_access_token(user_id)

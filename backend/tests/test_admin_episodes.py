@@ -16,6 +16,7 @@ import pytest_asyncio
 from httpx import AsyncClient
 from PIL import Image
 from sqlalchemy import update
+from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.lib.auth import access_cookie_name, create_access_token
@@ -845,6 +846,150 @@ async def test_draft_with_content_422(owner_client: AsyncClient, uploaded_keys: 
         draft=_draft(_para("편집본")),
     )
     assert resp.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# 회차 soft delete (#85)
+# ---------------------------------------------------------------------------
+
+
+def _episode_url(work_id: str, episode_id: str) -> str:
+    return f"{_episodes_url(work_id)}/{episode_id}"
+
+
+async def _deleted_state(db_session: AsyncSession, episode_id: str) -> tuple:
+    """삭제된 행의 (deleted_at, is_published, published_at). API로는 안 보이니 직접 읽는다.
+
+    엔티티가 아니라 컬럼을 select한다 - conftest 세션은 expire_on_commit=False라
+    identity map에 남은 Episode 인스턴스가 bulk UPDATE(synchronize_session=False)
+    결과를 모른 채 그대로 돌아온다. 컬럼 select는 항상 DB를 친다.
+    """
+    result = await db_session.exec(
+        select(Episode.deleted_at, Episode.is_published, Episode.published_at).where(
+            Episode.id == uuid.UUID(episode_id)
+        )
+    )
+    return result.one()
+
+
+async def test_delete_episode_204_and_hidden_from_list(
+    owner_client: AsyncClient, uploaded_keys: list[str]
+):
+    work_id, episode_id, _keys = await _episode_with_content(owner_client)
+    resp = await owner_client.delete(_episode_url(work_id, episode_id))
+    assert resp.status_code == 204
+    listed = await owner_client.get(_episodes_url(work_id))
+    assert listed.status_code == 200
+    assert listed.json() == []
+
+
+async def test_delete_published_episode_unpublishes(
+    owner_client: AsyncClient, uploaded_keys: list[str], db_session: AsyncSession
+):
+    # #85 본체: 공개 중인 회차도 지울 수 있고, 삭제와 공개 해제가 같은 UPDATE로 일어난다.
+    work_id, episode_id, _keys, published = await _published_episode(owner_client)
+    assert published["is_published"] is True
+    assert published["published_at"] is not None
+
+    assert (await owner_client.delete(_episode_url(work_id, episode_id))).status_code == 204
+
+    deleted_at, is_published, published_at = await _deleted_state(db_session, episode_id)
+    # "삭제 ⟹ 비공개" 불변식. 셋 중 하나라도 빠지면 독자 경로(is_published 기준)나
+    # 스케줄러 재공개(published_at 기준) 중 한쪽이 뚫린다.
+    assert deleted_at is not None
+    assert is_published is False
+    assert published_at is None
+
+
+async def test_delete_twice_404(owner_client: AsyncClient, uploaded_keys: list[str]):
+    work_id, episode_id, _keys = await _episode_with_content(owner_client)
+    assert (await owner_client.delete(_episode_url(work_id, episode_id))).status_code == 204
+    assert (await owner_client.delete(_episode_url(work_id, episode_id))).status_code == 404
+
+
+async def test_delete_missing_episode_404(owner_client: AsyncClient):
+    work_id = await _create_work_id(owner_client)
+    assert (await owner_client.delete(_episode_url(work_id, _MISSING))).status_code == 404
+
+
+async def test_deleted_episode_put_404(owner_client: AsyncClient, uploaded_keys: list[str]):
+    # 재공개 경로가 막혀야 "삭제 ⟹ 비공개"가 불변식으로 성립한다. 여기가 뚫리면
+    # 독자 경로의 deleted_at 가드는 방어선이 아니라 유일한 방어선이 된다.
+    work_id, episode_id, _keys = await _episode_with_content(owner_client)
+    assert (await owner_client.delete(_episode_url(work_id, episode_id))).status_code == 204
+    assert (await _put(owner_client, work_id, episode_id, is_published=True)).status_code == 404
+
+
+async def test_deleted_episode_image_upload_404(
+    owner_client: AsyncClient, uploaded_keys: list[str]
+):
+    work_id, episode_id, _keys = await _episode_with_content(owner_client)
+    assert (await owner_client.delete(_episode_url(work_id, episode_id))).status_code == 204
+    assert (await _upload_image(owner_client, work_id, episode_id)).status_code == 404
+
+
+async def test_deleted_episode_no_is_burned(owner_client: AsyncClient, uploaded_keys: list[str]):
+    # UNIQUE(work_id, episode_no)는 deleted_at을 안 본다 - 삭제한 번호는 소진된다(#85 결정:
+    # 독자 URL /works/{작품}/{회차번호}가 나중에 다른 내용을 가리키면 안 되므로).
+    work_id, episode_id, _keys = await _episode_with_content(owner_client)
+    assert (await owner_client.delete(_episode_url(work_id, episode_id))).status_code == 204
+    resp = await owner_client.post(
+        _episodes_url(work_id), json={"episode_no": 1, "title": "새 1화"}
+    )
+    assert resp.status_code == 409
+    # 목록에 없는 번호로 409를 받으면 관리자가 버그로 오인한다 - 문구가 이유를 밝혀야 한다.
+    assert "삭제된 회차" in resp.json()["detail"]
+
+
+async def test_auto_episode_no_counts_deleted(owner_client: AsyncClient, uploaded_keys: list[str]):
+    # 자동 할당(max+1)은 삭제분까지 세야 한다. 삭제분을 빼면 max+1이 소진된 번호와
+    # 겹쳐 "번호를 안 적었을 뿐인데 409"가 난다.
+    work_id, episode_id, _keys = await _episode_with_content(owner_client)
+    assert (await owner_client.delete(_episode_url(work_id, episode_id))).status_code == 204
+    resp = await owner_client.post(_episodes_url(work_id), json={"title": "다음 화"})
+    assert resp.status_code == 201
+    assert resp.json()["episode_no"] == 2
+
+
+async def test_delete_removes_public_thumbnail(
+    owner_client: AsyncClient, r2_calls: dict[str, list[dict]]
+):
+    # 공개 버킷 축소본은 서명 없이 열린다 - 회차를 내렸는데 남으면 URL을 아는 사람에게
+    # 계속 서빙된다. 원고(image_keys)는 soft delete라 그대로 둔다.
+    work_id, episode_id, keys = await _episode_with_content(owner_client)
+    assert (await _put(owner_client, work_id, episode_id, thumbnail=keys[0])).status_code == 200
+    r2_calls["delete"].clear()
+
+    assert (await owner_client.delete(_episode_url(work_id, episode_id))).status_code == 204
+
+    assert len(r2_calls["delete"]) == 1
+    call = r2_calls["delete"][0]
+    assert call["bucket"] == r2_service.settings.r2_public_bucket == "dweb-cover"
+    assert call["key"] == r2_service.episode_thumb_key(uuid.UUID(work_id), uuid.UUID(episode_id))
+
+
+async def test_delete_without_thumbnail_touches_no_object(
+    owner_client: AsyncClient, r2_calls: dict[str, list[dict]]
+):
+    # 위 테스트의 짝. 이것만 없으면 "삭제 시 무조건 thumb 키를 지운다"로 바뀌어도
+    # (썸네일 없는 회차에 없는 키 삭제 요청을 날려도) 아무도 못 잡는다.
+    work_id, episode_id, _keys = await _episode_with_content(owner_client)
+    r2_calls["delete"].clear()
+    assert (await owner_client.delete(_episode_url(work_id, episode_id))).status_code == 204
+    assert r2_calls["delete"] == []
+
+
+async def test_delete_excluded_from_work_episode_count(
+    owner_client: AsyncClient, uploaded_keys: list[str]
+):
+    # 작품 목록의 "총 N화"(Work.episode_count 상관 서브쿼리)도 삭제분을 빼야 한다 -
+    # 지웠는데 숫자가 그대로면 관리자는 삭제가 안 된 줄 안다.
+    work_id, episode_id, _keys = await _episode_with_content(owner_client)
+    before = (await owner_client.get(f"{WORKS_URL}/{work_id}")).json()["episode_count"]
+    assert before == 1
+    assert (await owner_client.delete(_episode_url(work_id, episode_id))).status_code == 204
+    after = (await owner_client.get(f"{WORKS_URL}/{work_id}")).json()["episode_count"]
+    assert after == 0
 
 
 async def test_content_write_consumes_draft(owner_client: AsyncClient, uploaded_keys: list[str]):

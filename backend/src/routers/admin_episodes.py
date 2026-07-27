@@ -126,9 +126,26 @@ async def update_episode(
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
 
 
+@router.delete("/{episode_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_episode(
+    work_id: uuid.UUID, episode_id: uuid.UUID, owner: OwnerDep, session: SessionDep
+) -> None:
+    """회차 soft delete (#85). 공개 중인 회차도 지울 수 있고, 삭제와 동시에 공개가 풀린다.
+
+    이미 삭제된 회차는 404다(_episode_or_404가 deleted_at을 본다) - DELETE를 멱등하게
+    두지 않은 건 "지웠는데 204가 또 온다"보다 "그 회차는 이미 없다"가 관리자에게
+    정확한 정보이기 때문. 되살리는 엔드포인트는 두지 않는다.
+    """
+    episode = await _episode_or_404(work_id, episode_id, session)
+    try:
+        await episode_service.soft_delete_episode(episode, session)
+    except EpisodeConflictError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+
+
 @router.get("", response_model=list[AdminEpisodeRead])
 async def list_episodes(work_id: uuid.UUID, owner: OwnerDep, session: SessionDep) -> list[Episode]:
-    """episode_no 순 목록. image_keys 포함(F3 재배열 UI 소비)이라 상세 GET은 없다."""
+    """episode_no 순 목록(삭제분 제외). image_keys 포함(F3 재배열 UI 소비)이라 상세 GET은 없다."""
     await _work_or_404(work_id, session)
     return list(await episode_service.list_episodes(work_id, session))
 

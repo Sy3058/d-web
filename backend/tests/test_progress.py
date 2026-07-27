@@ -143,6 +143,19 @@ async def test_put_rejects_unpublished_episode(
     assert resp.status_code == 404
 
 
+async def test_put_rejects_soft_deleted_episode(
+    async_client: AsyncClient, db_session: AsyncSession, user: User
+):
+    # 공개 상태를 남겨둔 삭제 회차(#85) - 비공개로 만들면 위 테스트와 조건이 같아져
+    # deleted_at 가드가 빠져도 통과한다.
+    work = await make_work(db_session, user)
+    ep = await make_episode(db_session, work, is_published=True, deleted_at=datetime.now(UTC))
+    await _authed(async_client, user)
+
+    resp = await async_client.put(_progress_url(ep.id), json={"page_no": 1})
+    assert resp.status_code == 404
+
+
 async def test_put_rejects_nonexistent_episode(
     async_client: AsyncClient, db_session: AsyncSession, user: User
 ):

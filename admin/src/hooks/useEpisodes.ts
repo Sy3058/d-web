@@ -1,6 +1,7 @@
 import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError, api } from '../lib/api';
 import type { Episode, EpisodeCreate, EpisodeImageUrl, EpisodeUpdate } from '../types';
+import { workDetailKey, worksListKey } from './useWorks';
 
 // useWorks와 같은 규칙: 키를 세그먼트로 분리해 서로 prefix가 되지 않게 한다
 // (prefix 매칭 무효화가 무관한 쿼리까지 재요청하는 F2 함정).
@@ -78,7 +79,8 @@ export function useUploadEpisodeImage(workId: string) {
 
 /** 부분수정 저장: 본문(content) + 제목/부제 + (회차 설정 모달에서) 회차번호/판매가.
  * is_published는 절대 싣지 않는다(F4 소관 - 에코하면 서버가 published_at을 NULL로 밀어 예약이
- * 풀린다). image_keys도 싣지 않는다 - 매니페스트는 이미지 업로드 엔드포인트가 append로 관리하고,
+ * 풀린다). 의도적으로 공개를 내리는 건 useUnpublishEpisode 전용 경로다(#85).
+ * image_keys도 싣지 않는다 - 매니페스트는 이미지 업로드 엔드포인트가 append로 관리하고,
  * 축소(미참조 키 정리)는 별도 후속이라 저장 경로가 건드리지 않는다. */
 export function useUpdateEpisode(workId: string) {
   const queryClient = useQueryClient();
@@ -87,6 +89,44 @@ export function useUpdateEpisode(workId: string) {
       api.put<Episode>(`${episodesUrl(workId)}/${episodeId}`, body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: episodesListKey(workId) });
+    },
+  });
+}
+
+/** 공개 회차 내리기 (#85). `is_published: false`를 **단독**으로 보낸다.
+ *
+ * 에디터 저장(useUpdateEpisode)을 재사용하면 안 된다 - 그 경로는 content를 항상 동봉하는데,
+ * 공개 회차에 content를 보내면 서버가 409로 막는다(#86 발행본 보호). 목록의 액션 메뉴는
+ * 원고를 만질 이유가 없으므로 상태 필드만 보낸다.
+ *
+ * 서버는 false를 받으면 published_at도 NULL로 밀어 예약까지 함께 해제한다 - 과거 시각이
+ * 남아 있으면 E1 스케줄러가 다음 틱(60초)에 그대로 재공개하기 때문. 재예약은 별도 요청이다.
+ * episode_count는 공개 여부와 무관(삭제분만 제외)이라 작품 캐시는 건드리지 않는다. */
+export function useUnpublishEpisode(workId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (episodeId: string) =>
+      api.put<Episode>(`${episodesUrl(workId)}/${episodeId}`, { is_published: false }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: episodesListKey(workId) });
+    },
+  });
+}
+
+/** 회차 soft delete (#85). 서버 응답은 204(본문 없음)라 반환값이 없다.
+ *
+ * 회차가 빠지면 작품의 "총 N화"(episode_count)도 줄어드는데 그 값은 작품 목록·상세가
+ * 들고 있다 - 회차 목록만 갱신하면 옆 화면 숫자가 옛값으로 남는다. */
+export function useDeleteEpisode(workId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (episodeId: string) => api.delete<void>(`${episodesUrl(workId)}/${episodeId}`),
+    // onSuccess가 아니라 onSettled: 대표 실패인 404(이미 지워진 회차)는 곧 "이 목록이
+    // 낡았다"는 신호라, 실패 경로에서도 갱신해야 유령 행이 화면에 남지 않는다.
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: episodesListKey(workId) });
+      queryClient.invalidateQueries({ queryKey: workDetailKey(workId) });
+      queryClient.invalidateQueries({ queryKey: worksListKey });
     },
   });
 }
