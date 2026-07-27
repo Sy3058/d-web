@@ -54,6 +54,12 @@ async def publish_due_episodes(session: AsyncSession) -> int:
             # 쓰기 경로가 유의미 내용 없는 문서를 EMPTY_DOC(content=[])으로 접어주기
             # 때문에(lib/content_doc) 배열 길이 > 0 이 곧 "유의미 내용 있음"이다.
             func.jsonb_array_length(Episode.content["content"]) > 0,
+            # soft delete(#85)는 published_at도 NULL로 밀기 때문에 위 조건만으로도
+            # 삭제된 회차는 이미 안 걸린다. 그래도 명시하는 이유: 이 잡이 비공개→공개를
+            # 자동으로 뒤집는 유일한 경로이고 그 전환은 되돌릴 수 없다. 나중에 누가
+            # "삭제해도 예약은 남겨두자"로 soft_delete_episode를 바꾸면 이 가드가 없는
+            # 순간 삭제한 회차가 다음 틱에 독자에게 공개된다.
+            Episode.deleted_at.is_(None),
         )
         .values(is_published=True)
         .execution_options(synchronize_session=False)

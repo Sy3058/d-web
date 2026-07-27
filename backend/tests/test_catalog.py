@@ -76,6 +76,23 @@ async def test_list_episode_count_counts_only_published_episodes(
     assert item["episode_count"] == 1
 
 
+async def test_list_episode_count_excludes_deleted_episode(
+    async_client: AsyncClient, db_session: AsyncSession, user: User
+):
+    # ⚠️ 삭제 회차를 is_published=True인 채로 만든다(#85). 비공개로 두면 기존
+    # is_published 필터에 먼저 걸려, deleted_at 가드가 없어도 이 테스트가 통과한다 -
+    # 판별력 0(#84 교훈). soft_delete_episode가 실제로는 둘 다 세우지만, 여기서
+    # 검증하려는 건 "불변식이 깨져도 독자 경로가 막히는가"다.
+    work = await _make_work(db_session, user)
+    await _make_episode(db_session, work, episode_no=1, is_published=True)
+    await _make_episode(
+        db_session, work, episode_no=2, is_published=True, deleted_at=datetime.now(UTC)
+    )
+
+    resp = await async_client.get(WORKS_URL)
+    assert resp.json()["items"][0]["episode_count"] == 1
+
+
 async def test_list_pagination(async_client: AsyncClient, db_session: AsyncSession, user: User):
     for i in range(3):
         await _make_work(db_session, user, title=f"작품{i}")
@@ -194,6 +211,20 @@ async def test_detail_excludes_unpublished_episode(
     resp = await async_client.get(f"{WORKS_URL}/{work.id}")
     ep_ids = {ep["id"] for ep in resp.json()["episodes"]}
     assert ep_ids == {str(published.id)}
+
+
+async def test_detail_excludes_deleted_episode(
+    async_client: AsyncClient, db_session: AsyncSession, user: User
+):
+    # 공개 상태를 남겨둔 삭제 행 - 위 count 테스트와 같은 이유(판별력).
+    work = await _make_work(db_session, user)
+    kept = await _make_episode(db_session, work, episode_no=1, is_published=True)
+    await _make_episode(
+        db_session, work, episode_no=2, is_published=True, deleted_at=datetime.now(UTC)
+    )
+
+    resp = await async_client.get(f"{WORKS_URL}/{work.id}")
+    assert {ep["id"] for ep in resp.json()["episodes"]} == {str(kept.id)}
 
 
 async def test_detail_episode_free_locked_purchased_flags(
@@ -469,6 +500,19 @@ async def test_episodes_excludes_unpublished_episode(
     resp = await async_client.get(_episodes_url(work.id))
     assert resp.status_code == 200
     assert [ep["id"] for ep in resp.json()] == [str(published.id)]
+
+
+async def test_episodes_excludes_deleted_episode(
+    async_client: AsyncClient, db_session: AsyncSession, user: User
+):
+    # make_episode 기본값이 is_published=True라, deleted_at만 얹으면 곧 "공개인데 삭제"다.
+    work = await _make_work(db_session, user)
+    kept = await _make_episode(db_session, work, episode_no=1)
+    await _make_episode(db_session, work, episode_no=2, deleted_at=datetime.now(UTC))
+
+    resp = await async_client.get(_episodes_url(work.id))
+    assert resp.status_code == 200
+    assert [ep["id"] for ep in resp.json()] == [str(kept.id)]
 
 
 async def test_episodes_ordered_by_episode_no(

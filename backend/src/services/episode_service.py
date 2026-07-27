@@ -14,6 +14,7 @@ import uuid
 from collections.abc import Sequence
 from datetime import UTC, datetime
 
+import structlog
 from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.sql import func
@@ -40,6 +41,28 @@ _PUBLISHED_CONTENT_GUARD = (
     " - 임시저장은 draft를 사용하세요"
 )
 _DRAFT_KEYS_REMOVED = "image_keys 축소가 임시저장본(draft)이 참조하는 키를 제거합니다"
+_DELETED_EPISODE_NO = (
+    "삭제된 회차가 사용 중인 번호입니다 - 삭제한 회차의 번호는 다시 쓸 수 없습니다"
+)
+
+logger = structlog.get_logger(__name__)
+
+
+async def _duplicate_no_message(work_id: uuid.UUID, episode_no: int, session: AsyncSession) -> str:
+    """회차 번호 충돌 문구. 삭제된 회차가 번호를 쥐고 있으면 그렇다고 알려준다(#85).
+
+    UNIQUE(work_id, episode_no)는 deleted_at을 보지 않아 삭제된 회차의 번호가 소진된다
+    (#85 결정 - 독자 URL의 회차 번호가 나중에 다른 내용을 가리키면 안 되므로).
+    기본 문구만 내보내면 관리자가 목록에 없는 번호로 409를 받고 버그로 오인한다.
+    """
+    result = await session.exec(
+        select(Episode.id).where(
+            Episode.work_id == work_id,
+            Episode.episode_no == episode_no,
+            Episode.deleted_at.is_not(None),
+        )
+    )
+    return _DELETED_EPISODE_NO if result.first() is not None else _DUPLICATE_EPISODE_NO
 
 
 async def create_episode(work_id: uuid.UUID, data: EpisodeCreate, session: AsyncSession) -> Episode:
@@ -57,6 +80,9 @@ async def create_episode(work_id: uuid.UUID, data: EpisodeCreate, session: Async
     """
     payload = data.model_dump()
     if payload["episode_no"] is None:
+        # ⚠️ soft delete된 회차도 세는 게 맞다(#85). UNIQUE(work_id, episode_no)는
+        # deleted_at을 안 보므로 삭제 행이 번호를 계속 점유한다 - 여기서 삭제분을
+        # 빼면 max+1이 삭제된 번호와 겹쳐 자동 할당이 IntegrityError로 죽는다.
         result = await session.exec(
             select(func.coalesce(func.max(Episode.episode_no), 0)).where(Episode.work_id == work_id)
         )
@@ -67,13 +93,17 @@ async def create_episode(work_id: uuid.UUID, data: EpisodeCreate, session: Async
         await session.commit()
     except IntegrityError as exc:
         await session.rollback()
-        raise EpisodeConflictError(_DUPLICATE_EPISODE_NO) from exc
+        raise EpisodeConflictError(
+            await _duplicate_no_message(work_id, payload["episode_no"], session)
+        ) from exc
     return episode
 
 
 async def list_episodes(work_id: uuid.UUID, session: AsyncSession) -> Sequence[Episode]:
     result = await session.exec(
-        select(Episode).where(Episode.work_id == work_id).order_by(Episode.episode_no)
+        select(Episode)
+        .where(Episode.work_id == work_id, Episode.deleted_at.is_(None))
+        .order_by(Episode.episode_no)
     )
     return result.all()
 
@@ -86,6 +116,10 @@ async def get_episode(
     Work를 join해 deleted_at까지 한 쿼리로 거른다 - 안 거르면 삭제된 작품의
     에피소드에 업로드·수정·공개가 통과하는 비대칭이 생긴다(생성·목록은 404인데
     업로드·PUT은 200 - 2026-07-10 리뷰 ⑤).
+
+    회차 자신의 deleted_at도 같이 본다(#85). 이 함수가 라우터의 _episode_or_404
+    관문이라, 여기서 걸러야 삭제된 회차의 수정·이미지 업로드·재공개가 전부 404가
+    된다 - 특히 PUT이 막혀야 "삭제 ⟹ 비공개" 불변식을 되돌릴 경로가 없어진다.
     """
     result = await session.exec(
         select(Episode)
@@ -93,6 +127,7 @@ async def get_episode(
         .where(
             Episode.id == episode_id,
             Episode.work_id == work_id,
+            Episode.deleted_at.is_(None),  # type: ignore[union-attr]
             Work.deleted_at.is_(None),  # type: ignore[union-attr]
         )
     )
@@ -197,6 +232,10 @@ async def update_episode(episode: Episode, data: EpisodeUpdate, session: AsyncSe
     new_keys: list[str] | None = changes.pop("image_keys", None)
     expected_len = len(episode.image_keys)
     draft_sent = "draft" in changes
+    # 번호 충돌 문구 조회용 스냅샷. rollback()은 세션 객체를 전부 만료시키므로 except
+    # 안에서 episode.*를 읽으면 async 밖 lazy load로 MissingGreenlet이 난다.
+    work_id = episode.work_id
+    final_no = changes.get("episode_no", episode.episode_no)
 
     if new_keys is not None:
         _validate_reorder(episode.image_keys, new_keys)
@@ -286,7 +325,9 @@ async def update_episode(episode: Episode, data: EpisodeUpdate, session: AsyncSe
             )
         except IntegrityError as exc:
             await session.rollback()
-            raise EpisodeConflictError(_DUPLICATE_EPISODE_NO) from exc
+            raise EpisodeConflictError(
+                await _duplicate_no_message(work_id, final_no, session)
+            ) from exc
         if result.rowcount != 1:
             await session.rollback()
             raise EpisodeConflictError(_STALE_EPISODE)
@@ -308,10 +349,61 @@ async def update_episode(episode: Episode, data: EpisodeUpdate, session: AsyncSe
         await session.commit()
     except IntegrityError as exc:
         await session.rollback()
-        raise EpisodeConflictError(_DUPLICATE_EPISODE_NO) from exc
+        raise EpisodeConflictError(await _duplicate_no_message(work_id, final_no, session)) from exc
     if should_delete_public_thumb:
         await r2_service.delete_object(
             r2_service.episode_thumb_key(episode.work_id, episode.id),
             bucket=settings.r2_public_bucket,
         )
     return episode
+
+
+async def soft_delete_episode(episode: Episode, session: AsyncSession) -> None:
+    """회차 soft delete (#85). deleted_at 스탬프와 공개 해제를 한 UPDATE로 원자화한다.
+
+    행을 남기는 이유는 UNIQUE(work_id, episode_no)다 - 삭제된 회차의 번호는 소진되고
+    재사용하지 않는다(독자 URL /works/{작품}/{회차번호}가 나중에 다른 내용을 가리키면
+    안 되므로). 되살리는 API는 없다.
+
+    deleted_at IS NULL 조건부 UPDATE라 동시 삭제는 한쪽만 이긴다(rowcount 0 = 409).
+    나눠 쓰면 "삭제됐는데 아직 공개"인 창이 생기는데, 그 사이 독자 요청 하나가
+    통과하면 되돌릴 수 없다.
+
+    공개 버킷의 썸네일 축소본은 DB 커밋 **후** 지운다(update_episode의 썸네일 해제와
+    같은 순서·같은 이유 - 먼저 지웠다가 DB가 실패하면 DB가 없는 객체를 가리킨다).
+    원고와 달리 이건 서명 없이 열리는 공개 객체라, 남기면 회차를 내린 뒤에도 URL을
+    아는 사람에게 계속 서빙된다. 페이지 원본에서 다시 만들 수 있는 파생물이라 지워도
+    복구 가능성은 줄지 않는다. image_keys의 원고는 건드리지 않는다(soft delete의 요점).
+    """
+    thumbnail = episode.thumbnail
+    work_id = episode.work_id
+    episode_id = episode.id
+
+    result = await session.exec(
+        update(Episode)
+        .where(Episode.id == episode_id, Episode.deleted_at.is_(None))
+        .values(deleted_at=func.now(), is_published=False, published_at=None)
+        .execution_options(synchronize_session=False)
+    )
+    if result.rowcount != 1:
+        await session.rollback()
+        raise EpisodeConflictError(_STALE_EPISODE)
+    await session.commit()
+
+    if thumbnail is not None:
+        try:
+            await r2_service.delete_object(
+                r2_service.episode_thumb_key(work_id, episode_id),
+                bucket=settings.r2_public_bucket,
+            )
+        except Exception:
+            # 삭제는 이미 커밋됐다. 여기서 예외를 올리면 "5xx인데 실제로는 삭제됨"이 되고,
+            # 관리자가 재시도하면 404가 나와 상태를 오해한다. 남는 건 공개 축소본 하나뿐이라
+            # (원고 아님) 실패를 로그로만 남기고 삭제 자체는 성공으로 응답한다.
+            # update_episode의 같은 호출과 다른 처리인 이유: 거기선 커밋 뒤 응답할 본문이
+            # 남아 있지만, 여기선 204라 되돌릴 것도 알릴 것도 없다.
+            logger.warning(
+                "episode_public_thumb_delete_failed",
+                episode_id=str(episode_id),
+                exc_info=True,
+            )

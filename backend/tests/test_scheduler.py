@@ -108,6 +108,21 @@ async def test_second_run_idempotent(db_session: AsyncSession, work: Work):
     assert await publish_due_episodes(db_session) == 0
 
 
+async def test_deleted_episode_not_republished(db_session: AsyncSession, work: Work):
+    # #85 가드. soft delete는 published_at도 NULL로 밀어서 정상 경로로는 "삭제됐는데
+    # 예약이 남은" 이 상태가 안 만들어진다 - 그래서 행을 직접 만들어 deleted_at 조건
+    # 자체를 검증한다. 이 잡은 비공개→공개를 자동으로 뒤집는 유일한 경로고 그 전환은
+    # 되돌릴 수 없으니, 삭제 정책이 바뀌어도 가드가 살아 있는지 여기서 잡아야 한다.
+    ep = await _make_episode(db_session, work, 1, published_at=_past())
+    ep.deleted_at = datetime.now(UTC)
+    db_session.add(ep)
+    await db_session.commit()
+
+    assert await publish_due_episodes(db_session) == 0
+    await db_session.refresh(ep)
+    assert ep.is_published is False
+
+
 # ---------------------------------------------------------------------------
 # 만료 토큰 cleanup 잡 (#57)
 # ---------------------------------------------------------------------------

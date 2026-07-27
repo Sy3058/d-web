@@ -35,12 +35,25 @@ def public_work_filters() -> list:
     return [Work.is_published.is_(True), Work.deleted_at.is_(None)]
 
 
+def public_episode_filters() -> list:
+    """독자에게 노출 가능한 회차 조건(공개 + 미삭제). 회차를 거치는 모든 공개 경로의 단일 출처.
+
+    ⚠️ deleted_at은 중복 방어다. soft delete(#85)가 is_published=false를 같은 UPDATE로
+    걸어주므로 원칙상 첫 조건만으로 충분하지만, 그러면 "삭제 ⟹ 비공개" 불변식이 깨지는
+    순간 노출 경로 전부가 동시에 뚫린다. 노출은 되돌릴 수 없어 한 줄을 더 쓴다.
+
+    is_published = true를 그대로 포함하므로 partial 인덱스(idx_episodes_published,
+    idx_episodes_published_at)의 조건을 여전히 만족한다 - 플래너가 계속 인덱스를 탄다.
+    """
+    return [Episode.is_published.is_(True), Episode.deleted_at.is_(None)]
+
+
 def _public_episode_count_subquery():
-    """작품별 공개(is_published) 회차 수. models.work.Work.episode_count(전체 카운트,
+    """작품별 공개 회차 수. models.work.Work.episode_count(관리자용 전체 카운트,
     column_property)와는 다른 값이라 재사용하지 않고 여기서 별도 계산한다."""
     return (
         select(func.count(Episode.id))
-        .where(Episode.work_id == Work.id, Episode.is_published.is_(True))
+        .where(Episode.work_id == Work.id, *public_episode_filters())
         .correlate(Work)
         .scalar_subquery()
     )
@@ -161,7 +174,7 @@ async def get_work_detail(work_id: uuid.UUID, session: AsyncSession) -> WorkDeta
     episodes = (
         await session.exec(
             select(Episode)
-            .where(Episode.work_id == work_id, Episode.is_published.is_(True))
+            .where(Episode.work_id == work_id, *public_episode_filters())
             .order_by(Episode.episode_no)
         )
     ).all()
@@ -207,7 +220,7 @@ async def public_episode_exists(episode_id: uuid.UUID, session: AsyncSession) ->
         .join(Work, Work.id == Episode.work_id)
         .where(
             Episode.id == episode_id,
-            Episode.is_published.is_(True),
+            *public_episode_filters(),
             *public_work_filters(),
         )
     )

@@ -35,12 +35,14 @@ async def _fetch_public_episode(
         .join(Work, Work.id == Episode.work_id)
         .where(
             Episode.id == episode_id,
-            Episode.is_published.is_(True),
-            # ⚠️ Episode.is_published만으로는 부족하다. 작품을 숨기거나(is_published=false)
-            # soft delete해도 **회차 행은 그대로 남으므로**, 회차 ID를 아는 사람이 직접
-            # 접근하면 내려간 작품이 계속 읽힌다. admin episode_service.get_episode가
-            # deleted_at만 보는 건 관리자가 비공개 작품도 봐야 해서고, 그 패턴을 독자
-            # 경로로 복사하면 안 된다(public_work_filters docstring 경고).
+            # 회차 자신의 공개·미삭제(#85). 회차만 보는 것으로는 부족하다 - 아래 작품
+            # 필터가 같이 있어야 한다.
+            *catalog_service.public_episode_filters(),
+            # ⚠️ 작품을 숨기거나(is_published=false) soft delete해도 **회차 행은 그대로
+            # 남으므로**, 회차 ID를 아는 사람이 직접 접근하면 내려간 작품이 계속 읽힌다.
+            # admin episode_service.get_episode가 작품의 deleted_at만 보고 is_published는
+            # 안 보는 건 관리자가 비공개 작품도 봐야 해서고, 그 패턴을 독자 경로로
+            # 복사하면 안 된다(public_work_filters docstring 경고).
             *catalog_service.public_work_filters(),
         )
     )
