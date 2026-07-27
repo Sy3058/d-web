@@ -55,6 +55,11 @@
   → PyJWT는 HS256 서명 키가 32바이트 미만이면 경고를 낸다. `"wrong-secret"`(12자) 같은 값은 테스트 의도(서명 불일치 → 401)엔 문제없지만 경고가 낀다
   → 32바이트 이상의 임의 문자열(예: `"wrong-secret-0123456789abcdef0123456789abcdef"`)로 늘려서 해결. 실제 사고: M1.5 B2 `test_setup_forged_cookie_401`. B3의 `/admin/login/totp` pending 쿠키 위조 테스트에서도 동일 패턴 재발 가능성 높음
 
+- **같은 머신이라도 시계는 단조가 아니다 - jwt.decode에는 leeway가 필수** (#85 조사, 2026-07-27)
+  → 실제 사고: 전체 pytest가 ~17회 중 3회, 매번 **다른** 테스트 1개가 401로 죽고 다음 테스트는 전부 정상. 원인은 WSL2/NTP 시계 역점프(~1.9초 실측) - 토큰 발급 직후 시계가 뒤로 가면 `iat`가 "미래"가 돼 PyJWT(2.6+)가 ImmatureSignatureError로 거부한다. 발급·검증이 같은 프로세스여도 일어난다. 수정: jwt.decode 전부에 `leeway=JWT_LEEWAY_SECONDS(10)` + 회귀 테스트 2건(iat 5초 미래 토큰 - test_token 단위 + test_admin_login stage2 통합)
+  → 원인 확정 방법: 실패 순간을 못 잡으면 가설만 쌓인다(3회 헛발질 후 계측 전환). 401 분기별 임시 진단 print + PG `log_statement='mod'`를 심고, 재현 루프가 첫 실패에서 pytest 출력·PG 로그·접속 스냅샷을 자동 수집하게 했다. 결정타는 **PG 순차 로그의 타임스탬프 역행**(연속 두 줄이 56.4초 → 54.6초)과 "iat를 미래로 박은 토큰"의 결정적 재현
+  → 패턴 인식: "매번 다른 테스트 1개만 실패 + 직후 전부 정상 + 실행 시간이 긴 파일에 실패 편중"은 임의 시점 일회성 **환경 이벤트**(시계·디스크·네트워크)의 서명이다. 코드 경로를 아무리 읽어도 안 나온다
+
 ## Astro / React
 
 - **`@tiptap/core`의 `generateHTML`은 브라우저 전용 - Node(vitest 기본 `environment: node`) 환경에서 `ReferenceError: window is not defined`** (M2 F1, 2026-07-25)

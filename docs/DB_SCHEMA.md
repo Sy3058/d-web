@@ -157,6 +157,9 @@ episodes
 ├── published_at TIMESTAMPTZ               -- 예약 공개 시간
 ├── created_at   TIMESTAMPTZ DEFAULT now()
 ├── updated_at   TIMESTAMPTZ DEFAULT now()
+├── deleted_at   TIMESTAMPTZ               -- 회차 soft delete (#85)
+│               -- 불변식: NOT NULL이면 is_published=false이고 published_at IS NULL
+│               -- (soft_delete_episode가 한 UPDATE로 보장). 되살리는 API 없음.
 └── UNIQUE (work_id, episode_no)
 ```
 > - `price IS NULL` → 런타임에 `works.episode_base_price` 참조
@@ -164,6 +167,9 @@ episodes
 >   경계 뒤 = 유료. `is_free` = "경계 뒤 유의미 콘텐츠 없음"(전체 무료)의 파생값.
 > - 미구매 독자 응답(M3) = 서버가 경계 이전 노드만 잘라 반환. 유료 구간의 이미지
 >   키·Signed URL은 절대 비공개(클라이언트 숨김 처리 금지).
+> - **UNIQUE는 `deleted_at`을 보지 않는다** - 삭제된 회차가 번호를 계속 점유하므로
+>   삭제한 회차 번호는 소진되고 재사용 불가(#85 결정: 독자 URL `/works/{id}/{회차번호}`가
+>   나중에 다른 내용을 가리키면 안 됨). 자동 번호 할당(max+1)도 삭제분을 세야 충돌하지 않는다.
 
 ### viewer_progress
 ```sql
