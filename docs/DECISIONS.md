@@ -585,3 +585,18 @@ main (항상 배포 가능 상태)
 - **⚠️ CI 효력의 전제 = branch protection (정정 2026-07-02: 무료 플랜 불가)**: 게이트의 실제 효력은 YAML이 아니라 서버 규칙(branch protection/ruleset)에 있다(`/council` 5렌즈 공통 맹점). 그러나 `backend`를 required status check로 등록하려면 branch protection 또는 ruleset이 필요한데, **무료 private repo는 둘 다 불가**(`branches/main/protection`·`repos/.../rulesets` API 모두 403 "Upgrade to Pro or make public"). 따라서 CI가 빨강이어도 서버가 머지를 강제로 막지 못한다 - 원래 "후속 P0(branch protection 등록)"는 이 플랜에선 실행 불가. 대신 **로컬 훅 `.githooks/pre-push`로 main 직접 push를 차단**해 PR 흐름(브랜치 → PR → squash-merge → `git pull`)을 강제한다(B1이 PR 없이 main 직행한 사고 대응). 단 이 훅은 "직접 push 금지"만 강제하고 **CI-그린은 강제하지 못한다**(클라 훅은 CI 상태를 못 봄) → CI 준수는 수동 규율. 진짜 서버 게이트가 필요하면 Pro 업그레이드 또는 repo 공개.
 - **후속**: `alembic upgrade head`+`alembic check` 게이트(모델↔마이그레이션 표류 차단), FE/admin job, 액션 SHA 핀(공급망), CD(F2~F3).
 - **완료된 후속**: HIBP 외부호출 테스트 격리(hermetic, 2026-06-24) - conftest autouse 전역 stub(`_stub_hibp`)으로 어떤 테스트도 `api.pwnedpasswords.com`에 실제 요청을 못 보내게 함(per-test mock 의존 제거). 실제 함수 본문 raise sabotage로 미도달 입증.
+
+---
+
+## 회차 식별/URL 결정
+
+### 회차 번호 폐기: 랜덤 공개 ID URL + created_at 정렬 (2026-07-28)
+
+**결정: `episode_no`(순번) 개념을 없앤다. 독자 URL은 포스타입식 랜덤 8자리 숫자 ID(전역 유니크)로, 목록 정렬은 `created_at`(올린 순서)으로. 구현은 #85 머지 후 별도 PR.**
+
+- 식별은 이미 UUID(PK)가 한다. 번호의 실제 역할은 ①독자 URL ②정렬 ③"N화" 표기 셋이었는데 - 표기는 불필요(제목만 노출, 사용자 결정), URL은 랜덤 ID로, 정렬은 created_at으로 각각 대체된다.
+- **#85의 "번호 소진(재사용 불가)" 결정은 이 결정으로 대체된다.** 소진은 번호 기반 URL(`/works/{작품}/{번호}`)이 전제였다 - 전제가 사라지므로 함께 소멸. #85에 넣은 소진 UX(확인창 경고·409 안내 문구·max+1 삭제분 카운트)는 새 PR에서 제거한다.
+- **시점 근거**: 출시 전이라 북마크를 가진 독자가 없다 - URL 스킴 변경 비용이 최소인 지금 확정. 출시 후엔 리다이렉트 없이 못 바꾼다.
+- **created_at 정렬 근거**: 내렸다 재공개해도 원래 자리를 유지한다(published_at 정렬이면 재공개 시 맨 뒤로 밀림 - #85의 "내리기"와 조합 시 순서가 흔들림). admin에 번호 입력 UI가 원래 없어 실사용 순서 = 올린 순서였고, 그 동작이 그대로 보존된다.
+- **랜덤 8자리**(1억 공간): 1인 작가 규모에서 생일 충돌 무시 가능. UNIQUE 제약이 백스톱, 충돌 시 재생성.
+- 영향 범위: FE `[episodeNo].astro` 라우트, BE 읽기·카탈로그·스키마, admin "N화" 표기, 마이그레이션 1건(공개 ID 추가+백필, episode_no 제거).
