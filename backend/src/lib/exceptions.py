@@ -66,3 +66,19 @@ class EpisodeValidationError(ValueError):
     image_keys 재배열에 이 회차의 키가 아닌 값/중복 키, thumbnail이 회차에
     없는 키 등. Pydantic 단독으론 못 잡는 DB 상태 의존 검증.
     """
+
+
+class CommissionConflictError(Exception):
+    """커미션 카드 상태 충돌 (router → 409) - M2 그룹 G.
+
+    샘플 이미지 append 경합(조건부 UPDATE rowcount=0)·카드당 장수 상한 도달.
+    EpisodeConflictError와 같은 성질 - 재시도하면 해소되는 충돌.
+    """
+
+
+class CommissionValidationError(ValueError):
+    """커미션 요청 값이 현재 상태와 안 맞음 (router → 422) - M2 그룹 G.
+
+    sample_image_keys 재배열에 이 카드의 키가 아닌 값/중복 키 등
+    DB 상태 의존 검증(EpisodeValidationError와 같은 성질).
+    """

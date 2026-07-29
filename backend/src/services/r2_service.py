@@ -15,6 +15,7 @@ aioboto3는 대량 동시 업로드가 필요해질 때 재검토(1인 작가 �
 - 에피소드 페이지: works/{work_id}/episodes/{episode_id}/{page:03d}.webp
   (episode_id=UUID 기준이라 episode_no를 나중에 바꿔도 키가 안정)
 - 표지: works/{work_id}/cover.webp
+- 커미션 샘플(공개 버킷): commission/{item_id}/{uuid4hex}.webp (M2 그룹 G)
 """
 
 import uuid
@@ -55,6 +56,15 @@ def episode_page_key(work_id: uuid.UUID, episode_id: uuid.UUID) -> str:
 def cover_key(work_id: uuid.UUID) -> str:
     """작품 표지 키. 작품당 1개 - 재업로드는 같은 키를 덮어쓴다."""
     return f"works/{work_id}/cover.webp"
+
+
+def commission_sample_key(item_id: uuid.UUID) -> str:
+    """커미션 카드 샘플 이미지 키 신규 발급(M2 그룹 G). 공개 버킷(dweb-cover) 전용.
+
+    episode_page_key와 같은 uuid4 파일명 - 호출마다 유일해 동시 업로드 덮어쓰기가
+    불가능하고, 유일 키라 표지·썸네일(고정 키 덮어쓰기)과 달리 캐시 버스터가 필요 없다.
+    """
+    return f"commission/{item_id}/{uuid.uuid4().hex}.webp"
 
 
 def episode_thumb_key(work_id: uuid.UUID, episode_id: uuid.UUID) -> str:
