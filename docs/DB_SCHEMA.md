@@ -186,6 +186,40 @@ viewer_progress
 └── UNIQUE (user_id, episode_id)
 ```
 
+### commission_items (M2 그룹 G)
+```sql
+commission_items
+├── id                UUID PRIMARY KEY DEFAULT gen_random_uuid()
+├── title             VARCHAR(200) NOT NULL
+├── description       TEXT                       -- 플레인 텍스트(줄바꿈만, 마크업 없음)
+├── price_text        VARCHAR(100) NOT NULL      -- 표시 전용 자유 문자열("50,000원~")
+│                    -- 숫자 컬럼이 아닌 이유: 커미션은 사이트 결제 대상이 아님(M5도 이메일 접수)
+├── duration_text     VARCHAR(100)               -- 작업 기간 표기("5일")
+├── sample_image_keys JSONB NOT NULL DEFAULT '[]'
+│                    -- 공개 버킷(dweb-cover) 키 매니페스트. episodes.image_keys와 달리
+│                    -- **배열 순서 = 표시 순서**(별도 콘텐츠 문서가 없어 순서의 진실이 여기뿐)
+├── is_open           BOOLEAN NOT NULL DEFAULT TRUE  -- 크레페식 슬롯 상태(마감 배지)
+├── sort_order        INTEGER NOT NULL DEFAULT 0     -- 공개 목록 정렬(오름차순)
+├── created_at        TIMESTAMPTZ DEFAULT now()
+└── updated_at        TIMESTAMPTZ DEFAULT now()
+```
+> - 크레페식 커미션 홍보 카드(M2 그룹 G, 2026-07-29 카드 모델 확정). 신청 폼·접수는 M5.
+> - **soft delete 없음**(하드 삭제) - 참조하는 자식 테이블·독자 URL이 없다. 삭제 시 샘플
+>   이미지는 커밋 성공 후 공개 버킷에서 정리(commission_service).
+> - 샘플 키 = `commission/{item_id}/{uuid4hex}.webp` - 유일 키라 캐시 버스터 불요.
+
+### site_texts (M2 그룹 G)
+```sql
+site_texts
+├── key         VARCHAR(50) PRIMARY KEY   -- 자연키: 'landing_intro' | 'commission_notes'
+│              -- 앱 enum(SiteTextKey) 검증 - 슬롯 추가는 멤버만 늘리면 됨(마이그레이션 0)
+├── body        TEXT NOT NULL DEFAULT ''  -- 플레인 텍스트(작가가 admin에서 편집)
+└── updated_at  TIMESTAMPTZ DEFAULT now()
+```
+> - 작가(owner)가 admin에서 편집하는 사이트 문구(랜딩 소개·커미션 유의사항). 행은
+>   시딩하지 않는다 - admin GET이 행 없음을 빈 기본값으로 응답, PUT이 ON CONFLICT upsert.
+> - M7 법무 문서(약관·개인정보처리방침)도 같은 모양이라 슬롯 추가로 흡수 가능(후보).
+
 ---
 
 ## 3. 결제 도메인
