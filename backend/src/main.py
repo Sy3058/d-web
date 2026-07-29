@@ -13,9 +13,11 @@ from src.lib.logging import configure_logging
 from src.lib.scheduler import create_scheduler
 from src.routers import (
     admin_auth,
+    admin_commission,
     admin_episodes,
     admin_works,
     auth,
+    commission,
     episodes,
     oauth,
     progress,
@@ -75,6 +77,8 @@ app.include_router(oauth.router)
 app.include_router(admin_auth.router)
 app.include_router(admin_works.router)
 app.include_router(admin_episodes.router)
+app.include_router(admin_commission.router)
+app.include_router(commission.router)
 app.include_router(works.router)
 app.include_router(tags.router)
 app.include_router(episodes.router)
