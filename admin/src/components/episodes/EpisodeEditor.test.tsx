@@ -37,8 +37,9 @@ function makeEpisode(overrides: Partial<Episode> = {}): Episode {
   return {
     id: 'e1',
     work_id: 'w1',
-    episode_no: 1,
-    title: '무제',
+    public_id: 10_000_001,
+    sort_order: 1,
+    title: '1화',
     subtitle: null,
     thumbnail: null,
     thumbnail_url: null,
@@ -152,6 +153,8 @@ describe('EpisodeEditor', () => {
     const { container } = renderEditor({ initialWorkId: 'w1' });
 
     await screen.findByRole('button', { name: '이미지' });
+    // 이미지 업로드도 지연 draft를 만드는 경로라 제목이 먼저 있어야 한다(제목 필수).
+    fireEvent.change(screen.getByPlaceholderText(/제목/), { target: { value: '1화 제목' } });
     const file = new File(['x'], 'p.png', { type: 'image/png' });
     fireEvent.change(screen.getByTestId('image-input'), { target: { files: [file] } });
 
@@ -160,12 +163,29 @@ describe('EpisodeEditor', () => {
     );
   });
 
+  it('제목 없이 이미지를 올리려 하면 업로드하지 않고 제목 작성을 안내한다', async () => {
+    // 지연 draft(ensureDraft)가 서버 기본값 '무제'로 회차를 만들던 구멍을 막은 자리.
+    // 번호 폐기로 제목이 유일한 식별자가 됐으므로 이 경로도 저장·발행과 같은 규칙을 따른다.
+    const { container } = renderEditor({ initialWorkId: 'w1' });
+
+    await screen.findByRole('button', { name: '이미지' });
+    const file = new File(['x'], 'p.png', { type: 'image/png' });
+    fireEvent.change(screen.getByTestId('image-input'), { target: { files: [file] } });
+
+    expect(
+      await screen.findByText('이미지를 넣기 전에 제목을 작성해 주세요.'),
+    ).toBeInTheDocument();
+    expect(vi.mocked(api.post)).not.toHaveBeenCalled();
+    expect(container.querySelector('img')).toBeNull();
+  });
+
   it('이미지 드롭: 에디터에 파일을 드롭하면 파일 입력과 같은 경로로 업로드·삽입된다', async () => {
     vi.mocked(api.post).mockResolvedValueOnce(makeEpisode({ id: 'e1' }));
     vi.mocked(api.post).mockResolvedValueOnce(makeEpisode({ id: 'e1', image_keys: ['k1'] }));
     const { container } = renderEditor({ initialWorkId: 'w1' });
 
     await screen.findByRole('button', { name: '이미지' });
+    fireEvent.change(screen.getByPlaceholderText(/제목/), { target: { value: '1화 제목' } });
     const file = new File(['x'], 'p.png', { type: 'image/png' });
     fireEvent.drop(screen.getByTestId('editor-dropzone'), {
       dataTransfer: { files: [file], types: ['Files'] },
@@ -330,6 +350,9 @@ describe('EpisodeEditor', () => {
     });
     renderEditor({ episode });
 
+    // 저장된 제목은 항상 작가가 쓴 값이므로(서버 기본값 '무제' 폐지) "제목 없음"은
+    // 작가가 입력을 비운 상태로만 만들어진다.
+    fireEvent.change(await screen.findByPlaceholderText(/제목/), { target: { value: '  ' } });
     fireEvent.click(await screen.findByRole('button', { name: '발행하기' }));
 
     expect(await screen.findByText('제목을 작성해 주세요.')).toBeInTheDocument();

@@ -311,13 +311,26 @@ export interface paths {
         };
         /**
          * List Episodes
-         * @description episode_no 순 목록(삭제분 제외). image_keys 포함(F3 재배열 UI 소비)이라 상세 GET은 없다.
+         * @description 작가 지정 순서(sort_order, tie는 created_at·id) 목록 - 삭제분 제외.
+         *
+         *     image_keys 포함(F3 재배열 UI 소비)이라 상세 GET은 없다.
          */
         get: operations["list_episodes_admin_works__work_id__episodes_get"];
-        put?: never;
+        /**
+         * Reorder Episodes
+         * @description 회차 표시 순서 재배열 - 살아있는 회차 전량을 원하는 순서로 나열해 보낸다.
+         *
+         *     컬렉션 PUT("")인 이유: `/reorder` 같은 하위 경로를 쓰면 위의 `PUT /{episode_id}`가
+         *     UUID 경로 파라미터로 `reorder` 세그먼트까지 삼켜서, 선언 순서에 따라 조용히
+         *     422가 나는 함정이 된다. 순서는 컬렉션 전체의 속성이라 컬렉션 PUT이 의미상으로도
+         *     맞다(개별 회차 수정은 `PUT /{episode_id}` 그대로).
+         *
+         *     집합이 어긋나면(다른 탭에서 추가·삭제) 409 - service의 낙관적 동시성 검사다.
+         */
+        put: operations["reorder_episodes_admin_works__work_id__episodes_put"];
         /**
          * Create Episode
-         * @description draft 생성(JSON, 이미지 없음). episode_no 중복은 이미지 업로드 전에 즉시 409.
+         * @description draft 생성(JSON, 이미지 없음). public_id는 서버가 발급(요청 필드 아님).
          */
         post: operations["create_episode_admin_works__work_id__episodes_post"];
         delete?: never;
@@ -549,8 +562,10 @@ export interface components {
              * Format: uuid
              */
             work_id: string;
-            /** Episode No */
-            episode_no: number;
+            /** Public Id */
+            public_id: number;
+            /** Sort Order */
+            sort_order: number;
             /** Title */
             title: string;
             /** Subtitle */
@@ -624,9 +639,15 @@ export interface components {
          * EpisodeCreate
          * @description draft 생성(is_published=false). 이미지·본문은 이후 요청(D3 구조 A + F3 에디터 PUT).
          *
-         *     F3 재설계(2026-07-15): 에디터가 "캔버스 먼저, 메타는 발행 모달" 흐름이라
-         *     episode_no 생략 = 서버가 해당 작품 max+1 자동 할당, title 생략 = "무제".
+         *     title은 **필수**다. F3 재설계(2026-07-15)가 넣었던 서버 기본값 "무제"를 회차 번호
+         *     폐기(DECISIONS 2026-07-28)와 함께 제거했다 - 번호가 사라지면서 목록·액션 메뉴·
+         *     뷰어 네비게이션의 식별자가 제목 하나로 줄어, "무제" 행이 둘 이상이면 작가도 독자도
+         *     구분할 수 없다. admin 쪽 "제목 필수"(ensureTitle) 결정을 서버가 뒤에서 무력화하고
+         *     있던 구멍이기도 했다(이미지 먼저 올리는 지연 draft 경로가 기본값을 타고 들어왔다).
+         *
          *     is_free는 입력에서 제거 - content의 유료 경계에서 서버가 파생하는 컬럼이 됐다.
+         *     public_id(독자 URL 조회키)와 sort_order(표시 순서)도 입력값이 아니라 서버가
+         *     발급·배정한다 - 클라이언트가 정할 이유가 없다.
          *
          *     thumbnail이 없는 이유는 기존과 동일 - 생성 시점엔 검증할 image_keys가 없어
          *     임의 키 주입 통로가 된다. published_at은 예약 공개 시각 - **과거 시각도 허용**
@@ -634,12 +655,7 @@ export interface components {
          *     오해석돼 9시간 밀리는 조용한 오동작 차단).
          */
         EpisodeCreate: {
-            /** Episode No */
-            episode_no?: number | null;
-            /**
-             * Title
-             * @default 무제
-             */
+            /** Title */
             title: string;
             /** Subtitle */
             subtitle?: string | null;
@@ -680,6 +696,22 @@ export interface components {
             /** Url */
             url: string;
         };
+        /**
+         * EpisodeReorder
+         * @description 회차 재배열 - 살아있는 회차 **전량**을 원하는 순서로 나열한 id 목록.
+         *
+         *     부분 목록이 아니라 전량을 받는 이유는 service(reorder_episodes) 독스트링 참조 -
+         *     요약하면 "순서"는 전체 집합에 대한 진술이고, 집합 불일치가 곧 낙관적 동시성
+         *     검사다(다른 탭에서 회차가 추가·삭제됐으면 409).
+         *
+         *     EpisodeUpdate에 sort_order를 얹지 않은 이유: 회차별 정수 대입을 허용하면
+         *     클라이언트가 전역 정합성(중복·구멍)을 책임져야 하고, 재배열 한 번이 N개의
+         *     PUT으로 쪼개져 중간 상태가 독자에게 노출된다.
+         */
+        EpisodeReorder: {
+            /** Episode Ids */
+            episode_ids: string[];
+        };
         /** EpisodeSummary */
         EpisodeSummary: {
             /**
@@ -687,8 +719,8 @@ export interface components {
              * Format: uuid
              */
             id: string;
-            /** Episode No */
-            episode_no: number;
+            /** Public Id */
+            public_id: number;
             /** Title */
             title: string;
             /** Subtitle */
@@ -726,8 +758,6 @@ export interface components {
          *       draft를 NULL로 비운다(발행 = 편집본 소진).
          */
         EpisodeUpdate: {
-            /** Episode No */
-            episode_no?: number | null;
             /** Title */
             title?: string | null;
             /** Subtitle */
@@ -1614,6 +1644,41 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminEpisodeRead"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reorder_episodes_admin_works__work_id__episodes_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                work_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EpisodeReorder"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

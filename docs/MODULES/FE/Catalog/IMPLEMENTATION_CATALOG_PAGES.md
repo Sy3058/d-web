@@ -58,6 +58,9 @@ E 그룹은 4개 커밋으로 나눠 올렸다(리팩터 → ui 프리미티브 
 카드 전체가 `<a href="/works/{id}">`라 그 안의 태그 칩에 `href`를 주면 **중첩 앵커(무효 HTML)**가 된다 → 카드 태그는 `<span>`. 상세 페이지 태그는 앵커에 감싸이지 않아 `/works?tag=X` 링크로 활성화.
 
 ### 회차 링크 = F1 라우트 계획값 `/works/{id}/{episode_no}`
+> ⚠️ **경로 변경됨(2026-07-30)**: 회차 번호 폐기로 라우트가
+> `pages/works/[id]/[publicId].astro`(랜덤 8자리 `public_id`)로 rename됐다.
+> 아래 서술의 "episode_no"는 당시 계획값이다.
 M2_foundation F1 산출물이 `pages/works/[id]/[episodeNo].astro`(episode_no 기반)로 확정돼 있어 그 경로를 선점한다. 뷰어 페이지 자체는 그룹 F(다음)에서 생기므로 **E 단계에서 회차 클릭 시 404는 의도된 상태**. 잠금 회차도 링크 활성(경계 이전 미리보기가 있음 - 배지로 유료 구간 존재만 표시).
 
 ### `statusLabel` 폴백

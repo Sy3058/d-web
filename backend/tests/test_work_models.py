@@ -42,7 +42,7 @@ async def test_work_defaults_round_trip(db_session, user: User):
 
 async def test_episode_defaults_round_trip(db_session, user: User):
     work = await _make_work(db_session, user)
-    ep = Episode(work_id=work.id, episode_no=1, title="1화")
+    ep = Episode(work_id=work.id, public_id=10_000_001, sort_order=1, title="1화")
     db_session.add(ep)
     await db_session.commit()
     await db_session.refresh(ep)
@@ -62,7 +62,7 @@ async def test_episode_defaults_round_trip(db_session, user: User):
 async def test_episode_image_keys_order_preserved(db_session, user: User):
     work = await _make_work(db_session, user)
     keys = ["001.webp", "002.webp", "003.webp"]
-    ep = Episode(work_id=work.id, episode_no=1, title="1화", image_keys=keys)
+    ep = Episode(work_id=work.id, public_id=10_000_001, sort_order=1, title="1화", image_keys=keys)
     db_session.add(ep)
     await db_session.commit()
     await db_session.refresh(ep)
@@ -75,12 +75,17 @@ async def test_episode_image_keys_order_preserved(db_session, user: User):
 # ---------------------------------------------------------------------------
 
 
-async def test_episode_unique_work_id_episode_no(db_session, user: User):
-    work = await _make_work(db_session, user)
-    db_session.add(Episode(work_id=work.id, episode_no=1, title="1화"))
+async def test_episode_unique_public_id(db_session, user: User):
+    # public_id는 work_id 스코프가 아니라 전역 유니크(독자 URL 조회키) - 다른 작품이어도
+    # 같은 값이면 충돌한다(회차 번호 폐기, DECISIONS 2026-07-28).
+    work_a = await _make_work(db_session, user, title="작품 A")
+    work_b = await _make_work(db_session, user, title="작품 B")
+    db_session.add(Episode(work_id=work_a.id, public_id=10_000_001, sort_order=1, title="1화"))
     await db_session.commit()
 
-    db_session.add(Episode(work_id=work.id, episode_no=1, title="중복 회차"))
+    db_session.add(
+        Episode(work_id=work_b.id, public_id=10_000_001, sort_order=1, title="중복 회차")
+    )
     with pytest.raises(IntegrityError):
         await db_session.commit()
     await db_session.rollback()

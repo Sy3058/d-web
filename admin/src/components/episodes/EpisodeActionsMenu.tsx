@@ -25,7 +25,7 @@ export function EpisodeActionsMenu({
   deleteLocked,
 }: EpisodeActionsMenuProps) {
   return (
-    <ActionsMenu label={`${episode.episode_no}화 관리 메뉴`} width="w-40">
+    <ActionsMenu label={`${episode.title} 관리 메뉴`} width="w-40">
       {(close) => (
         <>
           {/* 공개 중인 회차에만 띄운다 - 이미 비공개면 누를 이유가 없다. 예약(published_at만

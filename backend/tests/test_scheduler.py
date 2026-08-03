@@ -45,10 +45,13 @@ async def _make_episode(
     pages: int = 1,
 ) -> Episode:
     # F3 재설계: 공개 가드의 기준은 content 문서(pages=0 = EMPTY_DOC = 빈 본문).
+    # no는 키·제목 구분용 파라미터(회차 번호 폐기 이후 도메인 필드 아님) - db_session
+    # teardown이 매 테스트마다 전 테이블을 지우므로 이 결정적 매핑으로 유니크 충분.
     keys = [f"works/{work.id}/episodes/{no}/{i}.webp" for i in range(pages)]
     ep = Episode(
         work_id=work.id,
-        episode_no=no,
+        public_id=10_000_000 + no,
+        sort_order=no,
         title=f"{no}화",
         image_keys=keys,
         content={

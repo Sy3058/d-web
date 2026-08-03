@@ -21,7 +21,8 @@ function makeEpisode(id: string, imageKeys: string[] = []): Episode {
   return {
     id,
     work_id: 'w1',
-    episode_no: 1,
+    public_id: 10_000_001,
+    sort_order: 1,
     title: '1화',
     subtitle: null,
     thumbnail: null,

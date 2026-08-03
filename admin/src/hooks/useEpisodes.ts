@@ -17,7 +17,7 @@ export const episodesQueryOptions = (workId: string) =>
     queryFn: () => api.get<Episode[]>(episodesUrl(workId)),
   });
 
-/** episode_no 순 목록. 상세 GET이 없어(D3 계약) 편집 화면도 이 목록에서 찾는다. */
+/** 작가 지정 순서(sort_order) 목록. 상세 GET이 없어(D3 계약) 편집 화면도 이 목록에서 찾는다. */
 export function useEpisodes(workId: string) {
   return useQuery(episodesQueryOptions(workId));
 }
@@ -45,7 +45,7 @@ export function useEpisodeImageUrls(workId: string, episodeId: string | null) {
   });
 }
 
-/** draft 생성(JSON 메타). episode_no 중복이면 이미지 업로드 전에 409가 즉시 온다. */
+/** draft 생성(JSON 메타). public_id는 서버가 발급(요청 필드 아님). */
 export function useCreateEpisode(workId: string) {
   const queryClient = useQueryClient();
   return useMutation({
@@ -127,6 +127,26 @@ export function useDeleteEpisode(workId: string) {
       queryClient.invalidateQueries({ queryKey: episodesListKey(workId) });
       queryClient.invalidateQueries({ queryKey: workDetailKey(workId) });
       queryClient.invalidateQueries({ queryKey: worksListKey });
+    },
+  });
+}
+
+/** 회차 표시 순서 재배열. 살아있는 회차 **전량**을 원하는 순서로 보낸다(컬렉션 PUT).
+ *
+ * 서버가 재배열된 목록 전체를 돌려주므로 invalidate 대신 setQueryData로 캐시를 바로
+ * 덮는다 - 왕복 한 번을 아끼고, 버튼 연타 시 중간 상태가 화면에 튀지 않는다.
+ * 실패(대표적으로 409 - 다른 탭에서 회차가 추가·삭제돼 집합이 어긋남)는 곧 "이 목록이
+ * 낡았다"는 신호라 그때만 무효화해 서버 상태를 다시 읽는다. */
+export function useReorderEpisodes(workId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (episodeIds: string[]) =>
+      api.put<Episode[]>(episodesUrl(workId), { episode_ids: episodeIds }),
+    onSuccess: (episodes) => {
+      queryClient.setQueryData(episodesListKey(workId), episodes);
+    },
+    onError: () => {
+      queryClient.invalidateQueries({ queryKey: episodesListKey(workId) });
     },
   });
 }

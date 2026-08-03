@@ -329,10 +329,10 @@ async def test_episode_count_reflects_episodes(owner_client: AsyncClient) -> Non
     work_id = resp.json()["id"]
     assert resp.json()["episode_count"] == 0
 
-    for episode_no in (1, 2):
+    for i in (1, 2):
         created = await owner_client.post(
             f"{WORKS_URL}/{work_id}/episodes",
-            json={"episode_no": episode_no, "title": f"{episode_no}화"},
+            json={"title": f"{i}화"},
         )
         assert created.status_code == 201
 

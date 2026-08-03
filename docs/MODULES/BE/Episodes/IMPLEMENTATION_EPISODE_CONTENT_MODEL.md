@@ -72,6 +72,11 @@ content의 image 키는 매니페스트의 부분집합(임의 키 주입 = 다�
 공개 전 임시값이라 손실 무해).
 
 ### episode_no 자동 할당 (캔버스 먼저 흐름)
+> ⚠️ **폐기됨(2026-07-30)**: `episode_no`가 사라졌다. 독자 URL 조회키는 랜덤 `public_id`,
+> 표시 순서는 별도 `sort_order`(UNIQUE 없음 - 유일 제약이 아래 409의 원인이었다)로
+> 갈라졌다. 상세: `../../BE/Works/IMPLEMENTATION_EPISODE_PUBLIC_ID.md`.
+> 같은 표의 `title` 기본 "무제"도 폐지됐다(제목 필수).
+
 에디터는 "쓰기 시작 → 발행 모달에서 메타 확정" 순서라 draft 생성 시점에 번호가 없다.
 생략 시 서버가 해당 작품 `max+1` - 동시 생성 경합은 SELECT 선검사가 아니라
 UNIQUE(work_id, episode_no) 409가 백스톱(C1 태그와 동일 계열).

@@ -9,10 +9,11 @@ import uuid
 from datetime import UTC, datetime
 
 from httpx import AsyncClient
+from sqlalchemy import update
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.models.user import User
-from src.models.work import Tag, Work, WorkTag
+from src.models.work import Episode, Tag, Work, WorkTag
 from tests.factories import make_episode as _make_episode
 from tests.factories import make_work as _make_work
 
@@ -68,8 +69,8 @@ async def test_list_episode_count_counts_only_published_episodes(
     async_client: AsyncClient, db_session: AsyncSession, user: User
 ):
     work = await _make_work(db_session, user)
-    await _make_episode(db_session, work, episode_no=1, is_published=True)
-    await _make_episode(db_session, work, episode_no=2, is_published=False)
+    await _make_episode(db_session, work, is_published=True)
+    await _make_episode(db_session, work, is_published=False)
 
     resp = await async_client.get(WORKS_URL)
     item = resp.json()["items"][0]
@@ -84,10 +85,8 @@ async def test_list_episode_count_excludes_deleted_episode(
     # 판별력 0(#84 교훈). soft_delete_episode가 실제로는 둘 다 세우지만, 여기서
     # 검증하려는 건 "불변식이 깨져도 독자 경로가 막히는가"다.
     work = await _make_work(db_session, user)
-    await _make_episode(db_session, work, episode_no=1, is_published=True)
-    await _make_episode(
-        db_session, work, episode_no=2, is_published=True, deleted_at=datetime.now(UTC)
-    )
+    await _make_episode(db_session, work, is_published=True)
+    await _make_episode(db_session, work, is_published=True, deleted_at=datetime.now(UTC))
 
     resp = await async_client.get(WORKS_URL)
     assert resp.json()["items"][0]["episode_count"] == 1
@@ -205,8 +204,8 @@ async def test_detail_excludes_unpublished_episode(
     async_client: AsyncClient, db_session: AsyncSession, user: User
 ):
     work = await _make_work(db_session, user)
-    published = await _make_episode(db_session, work, episode_no=1, is_published=True)
-    await _make_episode(db_session, work, episode_no=2, is_published=False)
+    published = await _make_episode(db_session, work, is_published=True)
+    await _make_episode(db_session, work, is_published=False)
 
     resp = await async_client.get(f"{WORKS_URL}/{work.id}")
     ep_ids = {ep["id"] for ep in resp.json()["episodes"]}
@@ -218,10 +217,8 @@ async def test_detail_excludes_deleted_episode(
 ):
     # 공개 상태를 남겨둔 삭제 행 - 위 count 테스트와 같은 이유(판별력).
     work = await _make_work(db_session, user)
-    kept = await _make_episode(db_session, work, episode_no=1, is_published=True)
-    await _make_episode(
-        db_session, work, episode_no=2, is_published=True, deleted_at=datetime.now(UTC)
-    )
+    kept = await _make_episode(db_session, work, is_published=True)
+    await _make_episode(db_session, work, is_published=True, deleted_at=datetime.now(UTC))
 
     resp = await async_client.get(f"{WORKS_URL}/{work.id}")
     assert {ep["id"] for ep in resp.json()["episodes"]} == {str(kept.id)}
@@ -231,17 +228,17 @@ async def test_detail_episode_free_locked_purchased_flags(
     async_client: AsyncClient, db_session: AsyncSession, user: User
 ):
     work = await _make_work(db_session, user)
-    await _make_episode(db_session, work, episode_no=1, is_free=True)
-    await _make_episode(db_session, work, episode_no=2, is_free=False)
+    free_ep = await _make_episode(db_session, work, is_free=True)
+    locked_ep = await _make_episode(db_session, work, is_free=False)
 
     resp = await async_client.get(f"{WORKS_URL}/{work.id}")
-    episodes = {ep["episode_no"]: ep for ep in resp.json()["episodes"]}
-    assert episodes[1]["is_free"] is True
-    assert episodes[1]["is_locked"] is False
-    assert episodes[2]["is_free"] is False
-    assert episodes[2]["is_locked"] is True
-    assert episodes[1]["is_purchased"] is False
-    assert episodes[2]["is_purchased"] is False
+    episodes = {ep["public_id"]: ep for ep in resp.json()["episodes"]}
+    assert episodes[free_ep.public_id]["is_free"] is True
+    assert episodes[free_ep.public_id]["is_locked"] is False
+    assert episodes[locked_ep.public_id]["is_free"] is False
+    assert episodes[locked_ep.public_id]["is_locked"] is True
+    assert episodes[free_ep.public_id]["is_purchased"] is False
+    assert episodes[locked_ep.public_id]["is_purchased"] is False
 
 
 async def test_detail_episode_thumbnail_url_from_public_bucket(
@@ -254,9 +251,7 @@ async def test_detail_episode_thumbnail_url_from_public_bucket(
 
     monkeypatch.setattr(settings, "public_asset_base_url", "https://cover.example.com")
     work = await _make_work(db_session, user)
-    ep = await _make_episode(
-        db_session, work, episode_no=1, thumbnail="works/x/episodes/y/abc123.webp"
-    )
+    ep = await _make_episode(db_session, work, thumbnail="works/x/episodes/y/abc123.webp")
 
     resp = await async_client.get(f"{WORKS_URL}/{work.id}")
     body = resp.json()["episodes"][0]
@@ -274,7 +269,7 @@ async def test_detail_episode_thumbnail_falls_back_to_work_cover(
 
     monkeypatch.setattr(settings, "public_asset_base_url", "https://cover.example.com")
     work = await _make_work(db_session, user, cover_image="works/x/cover.webp")
-    await _make_episode(db_session, work, episode_no=1)
+    await _make_episode(db_session, work)
 
     resp = await async_client.get(f"{WORKS_URL}/{work.id}")
     body = resp.json()["episodes"][0]
@@ -285,7 +280,7 @@ async def test_detail_episode_thumbnail_none_when_no_thumbnail_and_no_cover(
     async_client: AsyncClient, db_session: AsyncSession, user: User
 ):
     work = await _make_work(db_session, user)
-    await _make_episode(db_session, work, episode_no=1)
+    await _make_episode(db_session, work)
 
     resp = await async_client.get(f"{WORKS_URL}/{work.id}")
     body = resp.json()["episodes"][0]
@@ -367,7 +362,7 @@ async def test_detail_episode_price_override(
     async_client: AsyncClient, db_session: AsyncSession, user: User
 ):
     work = await _make_work(db_session, user, episode_base_price=500)
-    await _make_episode(db_session, work, episode_no=1, is_free=False, price=1200)
+    await _make_episode(db_session, work, is_free=False, price=1200)
 
     resp = await async_client.get(f"{WORKS_URL}/{work.id}")
     assert resp.json()["episodes"][0]["price"] == 1200
@@ -377,7 +372,7 @@ async def test_detail_episode_price_falls_back_to_base_price(
     async_client: AsyncClient, db_session: AsyncSession, user: User
 ):
     work = await _make_work(db_session, user, episode_base_price=700)
-    await _make_episode(db_session, work, episode_no=1, is_free=False, price=None)
+    await _make_episode(db_session, work, is_free=False, price=None)
 
     resp = await async_client.get(f"{WORKS_URL}/{work.id}")
     assert resp.json()["episodes"][0]["price"] == 700
@@ -388,7 +383,7 @@ async def test_detail_free_episode_price_is_null(
 ):
     # 무료 회차는 price가 세팅돼 있어도 null - 0원 판매와 구분 + is_free 무시 표기 방지
     work = await _make_work(db_session, user)
-    await _make_episode(db_session, work, episode_no=1, is_free=True, price=900)
+    await _make_episode(db_session, work, is_free=True, price=900)
 
     resp = await async_client.get(f"{WORKS_URL}/{work.id}")
     ep = resp.json()["episodes"][0]
@@ -494,8 +489,8 @@ async def test_episodes_excludes_unpublished_episode(
     async_client: AsyncClient, db_session: AsyncSession, user: User
 ):
     work = await _make_work(db_session, user)
-    published = await _make_episode(db_session, work, episode_no=1)
-    await _make_episode(db_session, work, episode_no=2, is_published=False)
+    published = await _make_episode(db_session, work)
+    await _make_episode(db_session, work, is_published=False)
 
     resp = await async_client.get(_episodes_url(work.id))
     assert resp.status_code == 200
@@ -507,25 +502,58 @@ async def test_episodes_excludes_deleted_episode(
 ):
     # make_episode 기본값이 is_published=True라, deleted_at만 얹으면 곧 "공개인데 삭제"다.
     work = await _make_work(db_session, user)
-    kept = await _make_episode(db_session, work, episode_no=1)
-    await _make_episode(db_session, work, episode_no=2, deleted_at=datetime.now(UTC))
+    kept = await _make_episode(db_session, work)
+    await _make_episode(db_session, work, deleted_at=datetime.now(UTC))
 
     resp = await async_client.get(_episodes_url(work.id))
     assert resp.status_code == 200
     assert [ep["id"] for ep in resp.json()] == [str(kept.id)]
 
 
-async def test_episodes_ordered_by_episode_no(
+async def test_episodes_ordered_by_sort_order(
     async_client: AsyncClient, db_session: AsyncSession, user: User
 ):
+    # 독자에게 보이는 순서 = 작가가 정한 sort_order(회차 번호 폐기, DECISIONS 2026-07-28).
+    # ⚠️ 생성 순서·created_at 순서·sort_order 순서를 **셋 다 다르게** 깔아 둔다. 셋이 같은
+    # 방향이면 ORDER BY에서 sort_order를 지워도 통과해 판별력이 0이 된다.
+    #   생성 순서   : third, first, second
+    #   created_at : third, second, first  (sort_order와 정반대)
+    #   기대(정답)  : first, second, third
     work = await _make_work(db_session, user)
-    # 생성 순서를 역으로 - 정렬이 삽입 순서가 아니라 episode_no를 따르는지 본다.
-    await _make_episode(db_session, work, episode_no=3, title="3화")
-    await _make_episode(db_session, work, episode_no=1, title="1화")
-    await _make_episode(db_session, work, episode_no=2, title="2화")
+    third = await _make_episode(db_session, work, title="3화", sort_order=3)
+    first = await _make_episode(db_session, work, title="1화", sort_order=1)
+    second = await _make_episode(db_session, work, title="2화", sort_order=2)
+
+    for ep, ts in (
+        (first, datetime(2026, 1, 3, tzinfo=UTC)),
+        (second, datetime(2026, 1, 2, tzinfo=UTC)),
+        (third, datetime(2026, 1, 1, tzinfo=UTC)),
+    ):
+        await db_session.exec(update(Episode).where(Episode.id == ep.id).values(created_at=ts))
+    await db_session.commit()
 
     resp = await async_client.get(_episodes_url(work.id))
-    assert [ep["episode_no"] for ep in resp.json()] == [1, 2, 3]
+    assert [ep["id"] for ep in resp.json()] == [str(first.id), str(second.id), str(third.id)]
+
+
+async def test_episodes_created_at_breaks_sort_order_tie(
+    async_client: AsyncClient, db_session: AsyncSession, user: User
+):
+    # sort_order엔 UNIQUE가 없어 동점이 정상적으로 생긴다(동시 생성이 같은 max+1을 계산).
+    # 그때 순서를 확정하는 건 created_at이라, tie-breaker가 빠지면 순서가 무정의가 된다.
+    work = await _make_work(db_session, user)
+    late = await _make_episode(db_session, work, title="나중 화", sort_order=4)
+    early = await _make_episode(db_session, work, title="먼저 화", sort_order=4)
+
+    for ep, ts in (
+        (early, datetime(2026, 1, 1, tzinfo=UTC)),
+        (late, datetime(2026, 1, 2, tzinfo=UTC)),
+    ):
+        await db_session.exec(update(Episode).where(Episode.id == ep.id).values(created_at=ts))
+    await db_session.commit()
+
+    resp = await async_client.get(_episodes_url(work.id))
+    assert [ep["id"] for ep in resp.json()] == [str(early.id), str(late.id)]
 
 
 async def test_episodes_match_detail_payload(
@@ -537,8 +565,8 @@ async def test_episodes_match_detail_payload(
     B1에 별도 쿼리를 넣는 순간 여기서 깨진다.
     """
     work = await _make_work(db_session, user)
-    await _make_episode(db_session, work, episode_no=1)
-    await _make_episode(db_session, work, episode_no=2, is_free=True)
+    await _make_episode(db_session, work)
+    await _make_episode(db_session, work, is_free=True)
 
     listed = await async_client.get(_episodes_url(work.id))
     detail = await async_client.get(f"{WORKS_URL}/{work.id}")

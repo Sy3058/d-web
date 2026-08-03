@@ -13,7 +13,7 @@ aioboto3는 대량 동시 업로드가 필요해질 때 재검토(1인 작가 �
 
 키 스킴 (M1.5 D1 확정):
 - 에피소드 페이지: works/{work_id}/episodes/{episode_id}/{page:03d}.webp
-  (episode_id=UUID 기준이라 episode_no를 나중에 바꿔도 키가 안정)
+  (episode_id=UUID 기준이라 독자 URL 조회키(public_id)와 무관하게 키가 안정)
 - 표지: works/{work_id}/cover.webp
 """
 

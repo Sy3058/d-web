@@ -259,6 +259,12 @@
   → 실제 사고: `ruff check .`로 돌려 에러 85건을 보고할 뻔했다. CI 게이트는 `ruff check src/`고, migrations/ 등은 **의도적 제외**(alembic 자동생성이라 정규화 대상 아님 - DECISIONS CI 절). 반대로 CI보다 좁게 돌리면 빨강을 초록으로 오판한다
   → 게이트 명령의 단일 진실은 `.github/workflows/`다. 기억으로 재구성하지 말고 워크플로 파일에서 복사해 돌릴 것
 
+- **같은 브랜치를 워크트리 두 개에서 동시에 체크아웃 못한다 - `git checkout main`이 다른 워크트리 점유로 막힌다** (2026-07-28, `common/docs/g-redefine-episode-id` PR #106 준비 중)
+  → 실제 상황: `d-web-m2`가 이미 `main`을 체크아웃 중이라 `d-web`에서 `git checkout main`이 `fatal: 'main' is already used by worktree`로 실패
+  → 해법: 로컬 `main`을 거치지 말고 `git checkout -b <새브랜치> origin/main`으로 **원격 참조를 베이스로 직접 새 브랜치**를 판다 - local main 포인터를 건드릴 필요가 없다
+  → 다른 워크트리의 미커밋 변경을 가져올 땐 `git -C <경로> diff -- <파일...> > patch.diff` 후 이 저장소에서 `git apply patch.diff`(같은 저장소라 파일 상대경로 그대로 적용됨). 적용 전 `git apply --check`로 드라이런
+  → 정리 시 주의: **squash-merge된 브랜치는 `git merge-base --is-ancestor`가 "머지 안 됨"으로 오판**한다(원본 커밋이 squash 커밋의 조상이 아니라서). 진짜 근거는 `gh pr list --state all`의 PR state - MERGED 확인 후 `git branch -D`(force, `-d`는 이 경우 거부됨)
+
 - 셸 출력이 지연되면 빈 결과를 "사실"로 오판하지 말 것 (이번 세션 최악의 실수 원인)
   → 한 명령의 결과가 비어 있거나 늦게 와도, 그걸 근거로 "파일 없음 / 깨끗함 / 성공"이라 단정 금지
   → 특히 파괴적 작업(rm, 삭제, downgrade) 전엔 상태를 한 번 더 확정 후 진행
@@ -421,6 +427,12 @@
 - Pydantic 부분 업데이트 스키마(`X | None = None`)는 **명시적 JSON null**이 검증을 통과하고 `exclude_unset` dump에도 살아남는다
   → NOT NULL 컬럼이면 setattr → commit에서 미처리 500. `model_fields_set`(요청에 실제 등장한 필드 집합)으로 명시적 null을 422 거부할 것 (실제 사고: C1 WorkUpdate, 리뷰 발견)
 
+- **bulk `update()` 후 같은 세션에서 재조회하면 옛 값이 나온다** (`expire_on_commit=False` 조합, 2026-08-03)
+  → `synchronize_session=False`는 인메모리 인스턴스를 **의도적으로** 안 맞추고, 세션이 `expire_on_commit=False`(lib/db.py)라 commit도 만료시키지 않는다. 이 상태로 다시 SELECT하면 identity map이 **로드된 옛 속성을 그대로 둔 채** 기존 인스턴스를 돌려준다
+  → 무서운 건 증상 모양이다: 행 **순서**는 SQL `ORDER BY`가 정하니 맞고 **값만** 옛것이라, 순서로 렌더링하는 UI에선 화면상 완전히 정상으로 보인다
+  → 커밋 후 명시 갱신할 것 - 단건은 `session.refresh(obj)`, N건은 `session.expire(obj)` 루프(만료만 표시하면 뒤따르는 SELECT 한 번이 채우므로 refresh N번보다 쿼리가 적다)
+  → 실제 사고: 회차 재배열 `PUT .../episodes` 응답이 순서는 `[c,a,b]`로 맞는데 `sort_order`가 `[3,1,2]`(옛값). 어드민이 배열 순서로 그려 눈으로는 안 잡혔고, **테스트가 없었으면 그대로 머지**됐다
+
 ## Alembic 마이그레이션
 
 - 이미 DB에 적용(upgrade)된 마이그레이션 파일을 직접 편집하지 말 것
@@ -484,3 +496,16 @@
   → 해결(도입됨): conftest `test_engine`이 **PID 전용 DB**(`dweb_test_<pid>`)를 CREATE/DROP한다. `CREATE/DROP DATABASE`는 트랜잭션 안에서 불가라 `isolation_level="AUTOCOMMIT"` 연결로 실행. 검증 = pytest 2개 동시 실행 → 양쪽 337 passed
   → ⚠️ 정리 시 **다른 PID의 DB는 건드리지 말 것** - 동시 실행 중인 세션 것일 수 있다. 비정상 종료 잔재만 수동 정리
   → 진단 교훈: 실패가 매번 다르면 그 실패 지점을 디버깅하지 말고 **상태 오염을 먼저 의심**한다. 그리고 "지금 관측되지 않음"을 "없음"으로 단정하지 말 것 - 이번 건은 동시 접속을 몇 번 샘플링해 0으로 나오자 동시성 가설을 기각했는데, 상대 세션이 그 순간 쉬고 있었을 뿐이었다(사용자 제보로 확정)
+
+- 정렬 테스트는 **생성 순서 = 기대 순서면 판별력이 0**이다 (2026-07-30)
+  → `ORDER BY`를 통째로 지워도 통과한다 - 삽입 순서가 우연히 답을 맞히기 때문
+  → 정렬 키와 tie-breaker를 **서로 반대 방향**으로 깔아야 "진짜 그 컬럼을 보는지"가 잡힌다. 정렬 키가 둘 이상이면(예: `sort_order` → `created_at`) 셋 다 다른 방향으로
+  → 실제 사고: 같은 계약을 검증하는 자매 테스트 두 개 중 `test_catalog.py`는 역전시켜 뒀는데 `test_admin_episodes.py`만 순방향으로 새로 써서 한쪽만 판별력 0이 됐다(코드 리뷰에서 발각). **같은 계약을 여러 파일에서 검증할 땐 강한 쪽에 맞출 것**
+
+## vitest (admin / frontend 테스트)
+
+- `mockResolvedValueOnce` 큐는 `vi.clearAllMocks()`로 **안 비워진다** - 엉뚱한 테스트가 대신 깨진다 (2026-07-30)
+  → 증상: A 테스트를 깨뜨렸더니 무관한 B 테스트가 같이 빨강. B를 `-t`로 단독 실행하면 통과
+  → 원인: A가 큐에 쌓아둔 once 응답을 **소비하지 못하고** 끝나면(가드에 막혀 요청 자체를 안 보냄) 그 응답이 B의 첫 호출로 밀린다. `clearAllMocks`는 호출 **기록**만 지우고 큐는 남긴다(큐까지 비우려면 `mockReset`)
+  → 실제 사고: 회차 제목 필수 가드를 넣자 이미지 테스트 2개가 업로드를 건너뛰었고, 무관한 "여러 장 삽입" 테스트가 "3장 기대인데 1장"으로 깨졌다
+  → 판별법: **단독 실행이 통과하면 앞 테스트의 잔재를 의심**한다. 실패한 그 테스트를 고치려 들지 말 것

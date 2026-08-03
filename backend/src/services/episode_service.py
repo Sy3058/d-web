@@ -1,7 +1,7 @@
 """에피소드 서비스 (M1.5 D3, ADM-03).
 
 구조 A(장당 업로드 + JSON 메타 분리 - 2026-07-10 council 검증 후 확정):
-draft 생성이 이미지보다 먼저라 episode_no 충돌이 업로드 전에 발각되고,
+draft 생성이 이미지보다 먼저라 public_id 발급 실패가 업로드 전에 발각되고,
 이미지는 단건 append라 메모리·재시도·R2 미참조 파일(orphan)이 전부 1장 단위다.
 
 표시 순서·구성의 진실은 F3 재설계(2026-07-15)로 **content 문서**로 이동했고,
@@ -10,6 +10,7 @@ uuid(순수 식별자, 순서 의미 없음) - 순번 파일명은 동시 업로
 같은 번호를 계산해 살아있는 객체를 덮어쓰는 구멍이라 리뷰에서 폐기(2026-07-10 리뷰 ①·⑦).
 """
 
+import secrets
 import uuid
 from collections.abc import Sequence
 from datetime import UTC, datetime
@@ -34,78 +35,135 @@ from src.schemas.work import EpisodeCreate, EpisodeUpdate
 from src.services import r2_service
 from src.services.image_service import MAX_IMAGES_PER_EPISODE, THUMB_WIDTH, convert_to_webp
 
-_DUPLICATE_EPISODE_NO = "이미 존재하는 회차 번호입니다"
 _STALE_EPISODE = "회차가 다른 요청으로 먼저 변경되었습니다 - 새로고침 후 다시 시도하세요"
 _PUBLISHED_CONTENT_GUARD = (
     "공개 회차의 본문은 발행 액션(is_published 동반)으로만 수정할 수 있습니다"
     " - 임시저장은 draft를 사용하세요"
 )
 _DRAFT_KEYS_REMOVED = "image_keys 축소가 임시저장본(draft)이 참조하는 키를 제거합니다"
-_DELETED_EPISODE_NO = (
-    "삭제된 회차가 사용 중인 번호입니다 - 삭제한 회차의 번호는 다시 쓸 수 없습니다"
-)
+_PUBLIC_ID_EXHAUSTED = "회차 식별자 발급에 반복 실패했습니다 - 다시 시도해 주세요"
+_REORDER_SET_MISMATCH = "목록이 바뀌었습니다(회차 추가·삭제) - 새로고침 후 다시 정렬해 주세요"
+
+_PUBLIC_ID_MIN = 10_000_000
+_PUBLIC_ID_MAX = 99_999_999
+_PUBLIC_ID_MAX_ATTEMPTS = 5
 
 logger = structlog.get_logger(__name__)
 
 
-async def _duplicate_no_message(work_id: uuid.UUID, episode_no: int, session: AsyncSession) -> str:
-    """회차 번호 충돌 문구. 삭제된 회차가 번호를 쥐고 있으면 그렇다고 알려준다(#85).
-
-    UNIQUE(work_id, episode_no)는 deleted_at을 보지 않아 삭제된 회차의 번호가 소진된다
-    (#85 결정 - 독자 URL의 회차 번호가 나중에 다른 내용을 가리키면 안 되므로).
-    기본 문구만 내보내면 관리자가 목록에 없는 번호로 409를 받고 버그로 오인한다.
-    """
-    result = await session.exec(
-        select(Episode.id).where(
-            Episode.work_id == work_id,
-            Episode.episode_no == episode_no,
-            Episode.deleted_at.is_not(None),
-        )
-    )
-    return _DELETED_EPISODE_NO if result.first() is not None else _DUPLICATE_EPISODE_NO
+def _generate_public_id() -> int:
+    return secrets.randbelow(_PUBLIC_ID_MAX - _PUBLIC_ID_MIN + 1) + _PUBLIC_ID_MIN
 
 
 async def create_episode(work_id: uuid.UUID, data: EpisodeCreate, session: AsyncSession) -> Episode:
     """draft 생성(is_published=false, 빈 문서).
 
-    episode_no 생략 = 해당 작품 max+1 자동 할당(F3 에디터의 "캔버스 먼저" 흐름 -
-    작가는 발행 모달에서야 번호를 정한다). 동시 생성이 같은 max를 읽는 경합은
-    UNIQUE(work_id, episode_no)가 최종 백스톱 - check-then-insert 경합은 SELECT
-    선검사로 못 막고 DB 제약만이 단일 직렬화 권위다(C1 태그와 동일 계열).
-    구조 A라 이 409는 이미지 업로드 전에 즉시 반환된다.
+    public_id(독자 URL 조회키)는 서버가 무작위 발급한다(회차 번호 폐기, DECISIONS
+    2026-07-28) - 클라이언트 입력이 아니라 secrets.randbelow로 뽑고 충돌은
+    UNIQUE(public_id)가 최종 백스톱(C1 태그와 동일 계열). 라우터가 work_id를
+    미리 404 검증하므로(admin_episodes._work_or_404) 여기서 잡히는 IntegrityError는
+    항상 public_id 충돌이다. rollback()은 세션의 ORM 인스턴스를 전부 만료시키므로
+    재시도마다 새 Episode 인스턴스를 만든다 - 만료된 인스턴스를 재사용하면 다음
+    커밋에서 async 밖 lazy load(MissingGreenlet)로 죽는다.
 
     is_free=True 명시: is_free는 content 파생 컬럼이고 빈 문서 = 무료가 정합
     (derive_is_free(EMPTY_DOC) == True). 모델 컬럼 기본값 false에 맡기면
     "내용 없는 draft가 유료"라는 모순 상태로 시작한다.
     """
     payload = data.model_dump()
-    if payload["episode_no"] is None:
-        # ⚠️ soft delete된 회차도 세는 게 맞다(#85). UNIQUE(work_id, episode_no)는
-        # deleted_at을 안 보므로 삭제 행이 번호를 계속 점유한다 - 여기서 삭제분을
-        # 빼면 max+1이 삭제된 번호와 겹쳐 자동 할당이 IntegrityError로 죽는다.
-        result = await session.exec(
-            select(func.coalesce(func.max(Episode.episode_no), 0)).where(Episode.work_id == work_id)
+    # 표시 순서는 작품 안에서 max+1. UNIQUE가 없으므로 동시 생성이 같은 값을 잡아도
+    # 에러가 아니라 동점이고 (created_at, id)가 순서를 확정한다 - episode_no와 달리
+    # 409를 낼 이유가 없다. soft delete된 회차도 max에 포함해서, 되살렸을 때 뒤에
+    # 생긴 회차에게 자리를 뺏기지 않게 한다.
+    order_stmt = select(func.coalesce(func.max(Episode.sort_order), 0)).where(
+        Episode.work_id == work_id
+    )
+    next_sort_order = (await session.exec(order_stmt)).one() + 1
+
+    for attempt in range(_PUBLIC_ID_MAX_ATTEMPTS):
+        # 로그에 쓰려고 지역 변수로 먼저 잡는다 - rollback 뒤에 episode.public_id를 읽으면
+        # 만료된 인스턴스의 lazy load라 MissingGreenlet으로 죽는다(위 독스트링과 같은 함정).
+        public_id = _generate_public_id()
+        episode = Episode(
+            **payload,
+            work_id=work_id,
+            is_free=True,
+            public_id=public_id,
+            sort_order=next_sort_order,
         )
-        payload["episode_no"] = result.one() + 1
-    episode = Episode(**payload, work_id=work_id, is_free=True)
-    session.add(episode)
-    try:
-        await session.commit()
-    except IntegrityError as exc:
-        await session.rollback()
-        raise EpisodeConflictError(
-            await _duplicate_no_message(work_id, payload["episode_no"], session)
-        ) from exc
-    return episode
+        session.add(episode)
+        try:
+            await session.commit()
+        except IntegrityError as exc:
+            await session.rollback()
+            # 충돌 자체는 정상 동작(UNIQUE가 백스톱)이지만 조용히 넘기면 키스페이스가
+            # 좁아져도 알 방법이 없다. 충돌 확률은 회차 수의 **제곱**에 비례해 커지므로
+            # (생일 문제), 이 로그의 빈도가 public_id 자릿수를 늘릴 시점을 알려주는
+            # 유일한 신호다.
+            logger.warning(
+                "episode_public_id_collision",
+                work_id=str(work_id),
+                public_id=public_id,
+                attempt=attempt + 1,
+            )
+            if attempt == _PUBLIC_ID_MAX_ATTEMPTS - 1:
+                raise EpisodeConflictError(_PUBLIC_ID_EXHAUSTED) from exc
+            continue
+        return episode
+    raise AssertionError("unreachable - loop always returns or raises")
 
 
 async def list_episodes(work_id: uuid.UUID, session: AsyncSession) -> Sequence[Episode]:
+    # sort_order(작가 지정) 우선, created_at·id는 tie-breaker다(회차 번호 폐기,
+    # DECISIONS 2026-07-28). sort_order에 UNIQUE가 없어 동점이 정상적으로 생기므로
+    # tie-breaker는 장식이 아니라 순서를 확정하는 필수 요소다.
+    # published_at으로 정렬하지 않는 이유: 내렸다 재공개해도 원래 자리를 유지해야
+    # 하는데 published_at 정렬이면 재공개 시 맨 뒤로 밀린다.
     result = await session.exec(
         select(Episode)
         .where(Episode.work_id == work_id, Episode.deleted_at.is_(None))
-        .order_by(Episode.episode_no)
+        .order_by(Episode.sort_order, Episode.created_at, Episode.id)
     )
     return result.all()
+
+
+async def reorder_episodes(
+    work_id: uuid.UUID, episode_ids: Sequence[uuid.UUID], session: AsyncSession
+) -> Sequence[Episode]:
+    """작가가 끌어 놓은 순서대로 sort_order를 1..N으로 재배정한다.
+
+    부분 목록을 받지 않는다 - 살아있는 회차 **전량과 정확히 일치하는 집합**이어야 하고
+    아니면 409다. 부분 갱신을 허용하면 다른 탭에서 회차를 추가·삭제한 뒤 stale한 목록으로
+    요청했을 때 빠진 회차가 조용히 엉뚱한 자리로 밀리는데, "순서"는 전체 집합에 대한
+    진술이라 부분 적용이 의미를 갖지 않는다. 집합 비교가 곧 낙관적 동시성 검사 역할을
+    한다(별도 버전 토큰 불요).
+
+    soft delete된 회차는 대상이 아니다(list_episodes가 이미 제외). 그래서 재배열 후
+    삭제 회차의 sort_order는 살아있는 회차와 겹칠 수 있는데, UNIQUE가 없어 문제가
+    아니고 되살리면 tie-breaker가 자리를 정한다.
+    """
+    current = await list_episodes(work_id, session)
+    requested = list(episode_ids)
+    if len(requested) != len(set(requested)) or set(requested) != {e.id for e in current}:
+        raise EpisodeConflictError(_REORDER_SET_MISMATCH)
+
+    for position, episode_id in enumerate(requested, start=1):
+        await session.exec(
+            update(Episode)
+            .where(Episode.id == episode_id)
+            .values(sort_order=position)
+            .execution_options(synchronize_session=False)
+        )
+    await session.commit()
+    # bulk UPDATE(synchronize_session=False)는 인메모리 객체를 안 맞춰주고, 세션이
+    # expire_on_commit=False(lib/db.py)라 커밋도 만료시키지 않는다. 그 상태로 다시
+    # 조회하면 identity map이 **로드된 옛 속성을 그대로 둔 채** 같은 인스턴스를 돌려줘
+    # 행 순서만 맞고 sort_order 값은 옛것이 나간다(2026-08-03 실측: 응답 순서는
+    # [c,a,b]인데 sort_order가 [3,1,2]). refresh를 N번 도는 대신 만료만 표시해
+    # 아래 SELECT 한 번이 값을 덮어쓰게 한다.
+    for episode in current:
+        session.expire(episode)
+    return await list_episodes(work_id, session)
 
 
 async def get_episode(
@@ -232,10 +290,6 @@ async def update_episode(episode: Episode, data: EpisodeUpdate, session: AsyncSe
     new_keys: list[str] | None = changes.pop("image_keys", None)
     expected_len = len(episode.image_keys)
     draft_sent = "draft" in changes
-    # 번호 충돌 문구 조회용 스냅샷. rollback()은 세션 객체를 전부 만료시키므로 except
-    # 안에서 episode.*를 읽으면 async 밖 lazy load로 MissingGreenlet이 난다.
-    work_id = episode.work_id
-    final_no = changes.get("episode_no", episode.episode_no)
 
     if new_keys is not None:
         _validate_reorder(episode.image_keys, new_keys)
@@ -316,18 +370,12 @@ async def update_episode(episode: Episode, data: EpisodeUpdate, session: AsyncSe
             # 위 409 가드의 원자 버전: 로드 시점엔 비공개였어도 커밋 순간 공개 상태면
             # (스케줄러 전환 race) 이 행이 매칭되지 않아 임시저장이 라이브를 못 덮는다.
             conditions.append(Episode.is_published.is_(False))
-        try:
-            result = await session.exec(
-                update(Episode)
-                .where(*conditions)
-                .values(**changes)
-                .execution_options(synchronize_session=False)
-            )
-        except IntegrityError as exc:
-            await session.rollback()
-            raise EpisodeConflictError(
-                await _duplicate_no_message(work_id, final_no, session)
-            ) from exc
+        result = await session.exec(
+            update(Episode)
+            .where(*conditions)
+            .values(**changes)
+            .execution_options(synchronize_session=False)
+        )
         if result.rowcount != 1:
             await session.rollback()
             raise EpisodeConflictError(_STALE_EPISODE)
@@ -345,11 +393,7 @@ async def update_episode(episode: Episode, data: EpisodeUpdate, session: AsyncSe
     for field, value in changes.items():
         setattr(episode, field, value)
     session.add(episode)
-    try:
-        await session.commit()
-    except IntegrityError as exc:
-        await session.rollback()
-        raise EpisodeConflictError(await _duplicate_no_message(work_id, final_no, session)) from exc
+    await session.commit()
     if should_delete_public_thumb:
         await r2_service.delete_object(
             r2_service.episode_thumb_key(episode.work_id, episode.id),
@@ -361,9 +405,9 @@ async def update_episode(episode: Episode, data: EpisodeUpdate, session: AsyncSe
 async def soft_delete_episode(episode: Episode, session: AsyncSession) -> None:
     """회차 soft delete (#85). deleted_at 스탬프와 공개 해제를 한 UPDATE로 원자화한다.
 
-    행을 남기는 이유는 UNIQUE(work_id, episode_no)다 - 삭제된 회차의 번호는 소진되고
-    재사용하지 않는다(독자 URL /works/{작품}/{회차번호}가 나중에 다른 내용을 가리키면
-    안 되므로). 되살리는 API는 없다.
+    행을 남기는 이유(번호 폐기로 재작성, 2026-07-29): M3 purchases.episode_id가 ON DELETE
+    절 없이(기본 RESTRICT) episodes(id)를 참조하도록 설계돼 있다(DB_SCHEMA §purchases) -
+    구매·환불 기록이 걸린 회차는 하드 삭제가 애초에 불가능해진다. 되살리는 API는 없다.
 
     deleted_at IS NULL 조건부 UPDATE라 동시 삭제는 한쪽만 이긴다(rowcount 0 = 409).
     나눠 쓰면 "삭제됐는데 아직 공개"인 창이 생기는데, 그 사이 독자 요청 하나가

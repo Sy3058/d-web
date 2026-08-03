@@ -157,8 +157,8 @@ class Episode(SQLModel, table=True):
     # Work와 동일 - updated_at onupdate 컬럼이 있어 update 경로(D3)에서 같은 함정 방지.
     __mapper_args__ = {"eager_defaults": True}
     __table_args__ = (
-        # 한 작품 안에서 회차 번호 유일 (DB_SCHEMA §2)
-        UniqueConstraint("work_id", "episode_no", name="uq_episodes_work_id_episode_no"),
+        # 독자 URL의 조회키 - 전역 유일(회차 번호 폐기, DECISIONS "회차 번호 폐기" 2026-07-28)
+        UniqueConstraint("public_id", name="uq_episodes_public_id"),
         # work_id별 에피소드 조회 (FK엔 인덱스 자동생성 안 됨 - DB_SCHEMA §6)
         Index("idx_episodes_work_id", "work_id"),
         # 공개된 에피소드의 published_at 정렬/범위 조회 (partial)
@@ -183,7 +183,23 @@ class Episode(SQLModel, table=True):
             nullable=False,
         )
     )
-    episode_no: int = Field(sa_column=Column(Integer, nullable=False))
+    # 독자 URL의 조회키(포스타입식 랜덤 8자리, 10000000~99999999). 순번이 아니라 발급 시
+    # secrets.randbelow로 뽑고 충돌은 이 UNIQUE가 최종 백스톱(episode_service 재시도).
+    # DB DEFAULT(랜덤 생성 함수)로 옮기지 않는 이유: DEFAULT가 뽑은 값이 UNIQUE에 걸리면
+    # INSERT 문 자체가 실패하고 DB는 DEFAULT를 재평가해주지 않는다 - 재시도 루프는 어차피
+    # 필요하고, DB로 옮기면 사라지는 게 아니라 PL/pgSQL 안으로 숨을 뿐이다. 앱에 두면
+    # monkeypatch로 충돌을 결정적으로 재현해 테스트할 수 있고(재시도·소진 테스트 2건),
+    # 시드 PRNG인 Postgres random()과 달리 secrets는 CSPRNG다. 자릿수 정책도 URL 계약
+    # (프론트 정규식 ^[1-9]\d{7}$)과 같은 층에 있는 편이 낫다.
+    public_id: int = Field(sa_column=Column(Integer, nullable=False))
+    # 작품 안에서의 표시 순서(작가 지정). 회차 번호 폐기로 순번이 사라진 자리에서 "올린
+    # 순서 말고 내가 정한 순서"를 표현한다 - created_at 정렬만 남기면 프롤로그를 나중에
+    # 끼워넣거나 잘못 올린 순서를 되돌릴 방법이 없다.
+    # ⚠️ public_id와 달리 **유일하지 않다**(UNIQUE 없음). 동시 생성이 같은 값을 잡아도
+    # 409를 낼 이유가 없고 (created_at, id)가 tie를 깬다 - episode_no가 409를 뱉던
+    # 원인이 유일성이었으므로 그 함정을 다시 만들지 않는다. 독자에게 노출되지 않아
+    # "번호 소진" 개념도 없다.
+    sort_order: int = Field(sa_column=Column(Integer, nullable=False))
     title: str = Field(sa_column=Column(String(200), nullable=False))
     # 부제목 (포스타입식 에디터 - F3 재설계 2026-07-15)
     subtitle: str | None = Field(default=None, sa_column=Column(String(200), nullable=True))
@@ -232,8 +248,9 @@ class Episode(SQLModel, table=True):
     updated_at: datetime | None = Field(default=None, sa_column=_updated_at_column())
     # 회차 soft delete (#85). 불변식: deleted_at IS NOT NULL이면 is_published=false이고
     # published_at IS NULL이다(episode_service.soft_delete_episode가 한 UPDATE로 보장).
-    # 행이 남는 이유는 UNIQUE(work_id, episode_no) - 삭제된 회차의 번호는 소진되고
-    # 재사용하지 않는다(독자 URL /works/{id}/{회차번호}가 다른 내용을 가리키면 안 됨).
+    # 하드 삭제를 안 하는 이유(번호 폐기로 재작성, 2026-07-29): M3 purchases.episode_id
+    # REFERENCES episodes(id)가 ON DELETE 절 없이(기본 RESTRICT) 설계돼 있다(DB_SCHEMA
+    # §purchases) - 구매·환불 회계 기록이 걸린 회차는 하드 삭제가 애초에 불가능해진다.
     deleted_at: datetime | None = Field(
         default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
     )

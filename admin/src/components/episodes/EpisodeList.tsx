@@ -1,5 +1,9 @@
 import { Link } from '@tanstack/react-router';
-import { useDeleteEpisode, useUnpublishEpisode } from '../../hooks/useEpisodes';
+import {
+  useDeleteEpisode,
+  useReorderEpisodes,
+  useUnpublishEpisode,
+} from '../../hooks/useEpisodes';
 import { describeAuthError } from '../../lib/api';
 import type { Episode } from '../../types';
 import { EpisodeActionsMenu } from './EpisodeActionsMenu';
@@ -28,17 +32,25 @@ function priceLabel(episode: Episode, basePrice: number | null | undefined): str
 export function EpisodeList({ workId, episodes, basePrice }: EpisodeListProps) {
   const unpublishEpisode = useUnpublishEpisode(workId);
   const deleteEpisode = useDeleteEpisode(workId);
+  const reorderEpisodes = useReorderEpisodes(workId);
 
   if (episodes.length === 0) {
     return <p className="text-gray-500">아직 에피소드가 없습니다. 첫 에피소드를 등록해 보세요.</p>;
   }
 
+  // 인접 두 회차를 맞바꾼 뒤 **전량**을 보낸다(서버가 부분 목록을 409로 거부한다 -
+  // 순서는 전체 집합에 대한 진술이라 부분 적용이 의미가 없다).
+  const move = (index: number, delta: number) => {
+    const target = index + delta;
+    if (target < 0 || target >= episodes.length) return;
+    const next = [...episodes];
+    [next[index], next[target]] = [next[target], next[index]];
+    reorderEpisodes.mutate(next.map((episode) => episode.id));
+  };
+
   const handleDelete = (episode: Episode) => {
-    // 번호 소진은 되돌릴 수 없는 결과라 누르기 전에 알려야 한다(#85 - UNIQUE가
-    // deleted_at을 보지 않아 삭제된 회차가 번호를 계속 점유한다).
-    const warning =
-      `${episode.episode_no}화 "${episode.title}"을(를) 삭제할까요?` +
-      '\n독자에게 즉시 보이지 않게 되고, 이 회차 번호는 다시 쓸 수 없습니다.';
+    // 삭제는 soft delete라 되돌릴 API가 없다(#85) - 누르기 전에 알려야 한다.
+    const warning = `"${episode.title}"을(를) 삭제할까요?\n독자에게 즉시 보이지 않게 되고, 되돌릴 수 없습니다.`;
     if (window.confirm(warning)) {
       deleteEpisode.mutate(episode.id);
     }
@@ -64,10 +76,17 @@ export function EpisodeList({ workId, episodes, basePrice }: EpisodeListProps) {
           삭제하지 못했습니다. {describeAuthError(deleteEpisode.error)}
         </p>
       )}
+      {reorderEpisodes.isError && (
+        <p className="mb-2 text-sm text-red-600">
+          순서를 바꾸지 못했습니다. {describeAuthError(reorderEpisodes.error)}
+        </p>
+      )}
       <table className="w-full border-collapse text-sm">
         <thead>
           <tr className="text-left text-gray-500">
-            <th className="px-3 py-2 font-medium">회차</th>
+            <th className="px-3 py-2 font-medium">
+              <span className="sr-only">순서</span>
+            </th>
             <th className="px-3 py-2 font-medium">제목</th>
             <th className="px-3 py-2 font-medium">이미지</th>
             <th className="px-3 py-2 font-medium">가격</th>
@@ -78,11 +97,35 @@ export function EpisodeList({ workId, episodes, basePrice }: EpisodeListProps) {
           </tr>
         </thead>
         <tbody>
-          {episodes.map((episode) => {
+          {episodes.map((episode, index) => {
             const badge = statusBadge(episode);
             return (
               <tr key={episode.id} className="border-t border-gray-200 hover:bg-gray-50">
-                <td className="px-3 py-2 text-gray-500">{episode.episode_no}화</td>
+                <td className="px-3 py-2">
+                  {/* 재배열 중에는 전 버튼을 잠근다 - 인플라이트 요청의 응답이 캐시를
+                      덮기 전에 또 누르면 화면에 보이는(낡은) 순서를 기준으로 계산해
+                      직전 이동을 되돌리는 요청이 나간다. */}
+                  <div className="flex flex-col gap-0.5">
+                    <button
+                      type="button"
+                      onClick={() => move(index, -1)}
+                      disabled={index === 0 || reorderEpisodes.isPending}
+                      aria-label={`${episode.title} 위로 이동`}
+                      className="rounded px-1 leading-none text-gray-400 hover:bg-gray-200 hover:text-gray-700 disabled:opacity-30 disabled:hover:bg-transparent"
+                    >
+                      <span aria-hidden="true">↑</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => move(index, 1)}
+                      disabled={index === episodes.length - 1 || reorderEpisodes.isPending}
+                      aria-label={`${episode.title} 아래로 이동`}
+                      className="rounded px-1 leading-none text-gray-400 hover:bg-gray-200 hover:text-gray-700 disabled:opacity-30 disabled:hover:bg-transparent"
+                    >
+                      <span aria-hidden="true">↓</span>
+                    </button>
+                  </div>
+                </td>
                 <td className="px-3 py-2">
                   <Link
                     to="/works/$workId/episodes/$episodeId"
