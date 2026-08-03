@@ -40,7 +40,7 @@ export interface WorkListResponse {
 
 export interface EpisodeSummary {
   id: string;
-  episode_no: number;
+  public_id: number;
   title: string;
   subtitle: string | null;
   thumbnail_url: string | null;

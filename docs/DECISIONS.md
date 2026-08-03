@@ -583,14 +583,14 @@ main (항상 배포 가능 상태)
 - **테스트 DB**: GitHub Actions `postgres:16` 서비스. conftest가 `SQLModel.metadata.create_all`로 스키마를 직접 만들어 CI에 alembic 스텝 불필요. 필수 env(`PASSWORD_PEPPER` 등)는 테스트 전용 더미값 주입(실제 비밀 아님).
 - **`paths` 필터 미적용**: required check로 걸면 path-skip이 "pending"으로 남아 머지를 막는 트레이드오프 + 1인 저PR 볼륨이라 Actions 분 절약 한계효용 낮음.
 - **⚠️ CI 효력의 전제 = branch protection (정정 2026-07-02: 무료 플랜 불가)**: 게이트의 실제 효력은 YAML이 아니라 서버 규칙(branch protection/ruleset)에 있다(`/council` 5렌즈 공통 맹점). 그러나 `backend`를 required status check로 등록하려면 branch protection 또는 ruleset이 필요한데, **무료 private repo는 둘 다 불가**(`branches/main/protection`·`repos/.../rulesets` API 모두 403 "Upgrade to Pro or make public"). 따라서 CI가 빨강이어도 서버가 머지를 강제로 막지 못한다 - 원래 "후속 P0(branch protection 등록)"는 이 플랜에선 실행 불가. 대신 **로컬 훅 `.githooks/pre-push`로 main 직접 push를 차단**해 PR 흐름(브랜치 → PR → squash-merge → `git pull`)을 강제한다(B1이 PR 없이 main 직행한 사고 대응). 단 이 훅은 "직접 push 금지"만 강제하고 **CI-그린은 강제하지 못한다**(클라 훅은 CI 상태를 못 봄) → CI 준수는 수동 규율. 진짜 서버 게이트가 필요하면 Pro 업그레이드 또는 repo 공개.
-- **후속**: `alembic upgrade head`+`alembic check` 게이트(모델↔마이그레이션 표류 차단), FE/admin job, 액션 SHA 핀(공급망), CD(F2~F3).
-- **완료된 후속**: HIBP 외부호출 테스트 격리(hermetic, 2026-06-24) - conftest autouse 전역 stub(`_stub_hibp`)으로 어떤 테스트도 `api.pwnedpasswords.com`에 실제 요청을 못 보내게 함(per-test mock 의존 제거). 실제 함수 본문 raise sabotage로 미도달 입증.
+- **후속**: `alembic upgrade head`+`alembic check` 게이트(모델↔마이그레이션 표류 차단), 액션 SHA 핀(공급망), CD(F2~F3).
+- **완료된 후속**: HIBP 외부호출 테스트 격리(hermetic, 2026-06-24) - conftest autouse 전역 stub(`_stub_hibp`)으로 어떤 테스트도 `api.pwnedpasswords.com`에 실제 요청을 못 보내게 함(per-test mock 의존 제거). 실제 함수 본문 raise sabotage로 미도달 입증. FE/admin job(2026-07-23, #98) - pnpm 10 + Node 24 셋업, frontend job(astro check/build/vitest)·admin job(eslint/tsc·vite build/vitest) 전 job 그린.
 
 ---
 
 ## 회차 식별/URL 결정
 
-### 회차 번호 폐기: 랜덤 공개 ID URL + created_at 정렬 (2026-07-28)
+### 회차 번호 폐기: 랜덤 공개 ID URL + 작가 지정 정렬 (2026-07-28, 구현 완료 2026-08-03)
 
 **결정: `episode_no`(순번) 개념을 없앤다. 독자 URL은 포스타입식 랜덤 8자리 숫자 ID(전역 유니크)로, 목록 정렬은 `created_at`(올린 순서)으로. 구현은 #85 머지 후 별도 PR.**
 
@@ -600,3 +600,6 @@ main (항상 배포 가능 상태)
 - **created_at 정렬 근거**: 내렸다 재공개해도 원래 자리를 유지한다(published_at 정렬이면 재공개 시 맨 뒤로 밀림 - #85의 "내리기"와 조합 시 순서가 흔들림). admin에 번호 입력 UI가 원래 없어 실사용 순서 = 올린 순서였고, 그 동작이 그대로 보존된다.
 - **랜덤 8자리**(1억 공간): 1인 작가 규모에서 생일 충돌 무시 가능. UNIQUE 제약이 백스톱, 충돌 시 재생성.
 - 영향 범위: FE `[episodeNo].astro` 라우트, BE 읽기·카탈로그·스키마, admin "N화" 표기, 마이그레이션 1건(공개 ID 추가+백필, episode_no 제거).
+- **구현에서 확정(2026-07-29)**: 컬럼명은 `public_id`(결정문의 "1억 공간·선행 0" 대신 선행 0 없는 `INTEGER 10_000_000~99_999_999`, 9천만 공간 - 정규화 문제 회피). URL 계층은 `/works/{workId}/{publicId}` 유지(단독 `/e/{publicId}`는 회차→작품 역조회 엔드포인트가 새로 필요해 기각). 생성은 앱단 `secrets.randbelow` + IntegrityError 재시도(최대 5회, 시도마다 새 ORM 인스턴스). soft delete는 유지하되 근거를 재정의 - "번호 재사용 방지"가 사라진 자리를 "M3 `purchases.episode_id`가 `ON DELETE` 없이(RESTRICT) 참조해 구매 기록이 걸린 회차는 하드 삭제 자체가 불가"로 대체(`docs/DB_SCHEMA.md` §purchases). 마이그레이션(`f3a43b32fcfb`)은 upgrade/downgrade 왕복 실측 완료(9행). 상세: `docs/MODULES/BE/Works/IMPLEMENTATION_EPISODE_PUBLIC_ID.md`.
+- **정렬 정정(2026-07-30, 코드 리뷰 반영)**: 결정문의 "정렬은 created_at"은 **불충분했다**. 번호는 정렬 기준 역할도 겸했는데, `created_at`만 남기면 프롤로그를 나중에 끼워넣거나 잘못 올린 순서를 되돌릴 수단이 아예 없어진다(admin에 번호 입력 UI가 없었다는 근거는 "순서를 못 바꿔도 된다"가 아니라 "번호를 직접 칠 필요가 없다"였다). `episodes.sort_order`(작품 스코프, 작가 지정, 기본 `max+1`)를 추가하고 정렬을 `sort_order → created_at → id`로 확정한다. **UNIQUE는 걸지 않는다** - 유일 제약이 `episode_no`가 409를 뱉던 원인이고, 표시 순서는 동점이어도 tie-breaker가 깨준다. 재배열 API는 컬렉션 PUT(`PUT /admin/works/{workId}/episodes`)에 살아있는 회차 전량을 순서대로 전송(집합 불일치 = 409 = 낙관적 동시성 검사), admin UI는 ↑↓ 버튼(드래그앤드롭 의존성 도입 안 함). 마이그레이션 `a7c91d05e3b4`의 백필이 직전 정렬과 동일 순번이라 전환으로 순서가 바뀌지 않는다.
+- **제목 필수화 동반(2026-07-30)**: `EpisodeCreate.title`의 서버 기본값 `'무제'`를 제거한다(빈 제목 = 422). 번호가 사라지면서 목록·액션 메뉴·뷰어 네비의 식별자가 **제목 하나로** 줄어, `'무제'` 행이 둘 이상이면 구분이 불가능해졌기 때문. admin의 "제목 필수"(`ensureTitle`) 결정은 원래 있었지만 **이미지 업로드가 만드는 지연 draft**만 예외로 서버 기본값을 타고 있었고(`IMPLEMENTATION_EPISODE_EDITOR.md`의 명시적 예외), 그 예외를 이번에 닫았다.

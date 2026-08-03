@@ -132,9 +132,7 @@ async def _create_work_id(client: AsyncClient) -> str:
 
 
 async def _create_episode(client: AsyncClient, work_id: str, **fields) -> dict:
-    resp = await client.post(
-        _episodes_url(work_id), json={"episode_no": 1, "title": "1화", **fields}
-    )
+    resp = await client.post(_episodes_url(work_id), json={"title": "1화", **fields})
     assert resp.status_code == 201
     return resp.json()
 
@@ -224,17 +222,24 @@ async def test_create_episode_draft_201(owner_client: AsyncClient):
     assert body["is_free"] is True  # 빈 문서 = 무료 (파생 정합)
 
 
-async def test_create_episode_auto_assigns_no_and_default_title(owner_client: AsyncClient):
-    # F3 에디터 "캔버스 먼저" 흐름: 메타 없이 POST해도 max+1 번호와 "무제"로 draft 생성.
+async def test_create_episode_assigns_public_id(owner_client: AsyncClient):
+    # public_id는 클라이언트 입력이 아니라 서버가 무작위 발급하고, 매번 다른 값이다.
     work_id = await _create_work_id(owner_client)
-    resp = await owner_client.post(_episodes_url(work_id), json={})
-    assert resp.status_code == 201
-    body = resp.json()
-    assert body["episode_no"] == 1
-    assert body["title"] == "무제"
-    resp = await owner_client.post(_episodes_url(work_id), json={})
-    assert resp.status_code == 201
-    assert resp.json()["episode_no"] == 2
+    body = await _create_episode(owner_client, work_id, title="1화")
+    assert isinstance(body["public_id"], int)
+    assert 10_000_000 <= body["public_id"] <= 99_999_999
+
+    other = await _create_episode(owner_client, work_id, title="2화")
+    assert other["public_id"] != body["public_id"]
+
+
+async def test_create_episode_requires_title(owner_client: AsyncClient):
+    # 서버 기본값 "무제" 폐지(회차 번호 폐기와 동반) - 번호가 사라져 제목이 유일한
+    # 식별자가 됐으므로 빈 제목으로 회차가 생기는 경로 자체를 없앤다. 생략도 빈 문자열도 422.
+    work_id = await _create_work_id(owner_client)
+    assert (await owner_client.post(_episodes_url(work_id), json={})).status_code == 422
+    resp = await owner_client.post(_episodes_url(work_id), json={"title": ""})
+    assert resp.status_code == 422
 
 
 async def test_create_episode_ignores_is_free_injection(owner_client: AsyncClient):
@@ -244,16 +249,37 @@ async def test_create_episode_ignores_is_free_injection(owner_client: AsyncClien
     assert body["is_free"] is True
 
 
-async def test_create_episode_duplicate_no_409_before_any_upload(owner_client: AsyncClient):
-    # 구조 A의 핵심 이득: 회차 번호 충돌이 이미지 업로드 전에 즉시 발각된다.
+async def test_create_episode_retries_on_public_id_collision(
+    owner_client: AsyncClient, monkeypatch
+):
+    # public_id는 클라이언트가 지정할 수 없으니(요청 필드 아님) 충돌은 서버 내부 재시도로만
+    # 관측 가능하다 - _generate_public_id를 몽키패치해 1회 충돌 후 성공을 재현한다.
     work_id = await _create_work_id(owner_client)
-    await _create_episode(owner_client, work_id)
-    resp = await owner_client.post(_episodes_url(work_id), json={"episode_no": 1, "title": "중복"})
+    values = iter([10_000_001, 10_000_001, 20_000_002])
+    monkeypatch.setattr(episode_service, "_generate_public_id", lambda: next(values))
+
+    first = await owner_client.post(_episodes_url(work_id), json={"title": "1화"})
+    assert first.status_code == 201
+    assert first.json()["public_id"] == 10_000_001
+
+    second = await owner_client.post(_episodes_url(work_id), json={"title": "2화"})
+    assert second.status_code == 201
+    assert second.json()["public_id"] == 20_000_002
+
+
+async def test_create_episode_public_id_exhausted_409(owner_client: AsyncClient, monkeypatch):
+    # 재시도 상한(5회)을 모두 충돌로 소진하면 409. 실제로는 9천만 공간에서 극히
+    # 희박하지만, 로직 자체(무한 루프 대신 명시적 실패)는 결정적으로 검증돼야 한다.
+    work_id = await _create_work_id(owner_client)
+    monkeypatch.setattr(episode_service, "_generate_public_id", lambda: 10_000_001)
+    await owner_client.post(_episodes_url(work_id), json={"title": "1화"})
+
+    resp = await owner_client.post(_episodes_url(work_id), json={"title": "충돌"})
     assert resp.status_code == 409
 
 
 async def test_create_episode_work_not_found_404(owner_client: AsyncClient):
-    resp = await owner_client.post(_episodes_url(_MISSING), json={"episode_no": 1, "title": "1화"})
+    resp = await owner_client.post(_episodes_url(_MISSING), json={"title": "1화"})
     assert resp.status_code == 404
 
 
@@ -269,7 +295,7 @@ async def test_create_episode_naive_published_at_422(owner_client: AsyncClient):
     work_id = await _create_work_id(owner_client)
     resp = await owner_client.post(
         _episodes_url(work_id),
-        json={"episode_no": 1, "title": "1화", "published_at": "2026-07-15T10:00:00"},
+        json={"title": "1화", "published_at": "2026-07-15T10:00:00"},
     )
     assert resp.status_code == 422
 
@@ -366,9 +392,7 @@ async def test_append_image_stale_state_conflict(
     append를 커밋한 상황을, bulk UPDATE로 DB만 전진시켜 결정적으로 만든다.
     """
     work = await work_service.create_work(WorkCreate(title="경합"), owner.id, db_session)
-    episode = await episode_service.create_episode(
-        work.id, EpisodeCreate(episode_no=1, title="1화"), db_session
-    )
+    episode = await episode_service.create_episode(work.id, EpisodeCreate(title="1화"), db_session)
     sneaky = f"works/{work.id}/episodes/{episode.id}/{uuid.uuid4().hex}.webp"
     await db_session.exec(
         update(Episode)
@@ -416,7 +440,6 @@ async def test_update_meta_partial(owner_client: AsyncClient):
     body = resp.json()
     assert body["title"] == "개정판 1화"
     assert body["price"] == 300  # 미포함 필드 유지
-    assert body["episode_no"] == 1
 
 
 async def test_update_explicit_null_title_422(owner_client: AsyncClient):
@@ -424,14 +447,6 @@ async def test_update_explicit_null_title_422(owner_client: AsyncClient):
     episode = await _create_episode(owner_client, work_id)
     resp = await _put(owner_client, work_id, episode["id"], title=None)
     assert resp.status_code == 422
-
-
-async def test_update_duplicate_episode_no_409(owner_client: AsyncClient):
-    work_id = await _create_work_id(owner_client)
-    await _create_episode(owner_client, work_id, episode_no=1)
-    ep2 = await _create_episode(owner_client, work_id, episode_no=2, title="2화")
-    resp = await _put(owner_client, work_id, ep2["id"], episode_no=1)
-    assert resp.status_code == 409
 
 
 async def test_reorder_reflected(owner_client: AsyncClient, uploaded_keys: list[str]):
@@ -473,9 +488,7 @@ async def test_reorder_stale_snapshot_conflict(
     무보호 last-write-wins였다면 200을 받은 업로드 결과가 조용히 지워졌을 시나리오.
     """
     work = await work_service.create_work(WorkCreate(title="재배열경합"), owner.id, db_session)
-    episode = await episode_service.create_episode(
-        work.id, EpisodeCreate(episode_no=1, title="1화"), db_session
-    )
+    episode = await episode_service.create_episode(work.id, EpisodeCreate(title="1화"), db_session)
     appended = f"works/{work.id}/episodes/{episode.id}/{uuid.uuid4().hex}.webp"
     await db_session.exec(
         update(Episode)
@@ -669,9 +682,7 @@ async def test_content_save_stale_manifest_conflict(
     stale이면(인플라이트 업로드·재배열이 먼저 커밋) 409. 무가드 ORM 경로였다면
     "content 이미지 키 ⊆ image_keys" 불변식이 동시 요청에서 깨졌다."""
     work = await work_service.create_work(WorkCreate(title="본문경합"), owner.id, db_session)
-    episode = await episode_service.create_episode(
-        work.id, EpisodeCreate(episode_no=1, title="1화"), db_session
-    )
+    episode = await episode_service.create_episode(work.id, EpisodeCreate(title="1화"), db_session)
     appended = f"works/{work.id}/episodes/{episode.id}/{uuid.uuid4().hex}.webp"
     await db_session.exec(
         update(Episode)
@@ -928,29 +939,6 @@ async def test_deleted_episode_image_upload_404(
     assert (await _upload_image(owner_client, work_id, episode_id)).status_code == 404
 
 
-async def test_deleted_episode_no_is_burned(owner_client: AsyncClient, uploaded_keys: list[str]):
-    # UNIQUE(work_id, episode_no)는 deleted_at을 안 본다 - 삭제한 번호는 소진된다(#85 결정:
-    # 독자 URL /works/{작품}/{회차번호}가 나중에 다른 내용을 가리키면 안 되므로).
-    work_id, episode_id, _keys = await _episode_with_content(owner_client)
-    assert (await owner_client.delete(_episode_url(work_id, episode_id))).status_code == 204
-    resp = await owner_client.post(
-        _episodes_url(work_id), json={"episode_no": 1, "title": "새 1화"}
-    )
-    assert resp.status_code == 409
-    # 목록에 없는 번호로 409를 받으면 관리자가 버그로 오인한다 - 문구가 이유를 밝혀야 한다.
-    assert "삭제된 회차" in resp.json()["detail"]
-
-
-async def test_auto_episode_no_counts_deleted(owner_client: AsyncClient, uploaded_keys: list[str]):
-    # 자동 할당(max+1)은 삭제분까지 세야 한다. 삭제분을 빼면 max+1이 소진된 번호와
-    # 겹쳐 "번호를 안 적었을 뿐인데 409"가 난다.
-    work_id, episode_id, _keys = await _episode_with_content(owner_client)
-    assert (await owner_client.delete(_episode_url(work_id, episode_id))).status_code == 204
-    resp = await owner_client.post(_episodes_url(work_id), json={"title": "다음 화"})
-    assert resp.status_code == 201
-    assert resp.json()["episode_no"] == 2
-
-
 async def test_delete_removes_public_thumbnail(
     owner_client: AsyncClient, r2_calls: dict[str, list[dict]]
 ):
@@ -1058,9 +1046,7 @@ async def test_publish_flip_race_guarded(
     is_published=false 가드가 rowcount 0으로 잡는다. 인메모리 409 검사만으로는 이 창이
     안 닫힌다(#86 사고의 race 재발 경로)."""
     work = await work_service.create_work(WorkCreate(title="race"), owner.id, db_session)
-    episode = await episode_service.create_episode(
-        work.id, EpisodeCreate(episode_no=1, title="1화"), db_session
-    )
+    episode = await episode_service.create_episode(work.id, EpisodeCreate(title="1화"), db_session)
     await episode_service.update_episode(
         episode, EpisodeUpdate(content=_doc(_para("본문"))), db_session
     )
@@ -1094,13 +1080,124 @@ async def test_manifest_delete_breaking_draft_reference_422(
 # ---------------------------------------------------------------------------
 
 
-async def test_list_episodes_ordered_by_episode_no(owner_client: AsyncClient):
+async def _set_columns(db_session: AsyncSession, episode_id: str, **values) -> None:
+    await db_session.exec(
+        update(Episode).where(Episode.id == uuid.UUID(episode_id)).values(**values)
+    )
+    await db_session.commit()
+
+
+async def test_create_episode_assigns_incrementing_sort_order(owner_client: AsyncClient):
+    # 기본 표시 순서 = 올린 순서(작품 안에서 max+1). 다른 작품과 번호를 공유하지 않는다.
     work_id = await _create_work_id(owner_client)
-    await _create_episode(owner_client, work_id, episode_no=2, title="2화")
-    await _create_episode(owner_client, work_id, episode_no=1, title="1화")
+    other_work_id = await _create_work_id(owner_client)
+    first = await _create_episode(owner_client, work_id, title="첫 화")
+    second = await _create_episode(owner_client, work_id, title="다음 화")
+    elsewhere = await _create_episode(owner_client, other_work_id, title="남의 작품 1화")
+
+    assert first["sort_order"] == 1
+    assert second["sort_order"] == 2
+    assert elsewhere["sort_order"] == 1  # work_id 스코프라 1부터 다시 시작
+
+
+async def test_list_episodes_sort_order_beats_created_at(
+    owner_client: AsyncClient, db_session: AsyncSession
+):
+    # 정렬 1순위는 sort_order(작가 지정)고 created_at은 tie-breaker다.
+    # ⚠️ created_at을 sort_order와 **반대 방향**으로 깔아 둔다 - 둘이 같은 방향이면
+    # ORDER BY에서 sort_order를 지워도 테스트가 통과해 판별력이 0이 된다.
+    work_id = await _create_work_id(owner_client)
+    first = await _create_episode(owner_client, work_id, title="첫 화")  # sort_order 1
+    second = await _create_episode(owner_client, work_id, title="다음 화")  # sort_order 2
+
+    await _set_columns(db_session, first["id"], created_at=datetime(2026, 1, 2, tzinfo=UTC))
+    await _set_columns(db_session, second["id"], created_at=datetime(2026, 1, 1, tzinfo=UTC))
+
     resp = await owner_client.get(_episodes_url(work_id))
     assert resp.status_code == 200
-    assert [e["episode_no"] for e in resp.json()] == [1, 2]
+    assert [e["id"] for e in resp.json()] == [first["id"], second["id"]]
+
+
+async def test_list_episodes_created_at_breaks_sort_order_tie(
+    owner_client: AsyncClient, db_session: AsyncSession
+):
+    # sort_order엔 UNIQUE가 없어 동점이 정상적으로 발생한다(동시 생성이 같은 max+1을
+    # 계산하는 경우). 그때 순서를 확정하는 건 created_at이다 - tie-breaker가 빠지면
+    # 순서가 무정의(DB 임의 순서)가 되므로 이 계약도 고정해 둔다.
+    work_id = await _create_work_id(owner_client)
+    early = await _create_episode(owner_client, work_id, title="먼저 올린 화")
+    late = await _create_episode(owner_client, work_id, title="나중 올린 화")
+
+    await _set_columns(
+        db_session, early["id"], sort_order=7, created_at=datetime(2026, 1, 1, tzinfo=UTC)
+    )
+    await _set_columns(
+        db_session, late["id"], sort_order=7, created_at=datetime(2026, 1, 2, tzinfo=UTC)
+    )
+
+    resp = await owner_client.get(_episodes_url(work_id))
+    assert resp.status_code == 200
+    assert [e["id"] for e in resp.json()] == [early["id"], late["id"]]
+
+
+async def test_reorder_episodes_rewrites_sort_order(owner_client: AsyncClient):
+    work_id = await _create_work_id(owner_client)
+    a = await _create_episode(owner_client, work_id, title="A")
+    b = await _create_episode(owner_client, work_id, title="B")
+    c = await _create_episode(owner_client, work_id, title="C")
+
+    resp = await owner_client.put(
+        _episodes_url(work_id), json={"episode_ids": [c["id"], a["id"], b["id"]]}
+    )
+    assert resp.status_code == 200
+    assert [e["id"] for e in resp.json()] == [c["id"], a["id"], b["id"]]
+    assert [e["sort_order"] for e in resp.json()] == [1, 2, 3]
+
+    # 응답만 정렬된 게 아니라 실제로 저장됐는지 재조회로 확인한다.
+    again = await owner_client.get(_episodes_url(work_id))
+    assert [e["id"] for e in again.json()] == [c["id"], a["id"], b["id"]]
+
+
+async def test_reorder_episodes_rejects_partial_set_409(owner_client: AsyncClient):
+    # stale한 목록(다른 탭에서 회차가 추가된 뒤)으로 보낸 재배열은 빠진 회차를 조용히
+    # 엉뚱한 자리로 밀어버린다 - 집합 불일치를 낙관적 동시성 검사로 삼아 409로 막는다.
+    work_id = await _create_work_id(owner_client)
+    a = await _create_episode(owner_client, work_id, title="A")
+    await _create_episode(owner_client, work_id, title="B")
+
+    resp = await owner_client.put(_episodes_url(work_id), json={"episode_ids": [a["id"]]})
+    assert resp.status_code == 409
+
+
+async def test_reorder_episodes_rejects_duplicate_and_foreign_ids_409(owner_client: AsyncClient):
+    work_id = await _create_work_id(owner_client)
+    other_work_id = await _create_work_id(owner_client)
+    a = await _create_episode(owner_client, work_id, title="A")
+    b = await _create_episode(owner_client, work_id, title="B")
+    outsider = await _create_episode(owner_client, other_work_id, title="남의 작품")
+
+    dup = await owner_client.put(_episodes_url(work_id), json={"episode_ids": [a["id"], a["id"]]})
+    assert dup.status_code == 409
+
+    foreign = await owner_client.put(
+        _episodes_url(work_id), json={"episode_ids": [a["id"], b["id"], outsider["id"]]}
+    )
+    assert foreign.status_code == 409
+
+
+async def test_reorder_episodes_excludes_deleted(owner_client: AsyncClient):
+    # 삭제된 회차는 목록에서 빠지므로 재배열 대상 집합에도 없어야 한다 - 포함시키면 409.
+    work_id = await _create_work_id(owner_client)
+    a = await _create_episode(owner_client, work_id, title="A")
+    b = await _create_episode(owner_client, work_id, title="B")
+    assert (await owner_client.delete(f"{_episodes_url(work_id)}/{b['id']}")).status_code == 204
+
+    stale = await owner_client.put(_episodes_url(work_id), json={"episode_ids": [a["id"], b["id"]]})
+    assert stale.status_code == 409
+
+    ok = await owner_client.put(_episodes_url(work_id), json={"episode_ids": [a["id"]]})
+    assert ok.status_code == 200
+    assert [e["id"] for e in ok.json()] == [a["id"]]
 
 
 # ---------------------------------------------------------------------------

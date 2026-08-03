@@ -87,7 +87,7 @@ def _to_episode_summary(
         thumbnail_url = r2_service.public_url(work_cover_image, version=work_updated_at)
     return EpisodeSummary(
         id=ep.id,
-        episode_no=ep.episode_no,
+        public_id=ep.public_id,
         title=ep.title,
         subtitle=ep.subtitle,
         thumbnail_url=thumbnail_url,
@@ -171,11 +171,14 @@ async def get_work_detail(work_id: uuid.UUID, session: AsyncSession) -> WorkDeta
     if work is None:
         return None
 
+    # 독자에게 보이는 순서 = 작가가 정한 순서. episode_service.list_episodes와 반드시
+    # 같은 정렬이어야 한다 - 어긋나면 관리자 목록에서 재배열한 결과가 독자 쪽에
+    # 반영되지 않는다(sort_order는 UNIQUE가 아니라 tie-breaker까지 같아야 동일 순서).
     episodes = (
         await session.exec(
             select(Episode)
             .where(Episode.work_id == work_id, *public_episode_filters())
-            .order_by(Episode.episode_no)
+            .order_by(Episode.sort_order, Episode.created_at, Episode.id)
         )
     ).all()
 

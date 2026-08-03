@@ -24,7 +24,13 @@ from src.lib.exceptions import (
 from src.lib.uploads import R2_UNAVAILABLE, read_image_upload
 from src.models.user import User
 from src.models.work import Episode
-from src.schemas.work import AdminEpisodeRead, EpisodeCreate, EpisodeImageUrl, EpisodeUpdate
+from src.schemas.work import (
+    AdminEpisodeRead,
+    EpisodeCreate,
+    EpisodeImageUrl,
+    EpisodeReorder,
+    EpisodeUpdate,
+)
 from src.services import episode_service, r2_service, work_service
 from src.services.image_service import MAX_IMAGES_PER_EPISODE, convert_to_webp
 from src.services.r2_service import R2NotConfiguredError
@@ -61,7 +67,7 @@ async def _episode_or_404(
 async def create_episode(
     work_id: uuid.UUID, body: EpisodeCreate, owner: OwnerDep, session: SessionDep
 ) -> Episode:
-    """draft 생성(JSON, 이미지 없음). episode_no 중복은 이미지 업로드 전에 즉시 409."""
+    """draft 생성(JSON, 이미지 없음). public_id는 서버가 발급(요청 필드 아님)."""
     await _work_or_404(work_id, session)
     try:
         return await episode_service.create_episode(work_id, body, session)
@@ -143,9 +149,32 @@ async def delete_episode(
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
 
 
+@router.put("", response_model=list[AdminEpisodeRead])
+async def reorder_episodes(
+    work_id: uuid.UUID, body: EpisodeReorder, owner: OwnerDep, session: SessionDep
+) -> list[Episode]:
+    """회차 표시 순서 재배열 - 살아있는 회차 전량을 원하는 순서로 나열해 보낸다.
+
+    컬렉션 PUT("")인 이유: `/reorder` 같은 하위 경로를 쓰면 위의 `PUT /{episode_id}`가
+    UUID 경로 파라미터로 `reorder` 세그먼트까지 삼켜서, 선언 순서에 따라 조용히
+    422가 나는 함정이 된다. 순서는 컬렉션 전체의 속성이라 컬렉션 PUT이 의미상으로도
+    맞다(개별 회차 수정은 `PUT /{episode_id}` 그대로).
+
+    집합이 어긋나면(다른 탭에서 추가·삭제) 409 - service의 낙관적 동시성 검사다.
+    """
+    await _work_or_404(work_id, session)
+    try:
+        return list(await episode_service.reorder_episodes(work_id, body.episode_ids, session))
+    except EpisodeConflictError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+
+
 @router.get("", response_model=list[AdminEpisodeRead])
 async def list_episodes(work_id: uuid.UUID, owner: OwnerDep, session: SessionDep) -> list[Episode]:
-    """episode_no 순 목록(삭제분 제외). image_keys 포함(F3 재배열 UI 소비)이라 상세 GET은 없다."""
+    """작가 지정 순서(sort_order, tie는 created_at·id) 목록 - 삭제분 제외.
+
+    image_keys 포함(F3 재배열 UI 소비)이라 상세 GET은 없다.
+    """
     await _work_or_404(work_id, session)
     return list(await episode_service.list_episodes(work_id, session))
 

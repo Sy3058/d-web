@@ -14,7 +14,7 @@ const { workId, episode, first = false } = Astro.props;
 ---
 
 <a
-  href={`/works/${workId}/${episode.episode_no}`}
+  href={`/works/${workId}/${episode.public_id}`}
   class:list={['flex items-center gap-4 py-4 hover:bg-hover -mx-4 px-4', !first && 'border-t border-line']}
 >
   <div class="h-16 w-16 shrink-0 overflow-hidden rounded-control bg-hover">
@@ -32,7 +32,6 @@ const { workId, episode, first = false } = Astro.props;
   </div>
   <div class="min-w-0 flex-1">
     <div class="flex items-center gap-2">
-      <span class="text-label-md text-muted tabular-nums">{episode.episode_no}화</span>
       <span class="text-body-md text-ink truncate">{episode.title}</span>
     </div>
     {episode.subtitle && <p class="text-sm text-muted truncate">{episode.subtitle}</p>}

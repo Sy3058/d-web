@@ -138,8 +138,11 @@ tags
 episodes
 ├── id           UUID PRIMARY KEY DEFAULT gen_random_uuid()
 ├── work_id      UUID NOT NULL REFERENCES works(id) ON DELETE CASCADE
-├── episode_no   INTEGER NOT NULL          -- 회차 번호
-├── title        VARCHAR(200) NOT NULL
+├── public_id    INTEGER NOT NULL          -- 독자 URL 조회키(랜덤 8자리, 전역 UNIQUE)
+├── sort_order   INTEGER NOT NULL          -- 작품 안에서의 표시 순서(작가 지정, max+1 자동)
+│               -- ⚠️ UNIQUE 없음: 동점은 정상이고 (created_at, id)가 깬다. 유일 제약이
+│               -- episode_no가 동시 생성에서 409를 뱉던 원인이라 반복하지 않는다.
+├── title        VARCHAR(200) NOT NULL     -- 필수. 서버 기본값 '무제' 폐지(2026-07-30)
 ├── subtitle     VARCHAR(200)              -- 부제목 (포스타입식 에디터, F3 재설계)
 ├── thumbnail    TEXT                      -- R2 key
 ├── price        INTEGER                   -- NULL이면 works.episode_base_price 사용
@@ -163,17 +166,29 @@ episodes
 ├── updated_at   TIMESTAMPTZ DEFAULT now()
 ├── deleted_at   TIMESTAMPTZ               -- 회차 soft delete (#85)
 │               -- 불변식: NOT NULL이면 is_published=false이고 published_at IS NULL
-│               -- (soft_delete_episode가 한 UPDATE로 보장). 되살리는 API 없음.
-└── UNIQUE (work_id, episode_no)
+│               -- (soft_delete_episode가 한 UPDATE로 보장). 되살리는 API 없음. 하드
+│               -- 삭제를 안 하는 이유: M3 purchases.episode_id가 ON DELETE 절 없이
+│               -- (기본 RESTRICT) 참조 - 구매·환불 기록이 걸린 회차는 삭제 자체가 불가.
+└── UNIQUE (public_id)
 ```
 > - `price IS NULL` → 런타임에 `works.episode_base_price` 참조
 > - 유료 경계 = content 최상위의 `paywall` 노드(최대 1개). 경계 앞 = 무료 미리보기,
 >   경계 뒤 = 유료. `is_free` = "경계 뒤 유의미 콘텐츠 없음"(전체 무료)의 파생값.
 > - 미구매 독자 응답(M3) = 서버가 경계 이전 노드만 잘라 반환. 유료 구간의 이미지
 >   키·Signed URL은 절대 비공개(클라이언트 숨김 처리 금지).
-> - **UNIQUE는 `deleted_at`을 보지 않는다** - 삭제된 회차가 번호를 계속 점유하므로
->   삭제한 회차 번호는 소진되고 재사용 불가(#85 결정: 독자 URL `/works/{id}/{회차번호}`가
->   나중에 다른 내용을 가리키면 안 됨). 자동 번호 할당(max+1)도 삭제분을 세야 충돌하지 않는다.
+> - **회차 번호 폐기(2026-07-29, DECISIONS "회차 번호 폐기")**: `episode_no`(순번) 개념을
+>   없앴다. `public_id`는 서버가 발급하는 무작위 8자리 정수(`10_000_000`~`99_999_999`,
+>   `secrets.randbelow` + UNIQUE 재시도)이고 클라이언트가 지정할 수 없다. 독자 URL은
+>   `/works/{workId}/{publicId}`.
+> - **정렬은 `sort_order` → `created_at` → `id`**. `public_id`가 랜덤이 되면서 순번이
+>   정렬 기준 역할을 못 하게 됐고, `created_at`만 남기면 프롤로그를 나중에 끼워넣거나
+>   잘못 올린 순서를 되돌릴 수 없어 작가 지정 컬럼을 뒀다. 기본값은 작품 안 `max+1`,
+>   재배열은 `PUT /admin/works/{workId}/episodes`(살아있는 회차 전량을 순서대로 전송,
+>   집합 불일치는 409). `published_at`으로 정렬하지 않는 이유: 내렸다 재공개하면 맨
+>   뒤로 밀린다.
+> - **제목 필수(2026-07-30)**: `EpisodeCreate.title`의 서버 기본값 `'무제'`를 제거했다.
+>   번호가 사라져 목록·액션 메뉴·뷰어 네비의 식별자가 제목 하나로 줄었기 때문에
+>   `'무제'` 행이 둘 이상이면 구분이 불가능하다.
 
 ### viewer_progress
 ```sql

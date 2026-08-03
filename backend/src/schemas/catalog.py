@@ -41,7 +41,7 @@ class WorkListResponse(BaseModel):
 
 class EpisodeSummary(BaseModel):
     id: uuid.UUID
-    episode_no: int
+    public_id: int
     title: str
     subtitle: str | None
     # 회차 공개 축소본 또는 작품 표지 fallback - 모듈 docstring 참조.

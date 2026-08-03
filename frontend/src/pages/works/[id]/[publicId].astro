@@ -8,18 +8,21 @@ import Viewer from '../../../components/viewer/Viewer';
 import { getWorkDetail } from '../../../lib/catalog';
 import { applyCatalogCache } from '../../../lib/http';
 
-const { id, episodeNo: episodeNoParam } = Astro.params;
+const { id, publicId: publicIdParam } = Astro.params;
 
-// works/index.astro의 page 가드와 동일 원칙(isSafeInteger) - 1e21 같은 지수표기 누출을
-// 여기서 걸러 무효 경로 조합으로 낭비되는 백엔드 요청을 막는다.
-function parseEpisodeNo(raw: string | undefined): number | null {
-  const n = Number(raw);
-  return raw !== undefined && Number.isSafeInteger(n) && n > 0 ? n : null;
+// public_id는 항상 8자리 정수(10000000~99999999)라 URL 표준형도 하나뿐이다.
+// Number()만 쓰면 "1e7"·"0x989680"·" 10000000 "·"+10000000"·"10000000.0"이 전부 같은
+// 회차로 해석돼 한 회차에 URL이 여러 개 생기고(중복 콘텐츠), isSafeInteger는 1e21은
+// 걸러도 1e7은 못 거른다(=10000000, 유효 범위). 정규식으로 표준형만 통과시킨다.
+const PUBLIC_ID_PATTERN = /^[1-9]\d{7}$/;
+
+function parsePublicId(raw: string | undefined): number | null {
+  return raw !== undefined && PUBLIC_ID_PATTERN.test(raw) ? Number(raw) : null;
 }
 
-const episodeNo = parseEpisodeNo(episodeNoParam);
+const publicId = parsePublicId(publicIdParam);
 
-if (!id || episodeNo === null) {
+if (!id || publicId === null) {
   return new Response(null, { status: 404 });
 }
 
@@ -35,18 +38,30 @@ try {
 }
 
 const episodes = work?.episodes ?? [];
-const index = episodes.findIndex((e) => e.episode_no === episodeNo);
+const index = episodes.findIndex((e) => e.public_id === publicId);
 const episode = index >= 0 ? episodes[index] : null;
-// episode_no 산술(±1)이 아니라 배열 인접 항목을 쓴다 - 결번이 생겨도(삭제 등) 안전.
+// 인접 항목을 쓴다(회차 번호 산술 없음 - 번호 폐기, DECISIONS 2026-07-28) - 결번이
+// 생겨도(삭제 등) 안전.
 const prevEpisode = index > 0 ? episodes[index - 1] : null;
 const nextEpisode = index >= 0 && index < episodes.length - 1 ? episodes[index + 1] : null;
 
 // 404(회차 없음)도 no-store - 예약 공개 전 404가 캐시되면 공개 후에도 계속 404를 본다
 // (works.py·[id].astro와 동일 이유). 정책은 lib/http.ts applyCatalogCache에 집약.
 applyCatalogCache(Astro.response, { error: loadError, notFound: !work || !episode });
+
+// 탭 제목에 작품명까지 넣는다 - 회차 번호가 사라져(DECISIONS 2026-07-28) 회차 제목만으론
+// 여러 작품을 동시에 열어 둔 탭이 구분되지 않는다. 구분자는 BaseLayout이 붙이는 사이트명과
+// 같은 '·'로 맞춰 "회차 · 작품 · 도군"이 된다.
+// loadError를 따로 가르는 이유: 5xx인데 "찾을 수 없어요"라고 하면 없는 회차로 오해한다
+// (위 fail-closed 주석과 본문 문구는 이미 구분하는데 제목만 어긋나 있었다).
+const pageTitle = loadError
+  ? '회차를 불러오지 못했어요'
+  : work && episode
+    ? `${episode.title} · ${work.title}`
+    : '회차를 찾을 수 없어요';
 ---
 
-<BaseLayout title={episode ? `${episode.episode_no}화 ${episode.title}` : '회차를 찾을 수 없어요'}>
+<BaseLayout title={pageTitle}>
   <div class="max-w-[720px] mx-auto px-4 py-8">
     {
       loadError ? (
@@ -60,9 +75,7 @@ applyCatalogCache(Astro.response, { error: loadError, notFound: !work || !episod
               {work.title}
             </a>
             <div class="flex items-center gap-2 mt-1">
-              <h1 class="text-headline-md text-ink">
-                {episode.episode_no}화 {episode.title}
-              </h1>
+              <h1 class="text-headline-md text-ink">{episode.title}</h1>
               {episode.is_locked && <Badge variant="locked">잠금</Badge>}
             </div>
             {episode.subtitle && <p class="text-sm text-muted mt-1">{episode.subtitle}</p>}
@@ -70,7 +83,12 @@ applyCatalogCache(Astro.response, { error: loadError, notFound: !work || !episod
 
           <Viewer client:only="react" episodeId={episode.id} />
 
-          <nav class="flex items-center justify-between mt-10 pt-6 border-t border-line text-sm">
+          <!-- gap-4 + 각 링크 max-w-[45%]: 라벨이 "N화"에서 회차 제목 전문으로 바뀌었으므로
+               (번호 폐기) 긴 제목이 반대편 링크를 밀거나 줄바꿈으로 넘치지 않게 잘라 준다.
+               전문은 title 속성으로 남긴다. -->
+          <nav
+            class="flex items-center justify-between gap-4 mt-10 pt-6 border-t border-line text-sm"
+          >
             {prevEpisode ? (
               // data-astro-reload: ClientRouter의 클라이언트 사이드 라우팅을 건너뛰고 전체
               // 페이지를 새로고침한다. Viewer는 client:only="react" 아일랜드라, 뷰 트랜지션
@@ -78,22 +96,24 @@ applyCatalogCache(Astro.response, { error: loadError, notFound: !work || !episod
               // 끼우면 React 루트가 이전 회차 상태로 남을 위험이 있다 - 회차 간 이동에서
               // 가장 값싸게 그 위험을 차단하는 방법이 전체 새로고침이다.
               <a
-                href={`/works/${work.id}/${prevEpisode.episode_no}`}
-                class="text-ink hover:underline"
+                href={`/works/${work.id}/${prevEpisode.public_id}`}
+                class="text-ink hover:underline truncate max-w-[45%]"
+                title={prevEpisode.title}
                 data-astro-reload
               >
-                ← {prevEpisode.episode_no}화
+                ← {prevEpisode.title}
               </a>
             ) : (
               <span />
             )}
             {nextEpisode ? (
               <a
-                href={`/works/${work.id}/${nextEpisode.episode_no}`}
-                class="text-ink hover:underline"
+                href={`/works/${work.id}/${nextEpisode.public_id}`}
+                class="text-ink hover:underline truncate max-w-[45%]"
+                title={nextEpisode.title}
                 data-astro-reload
               >
-                {nextEpisode.episode_no}화 →
+                {nextEpisode.title} →
               </a>
             ) : (
               <span />

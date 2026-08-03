@@ -55,7 +55,7 @@ class ImageValidationError(ValueError):
 class EpisodeConflictError(Exception):
     """에피소드 상태 충돌 (router → 409) - M1.5 D3.
 
-    episode_no UNIQUE 중복, 이미지 append 경합(조건부 UPDATE rowcount=0),
+    public_id 발급 재시도 소진, 이미지 append 경합(조건부 UPDATE rowcount=0),
     회차당 장수 상한 도달. 재시도하거나 값을 바꾸면 해소되는 충돌.
     """
 

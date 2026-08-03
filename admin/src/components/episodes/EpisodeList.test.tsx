@@ -21,7 +21,8 @@ function makeEpisode(overrides: Partial<Episode>): Episode {
   return {
     id: 'e1',
     work_id: 'w1',
-    episode_no: 1,
+    public_id: 10_000_001,
+    sort_order: 1,
     title: '1화',
     subtitle: null,
     thumbnail: null,
@@ -48,9 +49,9 @@ function renderList(episodes: Episode[], basePrice?: number) {
   );
 }
 
-/** 해당 회차의 "···" 메뉴를 연다. 항목은 열기 전엔 DOM에 없다. */
-function openMenu(episodeNo: number) {
-  fireEvent.click(screen.getByRole('button', { name: `${episodeNo}화 관리 메뉴` }));
+/** 해당 회차의 "···" 메뉴를 연다(제목으로 식별 - aria-label이 제목 기반). 항목은 열기 전엔 DOM에 없다. */
+function openMenu(title: string) {
+  fireEvent.click(screen.getByRole('button', { name: `${title} 관리 메뉴` }));
 }
 
 describe('EpisodeList', () => {
@@ -61,9 +62,9 @@ describe('EpisodeList', () => {
   it('공개/예약/임시저장 상태와 가격(무료·기본가 금액·지정가)을 구분해 보여준다', () => {
     renderList(
       [
-        makeEpisode({ id: 'e1', episode_no: 1, is_published: true, published_at: '2026-07-01T00:00:00Z', is_free: true }),
-        makeEpisode({ id: 'e2', episode_no: 2, published_at: '2026-08-01T00:00:00Z' }),
-        makeEpisode({ id: 'e3', episode_no: 3, price: 1000 }),
+        makeEpisode({ id: 'e1', is_published: true, published_at: '2026-07-01T00:00:00Z', is_free: true }),
+        makeEpisode({ id: 'e2', published_at: '2026-08-01T00:00:00Z' }),
+        makeEpisode({ id: 'e3', price: 1000 }),
       ],
       2000,
     );
@@ -78,7 +79,7 @@ describe('EpisodeList', () => {
   });
 
   it('기본가가 아직 로딩 전이면 price NULL 회차를 "기본가"로 폴백 표기한다', () => {
-    renderList([makeEpisode({ id: 'e2', episode_no: 2, published_at: '2026-08-01T00:00:00Z' })]);
+    renderList([makeEpisode({ id: 'e2', published_at: '2026-08-01T00:00:00Z' })]);
     expect(screen.getByText('기본가')).toBeInTheDocument();
   });
 
@@ -95,7 +96,7 @@ describe('EpisodeList', () => {
         published_at: '2026-07-01T00:00:00Z',
         draft: { title: '고친 제목', subtitle: null, content: { type: 'doc', content: [] } },
       }),
-      makeEpisode({ id: 'e2', episode_no: 2 }),
+      makeEpisode({ id: 'e2' }),
     ]);
     expect(screen.getAllByText('임시저장본')).toHaveLength(1);
   });
@@ -123,13 +124,13 @@ describe('EpisodeList 액션 메뉴 (#85)', () => {
     renderList([
       makeEpisode({ id: 'e1', is_published: true, published_at: '2026-07-01T00:00:00Z' }),
     ]);
-    openMenu(1);
+    openMenu('1화');
     expect(screen.getByRole('button', { name: '비공개로 전환' })).toBeInTheDocument();
   });
 
   it('이미 비공개인 회차에는 비공개 전환 항목이 뜨지 않는다', async () => {
     renderList([makeEpisode({ id: 'e1', is_published: false })]);
-    openMenu(1);
+    openMenu('1화');
     expect(screen.queryByRole('button', { name: '비공개로 전환' })).not.toBeInTheDocument();
     // 삭제는 상태와 무관하게 항상 있어야 한다 - 메뉴 자체가 안 열린 걸 통과로 오인하지 않게.
     expect(screen.getByRole('button', { name: '삭제' })).toBeInTheDocument();
@@ -146,7 +147,7 @@ describe('EpisodeList 액션 메뉴 (#85)', () => {
       }),
     ]);
 
-    openMenu(1);
+    openMenu('1화');
     fireEvent.click(screen.getByRole('button', { name: '비공개로 전환' }));
 
     await waitFor(() => expect(api.put).toHaveBeenCalledTimes(1));
@@ -158,23 +159,23 @@ describe('EpisodeList 액션 메뉴 (#85)', () => {
     confirmSpy.mockReturnValue(false);
     renderList([makeEpisode({ id: 'e1' })]);
 
-    openMenu(1);
+    openMenu('1화');
     fireEvent.click(screen.getByRole('button', { name: '삭제' }));
 
     expect(confirmSpy).toHaveBeenCalled();
     expect(api.delete).not.toHaveBeenCalled();
   });
 
-  it('삭제를 확인하면 DELETE를 보내고, 번호 소진을 미리 알린다', async () => {
+  it('삭제를 확인하면 DELETE를 보내고, 삭제 경고를 미리 보여준다', async () => {
     confirmSpy.mockReturnValue(true);
     vi.mocked(api.delete).mockResolvedValue(undefined as never);
-    renderList([makeEpisode({ id: 'e1', episode_no: 3, title: '3화 제목' })]);
+    renderList([makeEpisode({ id: 'e1', title: '3화 제목' })]);
 
-    openMenu(3);
+    openMenu('3화 제목');
     fireEvent.click(screen.getByRole('button', { name: '삭제' }));
 
-    // 번호가 소진돼 되돌릴 수 없다는 건 누르기 전에 알아야 한다(#85 결정).
-    expect(confirmSpy.mock.calls[0][0]).toContain('다시 쓸 수 없습니다');
+    // soft delete는 되돌릴 API가 없다 - 누르기 전에 알아야 한다(#85 결정).
+    expect(confirmSpy.mock.calls[0][0]).toContain('되돌릴 수 없습니다');
     await waitFor(() =>
       expect(api.delete).toHaveBeenCalledWith('/admin/works/w1/episodes/e1'),
     );
@@ -185,17 +186,17 @@ describe('EpisodeList 액션 메뉴 (#85)', () => {
     // 영원히 안 끝나는 인플라이트 - 잠금은 응답이 오기 전 상태에서 검증해야 한다.
     vi.mocked(api.delete).mockReturnValue(new Promise(() => {}) as never);
     renderList([
-      makeEpisode({ id: 'e1', episode_no: 1 }),
-      makeEpisode({ id: 'e2', episode_no: 2, is_published: true, published_at: '2026-07-01T00:00:00Z' }),
+      makeEpisode({ id: 'e1' }),
+      makeEpisode({ id: 'e2', title: '2화', is_published: true, published_at: '2026-07-01T00:00:00Z' }),
     ]);
 
-    openMenu(1);
+    openMenu('1화');
     fireEvent.click(screen.getByRole('button', { name: '삭제' }));
 
     // 훅 옵저버는 가장 최근 mutate 하나만 추적한다 - 두 번째 발사를 허용하면 앞선 요청의
     // 실패 표시(isError)가 유실되고 잠금이 새 행으로 옮겨간다(#85 리뷰 실측). 그래서
     // 행 단위가 아니라 종류 단위로 잠근다. (1화 메뉴는 클릭 시 닫혔으니 아래는 2화 항목이다.)
-    openMenu(2);
+    openMenu('2화');
     await waitFor(() => expect(screen.getByRole('button', { name: '삭제' })).toBeDisabled());
     // 종류가 다른 액션(비공개 전환)은 별개 훅 인스턴스라 간섭이 없어 잠그지 않는다.
     expect(screen.getByRole('button', { name: '비공개로 전환' })).not.toBeDisabled();
@@ -203,12 +204,40 @@ describe('EpisodeList 액션 메뉴 (#85)', () => {
 
   it('메뉴 바깥을 클릭하면 닫힌다', async () => {
     renderList([makeEpisode({ id: 'e1' })]);
-    openMenu(1);
+    openMenu('1화');
     expect(screen.getByRole('button', { name: '삭제' })).toBeInTheDocument();
 
     // 컴포넌트는 click이 아니라 mousedown을 듣는다 - 항목을 누르는 도중(mousedown 시점)에
     // 닫히면 click이 사라진 요소로 가서 액션이 발화하지 않기 때문.
     fireEvent.mouseDown(document.body);
     expect(screen.queryByRole('button', { name: '삭제' })).not.toBeInTheDocument();
+  });
+
+  it('순서 이동: 인접 회차와 맞바꾼 **전량** 목록을 컬렉션 PUT으로 보낸다', async () => {
+    vi.mocked(api.put).mockResolvedValueOnce([] as never);
+    renderList([
+      makeEpisode({ id: 'e1', title: '1화' }),
+      makeEpisode({ id: 'e2', title: '2화' }),
+      makeEpisode({ id: 'e3', title: '3화' }),
+    ]);
+
+    fireEvent.click(screen.getByRole('button', { name: '3화 위로 이동' }));
+
+    await waitFor(() => expect(vi.mocked(api.put)).toHaveBeenCalled());
+    // 부분 목록이 아니라 전량이어야 한다 - 서버는 집합이 어긋나면 409로 거부한다
+    // (순서는 전체 집합에 대한 진술이라 부분 적용이 의미가 없다).
+    expect(vi.mocked(api.put)).toHaveBeenCalledWith('/admin/works/w1/episodes', {
+      episode_ids: ['e1', 'e3', 'e2'],
+    });
+  });
+
+  it('순서 이동: 목록 양 끝의 바깥 방향 버튼은 비활성이다', () => {
+    renderList([makeEpisode({ id: 'e1', title: '1화' }), makeEpisode({ id: 'e2', title: '2화' })]);
+
+    const button = (name: string) => screen.getByRole('button', { name }) as HTMLButtonElement;
+    expect(button('1화 위로 이동').disabled).toBe(true);
+    expect(button('2화 아래로 이동').disabled).toBe(true);
+    expect(button('1화 아래로 이동').disabled).toBe(false);
+    expect(button('2화 위로 이동').disabled).toBe(false);
   });
 });

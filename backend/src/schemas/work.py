@@ -133,9 +133,15 @@ class WorkRead(BaseModel):
 class EpisodeCreate(BaseModel):
     """draft 생성(is_published=false). 이미지·본문은 이후 요청(D3 구조 A + F3 에디터 PUT).
 
-    F3 재설계(2026-07-15): 에디터가 "캔버스 먼저, 메타는 발행 모달" 흐름이라
-    episode_no 생략 = 서버가 해당 작품 max+1 자동 할당, title 생략 = "무제".
+    title은 **필수**다. F3 재설계(2026-07-15)가 넣었던 서버 기본값 "무제"를 회차 번호
+    폐기(DECISIONS 2026-07-28)와 함께 제거했다 - 번호가 사라지면서 목록·액션 메뉴·
+    뷰어 네비게이션의 식별자가 제목 하나로 줄어, "무제" 행이 둘 이상이면 작가도 독자도
+    구분할 수 없다. admin 쪽 "제목 필수"(ensureTitle) 결정을 서버가 뒤에서 무력화하고
+    있던 구멍이기도 했다(이미지 먼저 올리는 지연 draft 경로가 기본값을 타고 들어왔다).
+
     is_free는 입력에서 제거 - content의 유료 경계에서 서버가 파생하는 컬럼이 됐다.
+    public_id(독자 URL 조회키)와 sort_order(표시 순서)도 입력값이 아니라 서버가
+    발급·배정한다 - 클라이언트가 정할 이유가 없다.
 
     thumbnail이 없는 이유는 기존과 동일 - 생성 시점엔 검증할 image_keys가 없어
     임의 키 주입 통로가 된다. published_at은 예약 공개 시각 - **과거 시각도 허용**
@@ -143,8 +149,7 @@ class EpisodeCreate(BaseModel):
     오해석돼 9시간 밀리는 조용한 오동작 차단).
     """
 
-    episode_no: int | None = Field(default=None, ge=1)  # None = 서버가 max+1 할당
-    title: str = Field(default="무제", min_length=1, max_length=TITLE_MAX)
+    title: str = Field(min_length=1, max_length=TITLE_MAX)
     subtitle: str | None = Field(default=None, max_length=TITLE_MAX)
     price: int | None = Field(default=None, ge=0)  # NULL = works.episode_base_price 참조
     published_at: AwareDatetime | None = None
@@ -184,7 +189,6 @@ class EpisodeUpdate(BaseModel):
       draft를 NULL로 비운다(발행 = 편집본 소진).
     """
 
-    episode_no: int | None = Field(default=None, ge=1)
     title: str | None = Field(default=None, min_length=1, max_length=TITLE_MAX)
     subtitle: str | None = Field(default=None, max_length=TITLE_MAX)
     price: int | None = Field(default=None, ge=0)
@@ -196,7 +200,7 @@ class EpisodeUpdate(BaseModel):
     draft: EpisodeDraft | None = None
 
     # WorkUpdate와 같은 규칙: `X | None`의 None은 "생략" 표현이지 null 대입 허용이 아니다.
-    _NON_NULLABLE = frozenset({"episode_no", "title", "is_published", "image_keys", "content"})
+    _NON_NULLABLE = frozenset({"title", "is_published", "image_keys", "content"})
 
     @model_validator(mode="after")
     def _reject_explicit_null(self) -> "EpisodeUpdate":
@@ -212,6 +216,21 @@ class EpisodeUpdate(BaseModel):
         return self
 
 
+class EpisodeReorder(BaseModel):
+    """회차 재배열 - 살아있는 회차 **전량**을 원하는 순서로 나열한 id 목록.
+
+    부분 목록이 아니라 전량을 받는 이유는 service(reorder_episodes) 독스트링 참조 -
+    요약하면 "순서"는 전체 집합에 대한 진술이고, 집합 불일치가 곧 낙관적 동시성
+    검사다(다른 탭에서 회차가 추가·삭제됐으면 409).
+
+    EpisodeUpdate에 sort_order를 얹지 않은 이유: 회차별 정수 대입을 허용하면
+    클라이언트가 전역 정합성(중복·구멍)을 책임져야 하고, 재배열 한 번이 N개의
+    PUT으로 쪼개져 중간 상태가 독자에게 노출된다.
+    """
+
+    episode_ids: list[uuid.UUID] = Field(min_length=1)
+
+
 class AdminEpisodeRead(BaseModel):
     """관리자(owner) 응답 **전용** - 이름부터 Admin: image_keys(R2 키)를 노출하므로
     독자용 라우터(M2)가 무심코 재사용하면 미결제 유저에게 키가 새는 경로가 된다.
@@ -222,7 +241,10 @@ class AdminEpisodeRead(BaseModel):
 
     id: uuid.UUID
     work_id: uuid.UUID
-    episode_no: int
+    public_id: int
+    # 작가 지정 표시 순서. 목록이 이미 이 순서로 내려오므로 admin이 정렬에 쓸 일은
+    # 없고, 재배열 UI가 "지금 순서"를 확인·전송하는 용도로만 쓴다.
+    sort_order: int
     title: str
     subtitle: str | None
     thumbnail: str | None

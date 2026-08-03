@@ -25,7 +25,6 @@ interface EpisodeEditorProps {
   episode?: Episode;
 }
 
-const TITLE_FALLBACK = '무제';
 const EMPTY_DOC: ContentDoc = { type: 'doc', content: [] };
 
 /** 로드된 본문에 유료 경계가 없으면 맨 끝에 넣는다(= 기본 전체 무료). 경계는 항상 1개 존재하고,
@@ -48,10 +47,11 @@ export function EpisodeEditor({ initialWorkId, episode }: EpisodeEditorProps) {
   // 편집 진입: 편집본(draft)이 있으면 그걸 연다(#86). 발행본(content)은 '수정 반영' 전까지
   // 독자에게 그대로 보인다.
   const storedDraft = episode?.draft ?? null;
+  // 서버가 기본 제목('무제')을 발급하지 않게 된 뒤로 저장된 제목은 항상 작가가 쓴 값이다.
+  // 예전엔 '무제'를 "제목 없음"으로 되읽었는데, 그러면 작가가 진짜로 '무제'라고 지은
+  // 제목이 편집 재진입에서 빈 칸이 되는 오작동이 있었다.
   const initialTitle = storedDraft?.title ?? episode?.title;
-  const [title, setTitle] = useState(
-    initialTitle && initialTitle !== TITLE_FALLBACK ? initialTitle : '',
-  );
+  const [title, setTitle] = useState(initialTitle ?? '');
   const [subtitle, setSubtitle] = useState(storedDraft?.subtitle ?? episode?.subtitle ?? '');
   const [hasDraft, setHasDraft] = useState(storedDraft !== null);
   const [saving, setSaving] = useState(false);
@@ -120,7 +120,7 @@ export function EpisodeEditor({ initialWorkId, episode }: EpisodeEditorProps) {
   const ensureDraft = async (): Promise<string> => {
     if (episodeId) return episodeId;
     const created = await createEpisode.mutateAsync({
-      title: title.trim() || TITLE_FALLBACK,
+      title: title.trim(),
       subtitle: subtitle.trim() || null,
     });
     setEpisodeId(created.id);
@@ -131,7 +131,7 @@ export function EpisodeEditor({ initialWorkId, episode }: EpisodeEditorProps) {
     const id = await ensureDraft();
     const content = (editor?.getJSON() as ContentDoc | undefined) ?? EMPTY_DOC;
     const body: EpisodeUpdate = {
-      title: title.trim() || TITLE_FALLBACK,
+      title: title.trim(),
       subtitle: subtitle.trim() || null,
       content,
       ...extra,
@@ -139,7 +139,9 @@ export function EpisodeEditor({ initialWorkId, episode }: EpisodeEditorProps) {
     return updateEpisode.mutateAsync({ episodeId: id, body });
   };
 
-  // 제목은 비울 수 없다 - 저장·발행 시 서버 기본값('무제')으로 조용히 넘기지 않고 작성을 요구한다.
+  // 제목은 비울 수 없다. 예전엔 서버가 빈 제목을 '무제'로 조용히 채웠고 이 가드가 그
+  // 대체를 막는 UI 장치였는데, 이제는 서버도 빈 제목을 422로 거부한다(회차 번호 폐기로
+  // 제목이 유일한 식별자가 됨) - 이 가드는 그 계약을 사용자에게 먼저 알려주는 역할이다.
   const ensureTitle = (): boolean => {
     if (title.trim() !== '') return true;
     setError('제목을 작성해 주세요.');
@@ -187,7 +189,7 @@ export function EpisodeEditor({ initialWorkId, episode }: EpisodeEditorProps) {
     try {
       await updateEpisode.mutateAsync({ episodeId: episode.id, body: { draft: null } });
       setHasDraft(false);
-      setTitle(episode.title !== TITLE_FALLBACK ? episode.title : '');
+      setTitle(episode.title);
       setSubtitle(episode.subtitle ?? '');
       editor?.commands.setContent(ensurePaywall(episode.content as JSONContent | undefined));
     } catch (err) {
@@ -238,6 +240,13 @@ export function EpisodeEditor({ initialWorkId, episode }: EpisodeEditorProps) {
   const onFilesSelected = async (files: File[]) => {
     setFileError(null);
     if (files.length === 0 || !editor || !workId) return;
+    // 아직 회차가 없으면 이 경로가 ensureDraft로 서버에 회차를 만든다 - 저장·발행과
+    // 똑같이 제목이 필요하다(서버 기본값 '무제' 폐지 후 빈 제목은 422). 업로드가
+    // 시작된 뒤 422를 보여주면 이미 변환·전송 비용을 쓴 뒤라 여기서 먼저 끊는다.
+    if (!episodeId && title.trim() === '') {
+      setFileError('이미지를 넣기 전에 제목을 작성해 주세요.');
+      return;
+    }
     const room = MAX_IMAGES_PER_EPISODE - countImages();
     const problems: string[] = [];
     const accepted: File[] = [];

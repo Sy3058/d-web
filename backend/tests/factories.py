@@ -51,10 +51,36 @@ async def make_work(db_session: AsyncSession, author: User, **overrides) -> Work
     return work
 
 
+_public_id_counter = 10_000_000
+
+
+def _next_public_id() -> int:
+    # 테스트 전용 - 프로덕션은 episode_service._generate_public_id(랜덤 + UNIQUE 재시도)를
+    # 쓴다. 여기선 무작위 충돌 재시도 로직 없이 단순 증가로 유니크만 보장하면 충분하다.
+    global _public_id_counter
+    _public_id_counter += 1
+    return _public_id_counter
+
+
+_sort_order_counter = 0
+
+
+def _next_sort_order() -> int:
+    # 전역 증가라 작품이 여러 개여도 각 작품 안에서는 생성 순서가 그대로 유지된다
+    # (sort_order는 work_id 스코프 정렬 키라 전역 연속성은 의미 없음).
+    global _sort_order_counter
+    _sort_order_counter += 1
+    return _sort_order_counter
+
+
 async def make_episode(db_session: AsyncSession, work: Work, **overrides) -> Episode:
+    # `or` 대신 sentinel 비교 - sort_order=0을 명시로 넘기는 테스트가 조용히 덮이면
+    # 정렬 테스트가 의도와 다른 값을 검증하게 된다.
+    sort_order = overrides.pop("sort_order", None)
     ep = Episode(
         work_id=work.id,
-        episode_no=overrides.pop("episode_no", 1),
+        public_id=overrides.pop("public_id", None) or _next_public_id(),
+        sort_order=_next_sort_order() if sort_order is None else sort_order,
         title=overrides.pop("title", "1화"),
         is_published=overrides.pop("is_published", True),
         **overrides,

@@ -32,7 +32,7 @@ DB_SCHEMA §2 "작품/에피소드 도메인"을 코드로 옮긴 것. M1.5 모�
 - **`works`**: `author_id` FK→users(**CASCADE 없음** - 작가 계정은 soft delete가 기본이라 작품 하드 삭제가 딸려가면 안 됨. 1인 작가라 값은 role=owner 유저 id, FK는 확장 대비 유지), `title` VARCHAR(200), `episode_base_price` default 500, `bundle_discount_rate` NUMERIC(4,3) default 0.1(저장만 - 할인 적용은 M3), `status` VARCHAR(20)(preparing/ongoing/completed/hiatus - preparing은 #84, 2026-07-26 추가), `deleted_at` soft delete.
 - **`tags`**: `name` VARCHAR(50) UNIQUE. UNIQUE가 name 조회 인덱스 겸용이라 별도 `idx_tags_name` 안 둠(중복 인덱스). 이 UNIQUE가 C1 get-or-create의 충돌 방어선.
 - **`works_tags`**: `PK(work_id, tag_id)` 복합, 양쪽 FK CASCADE.
-- **`episodes`**: `UNIQUE(work_id, episode_no)`, `work_id` FK CASCADE, `price` **nullable**(NULL이면 런타임에 `works.episode_base_price` 참조 - 금액 하드코딩 금지), `is_free`(“무료 회차 수”의 단일 진실 - 별도 컬럼 없음, 관리자 UI가 앞 N화 토글), `image_keys` JSONB `DEFAULT '[]'`(배열 인덱스 = 페이지 순서, R2 **키** 저장 - 공개 URL 아님), `is_published` + `published_at`(예약 공개 - 그룹 E).
+- **`episodes`** (⚠️ `episode_no`는 2026-07-30에 폐기 - 지금은 `UNIQUE(public_id)` + `sort_order`(UNIQUE 없음). `IMPLEMENTATION_EPISODE_PUBLIC_ID.md` 참조. 아래는 도입 당시 기록): `UNIQUE(work_id, episode_no)`, `work_id` FK CASCADE, `price` **nullable**(NULL이면 런타임에 `works.episode_base_price` 참조 - 금액 하드코딩 금지), `is_free`(“무료 회차 수”의 단일 진실 - 별도 컬럼 없음, 관리자 UI가 앞 N화 토글), `image_keys` JSONB `DEFAULT '[]'`(배열 인덱스 = 페이지 순서, R2 **키** 저장 - 공개 URL 아님), `is_published` + `published_at`(예약 공개 - 그룹 E).
 
 ### 인덱스 (DB_SCHEMA §6)
 - `idx_episodes_work_id` - FK 인덱스 명시(Postgres는 FK 자동 인덱스 없음)
