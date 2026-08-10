@@ -372,6 +372,11 @@
   → 실제 사고: 메모리에 "미푸시·PR 대기"로 남아 있었지만 실제로는 사용자가 세션 밖에서 push·PR 머지까지 완료 → 이미 머지된 잔재 브랜치 위에서 새 세션 시작
   → `git status -sb` + `gh pr list --head <브랜치> --state all`로 원격 상태를 확정. 머지된 잔재면 main 복귀 + 로컬 삭제부터. "PR 푸시 후 main 복귀" 규칙은 세션 밖 머지를 커버 못 하니 세션 시작 점검으로 보완
 
+- 미커밋 변경을 들고 브랜치를 옮길 때, 충돌 여부는 `origin/<브랜치>`가 아니라 **옮겨갈 로컬 ref**와 비교해야 한다
+  → `git diff <현재> origin/main -- <파일>`이 비어 있어도, **로컬 `main`이 아직 pull 안 된 상태면** checkout이 `local changes would be overwritten`으로 거부된다. 원격이 최신인 것과 이동 대상이 최신인 것은 별개 - checkout이 보는 건 로컬 ref다
+  → 실제 사고(2026-08-04): 머지 후 main 복귀에서 `origin/main`과 비교해 "차이 0이라 안전"이라고 사용자에게 보고했는데 checkout이 그대로 거부됨. 로컬 main이 2커밋 뒤처져 있었다
+  → 순서를 바꾸면 애초에 안 생긴다: **pull이 먼저, 이동이 나중**. 이동해야만 pull이 되는 상황이면 짧은 stash로 옮긴 뒤 곧바로 pop할 것 - 이때의 stash는 **이동 수단**이지 보관함이 아니다(장기 보관용 stash는 `git status`에 안 잡혀 잊힌다 - 같은 날 M0 시절 stash 1건이 실제로 방치된 채 발견됨)
+
 ## Pillow / 이미지 처리
 
 - P(팔레트) 모드 이미지의 resize는 **LANCZOS를 지정해도 조용히 NEAREST로 강제**된다
