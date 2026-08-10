@@ -2,12 +2,17 @@
 # Python / FastAPI (backend)
 # ========================
 .ruff_cache/
+.pytest_cache/
 __pycache__/
 *.py[cod]
 *.pyo
 venv/
 .venv/
 *.egg-info/
+.coverage
+.coverage.*
+coverage/
+htmlcov/
 .env
 .env.*
 .env.production
@@ -32,9 +37,15 @@ pnpm-debug.log*
 lerna-debug.log*
 
 # ========================
-# Claude Code
+# AI coding tools (local only)
 # ========================
 .claude/
+.codex/
+.agents/
+
+# `codex -c log_dir=./.codex-log` 및 큰 hook 출력 spill
+.codex-log/
+hook_outputs/
 
 # ========================
 # 보안 (절대 올라가면 안 되는 것들)

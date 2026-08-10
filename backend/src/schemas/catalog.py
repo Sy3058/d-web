@@ -10,6 +10,7 @@ update_episode). 썸네일 미선택 회차는 작품 표지로 대체, 표지�
 """
 
 import uuid
+from datetime import datetime
 
 from pydantic import BaseModel
 
@@ -55,6 +56,11 @@ class EpisodeSummary(BaseModel):
     # 내보낸다 - fallback 규칙을 클라이언트가 알 필요 없게. 무료 회차는 None
     # (0원 판매와 혼동 방지 + is_free를 무시한 가격 표기 방지).
     price: int | None
+    # 최초 공개 시각(E3). models.work.Episode.published_at이 아니라 first_published_at에서
+    # 그대로 옮긴다 - published_at은 내렸다 재공개하면 갱신되는 "현재 공개 시각"이라 목록
+    # 표시에 쓰면 날짜가 튄다(DB_SCHEMA.md 참조). 예약만 걸리고 아직 한 번도 공개된 적
+    # 없는 회차는 None.
+    first_published_at: datetime | None
 
 
 class PublicTag(BaseModel):

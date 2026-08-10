@@ -3,9 +3,9 @@
 | 항목 | 내용 |
 |------|------|
 | 모듈 | Frontend / Catalog (독자 공개 읽기 경로) |
-| 관련 마일스톤 | [M2](../../../milestones/M2_foundation.md) 그룹 E (E1+E2, WORK-01·02·03) |
+| 관련 마일스톤 | [M2](../../../milestones/M2_foundation.md) 그룹 E (E1+E2+E3, WORK-01·02·03) |
 | 작성 시점 | M2 E (2026-07-22) |
-| 상태 | 구현 + workflow `/code-review` xhigh(확정6+개연1+반증1, 오탐 2건 기각, 실수정 5+1 반영) 완료. `astro check` 0 errors + `vitest` 12/12 + `build` 통과 + 로컬 dev 런타임 스모크 |
+| 상태 | E1+E2 구현 및 리뷰 완료. E3 날짜·정렬·첫 화 보기 구현, `astro check` 0 errors + frontend 37 tests + build + backend 463 tests 통과 |
 | 관련 문서 | M2_foundation.md 그룹 E·결정 3, IMPLEMENTATION_PUBLIC_CATALOG_API.md(BE 계약 원본), DESIGN.md(컴포넌트 스펙), GUIDE_ASTRO.md(버전 델타) |
 
 비로그인 독자가 `/works`에서 공개 작품 목록(태그 필터·페이지네이션)을 보고, `/works/{id}`에서 작품 메타 + 회차 목록(무료/잠금 배지·뷰어 링크)을 보는 첫 독자용 카탈로그 화면. FE의 첫 `docs/MODULES/FE` 문서다. 회차 본문 렌더(뷰어)는 그룹 F 소관.
@@ -33,7 +33,16 @@ E 그룹은 4개 커밋으로 나눠 올렸다(리팩터 → ui 프리미티브 
 | `frontend/src/pages/works/[id].astro` | E2 작품 상세 + 회차 목록(SSR) | 26961d9 |
 | `frontend/src/lib/http.ts` | `applyCatalogCache()` - 결정 3 캐시 정책 단일 출처 | 26961d9 |
 
-새 의존성: `vitest`(devDep)만. DB 마이그레이션: 없음(읽기 전용 FE).
+E1+E2의 새 의존성은 `vitest`(devDep)뿐이고 당시 DB 마이그레이션은 없었다. E3는 `first_published_at` 추가 마이그레이션을 포함한다.
+
+### E3 확장(2026-08-10)
+
+- `EpisodeSummary.first_published_at`: 재공개 때 갱신되는 예약/공개 제어용 `published_at`과 분리한 독자 표시 전용 최초 공개 시각. 즉시 공개와 예약 공개에서 최초 1회만 기록하며, 예약 공개가 늦어지면 예약 목표가 아니라 DB의 실제 공개 전환 시각을 쓴다.
+- `EpisodeRow.astro`: 최초 공개 시각을 KST `YYYY.MM.DD`로 표시한다.
+- `catalog.ts`: `parseOrder`, 원본 불변 `orderEpisodes`, KST 날짜 포매터를 제공한다.
+- `[id].astro`: 기본 최신순, `?order=asc` 오래된순 토글, 총 회차·무료 회차 요약, 첫 화 보기 링크를 제공한다.
+- 첫 화 링크는 화면 정렬 배열이 아니라 서버가 준 `sort_order` 오름차순 원본의 첫 항목을 사용하므로 정렬 토글과 무관하다.
+- 기본 최신순 URL과 `?order=desc` 중복 색인을 막기 위해 기본값은 쿼리 없는 URL로 만들고 canonical도 pathname으로 고정한다.
 
 ---
 

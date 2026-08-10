@@ -43,6 +43,7 @@ async def _make_episode(
     published_at: datetime | None,
     is_published: bool = False,
     pages: int = 1,
+    first_published_at: datetime | None = None,
 ) -> Episode:
     # F3 재설계: 공개 가드의 기준은 content 문서(pages=0 = EMPTY_DOC = 빈 본문).
     # no는 키·제목 구분용 파라미터(회차 번호 폐기 이후 도메인 필드 아님) - db_session
@@ -60,6 +61,7 @@ async def _make_episode(
         },
         is_published=is_published,
         published_at=published_at,
+        first_published_at=first_published_at,
     )
     session.add(ep)
     await session.commit()
@@ -79,6 +81,50 @@ async def test_publish_due_past_episode(db_session: AsyncSession, work: Work):
     await db_session.refresh(ep)
     assert ep.is_published is True
     assert ep.published_at is not None  # 공개 시각 데이터로 보존(NULL 리셋 안 함)
+
+
+async def test_publish_due_stamps_first_published_at(db_session: AsyncSession, work: Work):
+    # E3: 최초 공개 시각 스탬프. 예약 목표 시각보다 실제 전환이 나중이므로 둘을
+    # 구분해, first_published_at에 published_at을 복사하는 회귀를 잡는다.
+    ts = _past()
+    ep = await _make_episode(db_session, work, 1, published_at=ts)
+    assert ep.first_published_at is None
+    assert await publish_due_episodes(db_session) == 1
+    await db_session.refresh(ep)
+    assert ep.first_published_at is not None
+    assert ep.first_published_at > ts
+
+
+async def test_delayed_publish_stamps_actual_first_published_at(
+    db_session: AsyncSession, work: Work
+):
+    # 빈 본문으로 예약 시각을 넘긴 뒤 나중에 본문이 생기는 경로. 첫 실행은 공개를
+    # 보류하고, 실제 공개 전환 시각은 과거 예약 목표 시각과 달라야 한다.
+    ts = _past(minutes=100)
+    ep = await _make_episode(db_session, work, 1, published_at=ts, pages=0)
+    assert await publish_due_episodes(db_session) == 0
+    assert ep.first_published_at is None
+
+    ep.content = {"type": "doc", "content": [{"type": "paragraph"}]}
+    db_session.add(ep)
+    await db_session.commit()
+
+    assert await publish_due_episodes(db_session) == 1
+    await db_session.refresh(ep)
+    assert ep.published_at == ts
+    assert ep.first_published_at is not None
+    assert ep.first_published_at > ts
+
+
+async def test_publish_due_keeps_existing_first_published_at(db_session: AsyncSession, work: Work):
+    # E3: 이미 first_published_at이 있으면(예: 과거 백필) 스케줄러가 덮어쓰지 않는다
+    # (coalesce) - 시작값(과거 고정 시각) ≠ 새 published_at 시각이라 판별력 있음.
+    original = _past(minutes=100)
+    ts = _past()
+    ep = await _make_episode(db_session, work, 1, published_at=ts, first_published_at=original)
+    assert await publish_due_episodes(db_session) == 1
+    await db_session.refresh(ep)
+    assert ep.first_published_at == original
 
 
 async def test_future_reservation_stays_draft(db_session: AsyncSession, work: Work):

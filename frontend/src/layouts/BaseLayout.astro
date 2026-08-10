@@ -7,9 +7,13 @@ import Footer from '../components/common/Footer.astro';
 interface Props {
   title: string;
   description?: string;
+  // 정렬(?order=)처럼 캐시 키 정규화를 위해 URL에서 생략하는 기본값 쿼리가 있는
+  // 페이지용 - 같은 콘텐츠가 쿼리 유무로 두 URL에 중복 색인되는 걸 막는다(E3).
+  // 쿼리 없는 pathname만 넘긴다(예: Astro.url.pathname).
+  canonicalPath?: string;
 }
 
-const { title, description = '' } = Astro.props;
+const { title, description = '', canonicalPath } = Astro.props;
 ---
 
 <html lang="ko">
@@ -20,6 +24,7 @@ const { title, description = '' } = Astro.props;
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="generator" content={Astro.generator} />
     {description && <meta name="description" content={description} />}
+    {canonicalPath && <link rel="canonical" href={new URL(canonicalPath, Astro.url).href} />}
     <title>{title} · 도군</title>
     <ClientRouter />
   </head>

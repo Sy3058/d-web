@@ -2,7 +2,7 @@
 // 회차 목록 행 (E2). 잠금 회차도 뷰어 진입은 가능하다(경계 이전 미리보기가 있음) -
 // 배지는 유료 구간 존재만 표시하고 링크 자체는 항상 활성화한다.
 import Badge from '../ui/Badge.astro';
-import { formatPrice, type EpisodeSummary } from '../../lib/catalog';
+import { formatEpisodeDate, formatPrice, type EpisodeSummary } from '../../lib/catalog';
 
 interface Props {
   workId: string;
@@ -11,6 +11,7 @@ interface Props {
 }
 
 const { workId, episode, first = false } = Astro.props;
+const displayDate = formatEpisodeDate(episode.first_published_at);
 ---
 
 <a
@@ -35,6 +36,13 @@ const { workId, episode, first = false } = Astro.props;
       <span class="text-body-md text-ink truncate">{episode.title}</span>
     </div>
     {episode.subtitle && <p class="text-sm text-muted truncate">{episode.subtitle}</p>}
+    {
+      displayDate && (
+        <time datetime={episode.first_published_at ?? undefined} class="text-xs text-muted">
+          {displayDate}
+        </time>
+      )
+    }
   </div>
   <div class="flex shrink-0 items-center gap-2">
     {

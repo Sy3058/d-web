@@ -2,12 +2,14 @@
 
 | 항목 | 내용 |
 |------|------|
-| 문서 버전 | v0.11 (2026-08-03, 회차 번호 폐기 구현 반영: `episode_no` 완전 제거 → **조회키와 표시 순서를 분리**. 조회키 = `public_id`(랜덤 8자리 INTEGER, 전역 UNIQUE), 표시 순서 = `sort_order`(**UNIQUE 없음** - 유일 제약이 옛 409의 원인이었으므로 그 함정을 재현하지 않는다, 동점은 `created_at`·`id`가 깬다). 독자 URL `/works/{workId}/{publicId}` 유지. 재배열 API `PUT /admin/works/{id}/episodes`(살아있는 회차 전량 전송, 집합 불일치 시 409 = 낙관적 동시성) + 어드민 ↑↓ 버튼 신설. 제목 기본값 `'무제'` 폐지(번호가 사라져 제목이 유일 식별자 - 서버 필수 + 이미지 업로드 경로 가드). 마이그레이션 2건(`f3a43b32fcfb` public_id, `a7c91d05e3b4` sort_order) upgrade/downgrade 왕복 검증 완료, BE 435 + FE 28 + admin 81 테스트 그린. 상세: `docs/MODULES/BE/Works/IMPLEMENTATION_EPISODE_PUBLIC_ID.md`) · v0.10 (2026-07-28, 그룹 G 재정의 반영: 2026-07-26 결정(DECISIONS "랜딩 페이지 구성 + 커미션 단계 분리") - 옛 "작가 소개 정적 페이지"를 폐기하고 **메인 랜딩(`/`) 히어로 + `/commission` 정적 홍보**로 재정의. 커미션 신청 폼·접수 관리(M5)는 스코프 밖 그대로, 정적 홍보 부분만 M2로 앞당김. 문서 미착수 - 구현 전) · v0.9 (2026-07-25, 그룹 F1 구현 반영: 뷰어 아일랜드(SSR 셸 + React 아일랜드 렌더러) 구현·Opus 리뷰(Critical 0/Major 1 반영) 완료. 수동 e2e(브라우저 실기능)·회차당 전송 바이트 실측(결정 6 재검토 조건)은 사용자 확인 대기 - 결과 반영 전까지 그룹 H 체크는 보류) · v0.8 (2026-07-21, 그룹 B 완료 반영: B1(회차 목록)·B2(무료 구간 콘텐츠) 구현·Opus 리뷰 완료. **B2 DoD (c) 문구 정정** - "응답에 원본 R2 키 문자열 부재"는 presigned URL이 구조상 키를 경로에 포함하므로 성립 불가, "유료 구간 키 전무 + image attrs에 key 부재"로 대체. 절단은 `is_free` 컬럼과 무관하게 항상 수행으로 확정) · v0.7 (2026-07-20, 그룹 D 완료 반영: D1(공개 버킷 전환)·D2(썸네일 공개 축소본) 구현·리뷰·실서버 스모크 완료. URL 조립 `r2_service.public_url()` 단일화, R2 side-effect 순서(생성 커밋 전/삭제 커밋 후) 확정) · v0.6 (2026-07-19, 뷰어 이미지 로딩 전략 확정: lazy → **즉시 전량 요청 + `fetchpriority`**(결정 6 신설) - presigned 만료(600초) 구간을 구조적으로 회피. 서명 쿠키가 Cloudflare엔 네이티브로 없다는 공식 문서 확인 결과 반영(M3 이연), presigned가 커스텀 도메인 불가라는 사실 결정 1에 명시) · v0.5 (2026-07-18, M1.5 완전 종료·그룹 D 계획 구체화: 에디터 #78·예약 UI #79 머지 반영, 썸네일 = 원고 키 방식 확정(D2 = BE-only 공개 축소본 파생), D1/D2에 #81 후속 조사 반영(공개 URL 조립 단일화·캐시 버스터·공개 카탈로그 배선·download_bytes), R2 토큰 스코프 리스크 추가) · v0.4 (2026-07-18, 그룹 A 완료 반영: `works.is_published` 신설 확정 + B1/B2에 `public_work_filters()` 사용 지시 추가 - admin 패턴 복사 시 is_published 누락 함정 리뷰 발견) · v0.3 (2026-07-16, M1.5 F3 재설계 #76 반영: 콘텐츠 문서(회차 내 유료 경계) 모델 기준 전면 개정 - 무료 서빙 = content 절단 앞당김, 뷰어 = 문서 렌더러, 진행도 = 블록 인덱스, presign 실물 계약 반영) · v0.2 (2026-07-15, 리뷰 반영: 공개 서빙 게이트에 작품 soft-delete join 명시 + TTL config 키 관계 정리) · v0.1 (2026-07-15, 초안) |
+| 문서 버전 | v0.12 (2026-08-03, 그룹 E 확장 - 회차 번호 폐기의 후속 UX. E3(공개 날짜 + 최신순/등록순 정렬 토글 + 첫 화 보기 + 총 N화·무료 N화 요약)·E4(이어 보기 + 작품 단위 진행률 바, 로그인 전용·클라이언트 섬) 신설. 회차 **내부** 진행률(%)은 M3 이연 - 서버 픽셀 누적은 글 블록 높이를 알 수 없어 불가능하고 클라이언트 스크롤 비율은 뷰어의 이미지 공간 미예약 때문에 값이 못 미덥다는 코드 검증 결과. 근거 전문: DECISIONS "독자 회차 목록 UX: 날짜·정렬·진행률") · v0.11 (2026-08-03, 회차 번호 폐기 구현 반영: `episode_no` 완전 제거 → **조회키와 표시 순서를 분리**. 조회키 = `public_id`(랜덤 8자리 INTEGER, 전역 UNIQUE), 표시 순서 = `sort_order`(**UNIQUE 없음** - 유일 제약이 옛 409의 원인이었으므로 그 함정을 재현하지 않는다, 동점은 `created_at`·`id`가 깬다). 독자 URL `/works/{workId}/{publicId}` 유지. 재배열 API `PUT /admin/works/{id}/episodes`(살아있는 회차 전량 전송, 집합 불일치 시 409 = 낙관적 동시성) + 어드민 ↑↓ 버튼 신설. 제목 기본값 `'무제'` 폐지(번호가 사라져 제목이 유일 식별자 - 서버 필수 + 이미지 업로드 경로 가드). 마이그레이션 2건(`f3a43b32fcfb` public_id, `a7c91d05e3b4` sort_order) upgrade/downgrade 왕복 검증 완료, BE 435 + FE 28 + admin 81 테스트 그린. 상세: `docs/MODULES/BE/Works/IMPLEMENTATION_EPISODE_PUBLIC_ID.md`) · v0.10 (2026-07-28, 그룹 G 재정의 반영: 2026-07-26 결정(DECISIONS "랜딩 페이지 구성 + 커미션 단계 분리") - 옛 "작가 소개 정적 페이지"를 폐기하고 **메인 랜딩(`/`) 히어로 + `/commission` 정적 홍보**로 재정의. 커미션 신청 폼·접수 관리(M5)는 스코프 밖 그대로, 정적 홍보 부분만 M2로 앞당김. 문서 미착수 - 구현 전) · v0.9 (2026-07-25, 그룹 F1 구현 반영: 뷰어 아일랜드(SSR 셸 + React 아일랜드 렌더러) 구현·Opus 리뷰(Critical 0/Major 1 반영) 완료. 수동 e2e(브라우저 실기능)·회차당 전송 바이트 실측(결정 6 재검토 조건)은 사용자 확인 대기 - 결과 반영 전까지 그룹 H 체크는 보류) · v0.8 (2026-07-21, 그룹 B 완료 반영: B1(회차 목록)·B2(무료 구간 콘텐츠) 구현·Opus 리뷰 완료. **B2 DoD (c) 문구 정정** - "응답에 원본 R2 키 문자열 부재"는 presigned URL이 구조상 키를 경로에 포함하므로 성립 불가, "유료 구간 키 전무 + image attrs에 key 부재"로 대체. 절단은 `is_free` 컬럼과 무관하게 항상 수행으로 확정) · v0.7 (2026-07-20, 그룹 D 완료 반영: D1(공개 버킷 전환)·D2(썸네일 공개 축소본) 구현·리뷰·실서버 스모크 완료. URL 조립 `r2_service.public_url()` 단일화, R2 side-effect 순서(생성 커밋 전/삭제 커밋 후) 확정) · v0.6 (2026-07-19, 뷰어 이미지 로딩 전략 확정: lazy → **즉시 전량 요청 + `fetchpriority`**(결정 6 신설) - presigned 만료(600초) 구간을 구조적으로 회피. 서명 쿠키가 Cloudflare엔 네이티브로 없다는 공식 문서 확인 결과 반영(M3 이연), presigned가 커스텀 도메인 불가라는 사실 결정 1에 명시) · v0.5 (2026-07-18, M1.5 완전 종료·그룹 D 계획 구체화: 에디터 #78·예약 UI #79 머지 반영, 썸네일 = 원고 키 방식 확정(D2 = BE-only 공개 축소본 파생), D1/D2에 #81 후속 조사 반영(공개 URL 조립 단일화·캐시 버스터·공개 카탈로그 배선·download_bytes), R2 토큰 스코프 리스크 추가) · v0.4 (2026-07-18, 그룹 A 완료 반영: `works.is_published` 신설 확정 + B1/B2에 `public_work_filters()` 사용 지시 추가 - admin 패턴 복사 시 is_published 누락 함정 리뷰 발견) · v0.3 (2026-07-16, M1.5 F3 재설계 #76 반영: 콘텐츠 문서(회차 내 유료 경계) 모델 기준 전면 개정 - 무료 서빙 = content 절단 앞당김, 뷰어 = 문서 렌더러, 진행도 = 블록 인덱스, presign 실물 계약 반영) · v0.2 (2026-07-15, 리뷰 반영: 공개 서빙 게이트에 작품 soft-delete join 명시 + TTL config 키 관계 정리) · v0.1 (2026-07-15, 초안) |
 | 상위 마일스톤 | [M2](./README.md#m2-콘텐츠-무료-구간) |
 | 예상 기간 | 약 2~3주 (표지 공개 버킷 커스텀 도메인 외부 왕복 포함) |
 | 완료 기준 | 비로그인 유저가 작품 목록 → 무료 구간(전체 무료 회차 + 부분 유료 회차의 경계 이전 미리보기) 열람, 유료 경계 도달 시 잠금 UI(M3 전이라 placeholder) 노출 (그룹 H 체크리스트) |
 | 선행 마일스톤 | [M1.5](./M1.5_foundation.md) - 관리자 부트스트랩. **완전 종료**(2026-07-17, G 검증 28/28 + `v0.1.5` 태깅 - 에디터 #78·예약 UI #79 포함 전부 main 머지) |
 | 다음 마일스톤 | [M4](./README.md#m4-커뮤니티-후원은-m3로-이동) - 커뮤니티 (결제 무관, M2 뒤 바로) |
+
+> **v0.13 갱신(2026-08-11)**: E3 구현·리뷰 반영. `first_published_at`을 예약 목표 시각과 분리해 실제 최초 공개 전환 시각으로 기록하고, 회차 날짜·정렬 토글·첫 화 보기·총/무료 회차 요약을 완료했다.
 
 > **목적**: 작품 목록 → 작품 상세 → 에피소드 목록 → 뷰어의 독자 열람 경로를 완성한다. 결제는 없다(M3). 회차 본문은 **콘텐츠 문서(TipTap JSON, `episodes.content`) + 회차 내 유료 경계(paywall 노드)** 모델(#76, DECISIONS "에피소드 콘텐츠 모델")이며, M2는 **경계 이전(무료 구간)만 서버가 잘라 서빙**하고 경계 지점에 잠금 placeholder를 노출한다. 범위는 PRD **WORK-01~09**(목록/상세/회차목록/뷰어/진행도) + 랜딩(`/`) 재설계 + 커미션 정적 홍보(`/commission`, 2026-07-26 재정의 - 아래 그룹 G). 경계 뒤(유료 구간) 반환·결제 검증은 **M3**, 커뮤니티(댓글·하트)는 **M4**, 작품 검색은 **P2**, 커미션 신청 폼·접수 관리는 **M5**.
 
@@ -104,7 +106,7 @@ M2 착수 전 확정. presigned·표지·콘텐츠 모델은 기존 결정(DECIS
 ### A2. 공개 작품 상세 API ✅ (2026-07-18 완료 - A1과 같은 PR)
 - 선행: A1
 - 산출물: `GET /works/{id}` - works + tags + **공개 회차 요약 목록**(`selectinload`). 응답 = `WorkDetail`(작품 메타 + `episodes: [EpisodeSummary]`).
-- `EpisodeSummary` = id·`public_id`(2026-07-28 회차 번호 폐기 결정 전엔 `episode_no`)·title·`subtitle`(#76 신설)·썸네일 공개 URL·`is_free`(전체 무료 - 경계 파생 컬럼)·`is_locked`(유료 구간 존재 = `!is_free`)·`is_purchased`(M2=항상 false)·`price`(**실효 판매가** = `episodes.price ?? works.episode_base_price`를 서버가 계산, 무료 회차는 null - #83 후속 추가). **`content`·`image_keys` 미포함**.
+- `EpisodeSummary` = id·`public_id`(2026-07-28 회차 번호 폐기 결정 전엔 `episode_no`)·title·`subtitle`(#76 신설)·썸네일 공개 URL·`is_free`(전체 무료 - 경계 파생 컬럼)·`is_locked`(유료 구간 존재 = `!is_free`)·`is_purchased`(M2=항상 false)·`price`(**실효 판매가** = `episodes.price ?? works.episode_base_price`를 서버가 계산, 무료 회차는 null - #83 후속 추가)·`first_published_at`(E3, 실제 최초 공개 전환 시각). **`content`·`image_keys` 미포함**.
 - DoD: pytest - 상세 응답에 미공개 회차·`content`·`image_keys` 미포함, 무료/잠금 플래그 정확, soft-delete 작품은 404.
 
 ### A3. 공개 태그 목록 API ✅ (2026-07-19 완료 - PR `be/feat/m2-catalog-followup`, #82)
@@ -190,6 +192,24 @@ M2 착수 전 확정. presigned·표지·콘텐츠 모델은 기존 결정(DECIS
 - DoD: 목록→상세 네비게이션, 무료/잠금 배지 정확, 미공개 회차 미노출.
 
 - **구현에서 확정(2026-07-22, E1+E2)**: ① 결정 3 캐시 정책은 `lib/http.ts applyCatalogCache`로 단일화(index/[id] 공용, 그룹 F 뷰어 셸도 재사용). ② fail-closed: `getWorkDetail`이 404·**422(무효 UUID)**를 null→404로 매핑, 5xx만 loadError 승격. ③ 목록/태그는 `Promise.allSettled`로 독립(태그 실패가 카탈로그를 안 무너뜨림). ④ 범위 밖 page는 마지막 페이지로 302, page 가드는 `isSafeInteger`(1e21 지수표기 누출 차단). ⑤ 회차 링크 = F1 계획값 `/works/{id}/{episode_no}`(2026-07-28 회차 번호 폐기로 지금은 `/works/{id}/{publicId}`) - 뷰어(F) 전까지 404가 의도된 상태. ⑥ WorkCard 태그는 중첩 앵커 회피로 링크 아님(상세 페이지 태그만 링크). workflow `/code-review` xhigh 실수정 5+1 반영, 오탐 2건 기각(v4 preflight `[hidden] !important`로 flex 미오버라이드 / F1 라우트 일치). 상세: `docs/MODULES/FE/Catalog/IMPLEMENTATION_CATALOG_PAGES.md`.
+
+### E3. 회차 목록 강화 - 날짜 · 정렬 토글 · 첫 화 보기 ✅ (2026-08-10 완료)
+- 선행: A2, **회차 번호 폐기(`sort_order`) 머지** - "첫 화 보기"가 `sort_order` 첫 회차를 가리키므로 그 컬럼이 main에 있어야 한다.
+- 산출물: `EpisodeSummary.first_published_at` 신규, `EpisodeRow.astro` 공개 날짜 표시, `[id].astro`에 정렬 토글(`?order=`, **기본 최신순**)·"첫 화 보기" 버튼·"총 N화 · 무료 N화" 요약.
+- 근거: 번호 폐기로 독자가 진도를 기억할 수단이 사라졌다. 전문은 DECISIONS "독자 회차 목록 UX: 날짜·정렬·진행률".
+- ⚠️ "첫 화 보기"는 **정렬 토글과 무관하게** `sort_order` 첫 회차여야 한다 - 기본이 최신순이라 1화가 목록 맨 아래로 밀리는데, 이 버튼까지 화면 순서를 따라가면 마지막 화로 간다.
+- ⚠️ 정렬은 **프론트에서 뒤집는다**(페이지네이션이 없어 전량이 이미 응답에 있다 - 결정 5). 서버 정렬은 `sort_order` 오름차순 그대로.
+- **구현에서 확정(2026-08-10, 2026-08-11 리뷰 보완)**: #85 경로 실측 결과 재공개 시 `published_at`이 갱신되므로 독자 표시용 `first_published_at`을 분리했다. 즉시 공개와 예약 공개 모두 최초 1회만 스탬프하며 재공개에서는 유지한다. 예약 공개가 빈 본문 등으로 늦어지면 예약 목표가 아니라 DB의 실제 공개 전환 시각을 기록한다. 기본 최신순은 쿼리 없는 canonical URL, 오래된순은 `?order=asc`를 사용한다.
+- DoD: pytest(`first_published_at` 노출·값·지연 예약 실제 전환 시각), `?order=asc|desc` 각각 순서 단언(**생성 순서·날짜·`sort_order`를 다 다른 방향**으로 깔아 판별력 확보 - 2026-07-30 판별력 0 사고 재발 방지), 첫 화 링크가 정렬과 무관하게 동일, `astro check`/`build`/`test`.
+
+### E4. 이어 보기 + 작품 단위 진행률 바 (2026-08-03 결정, 미착수)
+- 선행: C1(`viewer_progress`), E3
+- 산출물: `GET /works/{work_id}/progress`(**인증 필수** - 읽은 회차 id 목록 + 마지막 본 회차 1건을 한 번에) + FE React 섬(`client:idle`, `credentials: 'include'`). 작품 단위 바는 `읽은 회차 수 / 전체 회차 수`.
+- 마이그레이션 불요 - `viewer_progress.updated_at`(`onupdate=func.now()`)이 이미 있어 "마지막 본 회차"를 특정할 수 있다.
+- ⚠️ **SSR HTML에 절대 넣지 말 것** - 작품 상세는 성공 시 `Cache-Control: public, max-age=60`(`lib/http.ts`)이라 HTML이 60초간 공유된다. 개인 진행도를 넣으면 남의 진도가 그대로 샌다. 반드시 클라이언트 섬에서 fetch.
+- 비로그인은 대상이 아니다(`viewer_progress`가 `user_id` 기반, 뷰어도 `isLoggedIn` 후에만 저장). 401이면 아무것도 렌더하지 않는다.
+- 회차 **내부** 진행률(%)은 이 그룹에 넣지 않는다(M3 이연). 서버 픽셀 누적은 글 블록 높이를 알 수 없어 불가능하고, 클라이언트 스크롤 비율은 뷰어가 이미지 공간을 예약하지 않아 지금은 값이 못 미덥다. 근거와 M3 착수 순서는 DECISIONS 같은 절 참조.
+- DoD: pytest(삭제·비공개 회차 제외, 비인증 401), 비로그인 시 미렌더, **SSR 응답 HTML에 진행도 문자열이 없음**을 단언.
 
 ---
 

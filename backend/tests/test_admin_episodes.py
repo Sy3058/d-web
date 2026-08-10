@@ -1039,6 +1039,47 @@ async def test_republish_content_keeps_published_at(
     assert body["published_at"] == published["published_at"]
 
 
+async def _episode_first_published_at(db_session: AsyncSession, episode_id: str) -> datetime | None:
+    # first_published_at은 AdminEpisodeRead에 안 실린다(독자 표시 전용, E3 스코프 밖) -
+    # API로는 안 보이니 컬럼을 직접 select(엔티티 select는 identity map의 stale 값을
+    # 돌려줄 수 있음 - _deleted_state와 동일 이유).
+    result = await db_session.exec(
+        select(Episode.first_published_at).where(Episode.id == uuid.UUID(episode_id))
+    )
+    return result.one()
+
+
+async def test_first_publish_stamps_first_published_at(
+    owner_client: AsyncClient, uploaded_keys: list[str], db_session: AsyncSession
+):
+    # E3: 최초 공개 시 스탬프. 시작값(None) ≠ 기대값(non-None)이라 판별력 있음.
+    work_id, episode_id, _keys, published = await _published_episode(owner_client)
+    stamped = await _episode_first_published_at(db_session, episode_id)
+    assert stamped is not None
+    assert stamped == datetime.fromisoformat(published["published_at"])
+
+
+async def test_republish_keeps_first_published_at(
+    owner_client: AsyncClient, uploaded_keys: list[str], db_session: AsyncSession
+):
+    # E3 핵심 DoD: 내렸다 재공개해도 first_published_at은 최초 시각 그대로다
+    # (published_at은 재공개 시각으로 갱신됨 - 별개 컬럼이 지금 이 구분을 가능케 한다).
+    # 시작값(최초 스탬프) ≠ 재공개 시 published_at(새 시각)이라 "안 바뀜"이 판별력 있는
+    # 단언이 되도록, 재공개 전후 published_at이 실제로 달라지는지도 같이 확인한다.
+    work_id, episode_id, _keys, published = await _published_episode(owner_client)
+    original_first = await _episode_first_published_at(db_session, episode_id)
+    assert original_first is not None
+
+    await _put(owner_client, work_id, episode_id, is_published=False)
+    resp = await _put(owner_client, work_id, episode_id, is_published=True)
+    assert resp.status_code == 200
+    republished_at = resp.json()["published_at"]
+    assert republished_at != published["published_at"]  # published_at은 갱신됨(기존 계약)
+
+    first_after_republish = await _episode_first_published_at(db_session, episode_id)
+    assert first_after_republish == original_first  # first_published_at은 불변
+
+
 async def test_publish_flip_race_guarded(
     owner: User, uploaded_keys: list[str], db_session: AsyncSession
 ):
