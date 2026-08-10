@@ -36,7 +36,7 @@ DB_SCHEMA §2 "작품/에피소드 도메인"을 코드로 옮긴 것. M1.5 모�
 
 ### 인덱스 (DB_SCHEMA §6)
 - `idx_episodes_work_id` - FK 인덱스 명시(Postgres는 FK 자동 인덱스 없음)
-- `idx_episodes_published_at` - partial `WHERE is_published`(공개분 정렬/범위)
+- `idx_episodes_published_at` - M1.5 당시 추가했으나 소비 쿼리가 없어 M2 E3에서 제거
 - `idx_episodes_published` - partial `work_id WHERE is_published`
 - `works_tags` 역방향(tag_id) 인덱스는 태그별 작품 목록이 필요해질 때(M2/M5) 보류
 

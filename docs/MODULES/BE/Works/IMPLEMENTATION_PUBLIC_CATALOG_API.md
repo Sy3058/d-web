@@ -28,6 +28,10 @@
 
 새 의존성: 없음. DB 마이그레이션: 1개(위 backfill 포함).
 
+### E3 후속(2026-08-11)
+
+`EpisodeSummary`에 `first_published_at`을 추가했다. 예약 제어용 `published_at`은 재공개 때 바뀔 수 있으므로 공개 DTO에 쓰지 않고, 최초 공개 전환 때 한 번만 기록되는 값을 회차 목록 날짜로 제공한다. `GET /works/{id}`와 `GET /works/{id}/episodes`는 같은 변환 함수를 재사용하므로 두 응답 계약이 함께 갱신된다.
+
 ---
 
 ## 2. 주요 결정

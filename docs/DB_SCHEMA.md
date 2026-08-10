@@ -2,7 +2,7 @@
 
 | 항목 | 내용 |
 |------|------|
-| 문서 버전 | v1.3 (2026-07-01, users `is_admin`→`role` 3-역할 RBAC) · v1.2 (2026-05-26) |
+| 문서 버전 | v1.4 (2026-08-11, episodes `first_published_at` + 현행 인덱스 반영) · v1.3 (2026-07-01, users `is_admin`→`role` 3-역할 RBAC) · v1.2 (2026-05-26) |
 | DB | PostgreSQL |
 | ORM | SQLModel |
 | 작성 기준 | PRD v1.0 + 미결 사항 확정 답변 |
@@ -161,7 +161,8 @@ episodes
 │               -- content의 image 키는 이 배열의 부분집합이어야 함 (F3 재설계로
 │               -- "배열 인덱스 = 페이지 순서" 의미는 content로 이관)
 ├── is_published BOOLEAN DEFAULT FALSE
-├── published_at TIMESTAMPTZ               -- 예약 공개 시간
+├── published_at TIMESTAMPTZ               -- 예약 목표 시각·현재 공개 제어
+├── first_published_at TIMESTAMPTZ          -- 실제 최초 공개 전환 시각(재공개 시 불변)
 ├── created_at   TIMESTAMPTZ DEFAULT now()
 ├── updated_at   TIMESTAMPTZ DEFAULT now()
 ├── deleted_at   TIMESTAMPTZ               -- 회차 soft delete (#85)
@@ -445,7 +446,7 @@ notification_logs
 ```sql
 -- 자주 쓰이는 조회 기준 인덱스
 CREATE INDEX idx_episodes_work_id       ON episodes(work_id);
-CREATE INDEX idx_episodes_published_at  ON episodes(published_at) WHERE is_published = TRUE;
+CREATE INDEX idx_episodes_published     ON episodes(work_id) WHERE is_published = TRUE;
 CREATE INDEX idx_purchases_user_id      ON purchases(user_id);
 CREATE INDEX idx_purchases_episode_id   ON purchases(episode_id);
 CREATE INDEX idx_purchases_bundle_id    ON purchases(bundle_id) WHERE bundle_id IS NOT NULL;
