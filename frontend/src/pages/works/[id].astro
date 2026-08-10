@@ -5,7 +5,14 @@ import CoverImage from '../../components/works/CoverImage.astro';
 import EpisodeRow from '../../components/works/EpisodeRow.astro';
 import Badge from '../../components/ui/Badge.astro';
 import Chip from '../../components/ui/Chip.astro';
-import { getWorkDetail, statusLabel, buildWorksUrl, type WorkDetail } from '../../lib/catalog';
+import {
+  getWorkDetail,
+  statusLabel,
+  buildWorksUrl,
+  parseOrder,
+  orderEpisodes,
+  type WorkDetail,
+} from '../../lib/catalog';
 import { applyCatalogCache } from '../../lib/http';
 
 const { id } = Astro.params;
@@ -27,9 +34,17 @@ try {
 // 404(작품 없음)도 no-store - 예약 공개 전 404가 캐시되면 공개 후에도 계속 404를 본다
 // (백엔드 works.py의 같은 이유). 정책은 lib/http.ts applyCatalogCache에 집약.
 applyCatalogCache(Astro.response, { error: loadError, notFound: !work });
+
+// 정렬 토글(E3). 서버는 항상 sort_order 오름차순(작가 지정 순서)으로 준다 - "첫 화
+// 보기"는 이 원본 배열의 [0]을 써야 정렬 토글과 무관하게 항상 같은 회차를 가리킨다.
+// 뒤집힌 배열에서 [0]을 뽑으면 desc일 때 마지막 화가 "첫 화"로 둔갑한다.
+const order = parseOrder(Astro.url.searchParams.get('order'));
+const firstEpisode = work?.episodes[0] ?? null;
+const displayEpisodes = work ? orderEpisodes(work.episodes, order) : [];
+const freeCount = work ? work.episodes.filter((ep) => ep.is_free).length : 0;
 ---
 
-<BaseLayout title={work ? work.title : '작품을 찾을 수 없어요'}>
+<BaseLayout title={work ? work.title : '작품을 찾을 수 없어요'} canonicalPath={Astro.url.pathname}>
   <div class="max-w-[1140px] mx-auto px-6 py-12">
     {
       loadError ? (
@@ -62,7 +77,37 @@ applyCatalogCache(Astro.response, { error: loadError, notFound: !work });
             <p class="text-sm text-muted">아직 등록된 회차가 없어요.</p>
           ) : (
             <div>
-              {work.episodes.map((episode, i) => (
+              <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+                <div class="flex items-center gap-3">
+                  <span class="text-sm text-muted">
+                    총 {work.episodes.length}화 · 무료 {freeCount}화
+                  </span>
+                  {firstEpisode && (
+                    <a
+                      href={`/works/${work.id}/${firstEpisode.public_id}`}
+                      class="text-sm text-ink underline underline-offset-2"
+                    >
+                      {firstEpisode.is_free ? '첫 화 무료로 보기' : '첫 화 보기'}
+                    </a>
+                  )}
+                </div>
+                <div class="flex items-center gap-2 text-sm">
+                  <a
+                    href={Astro.url.pathname}
+                    class:list={[order === 'desc' ? 'text-ink font-medium' : 'text-muted']}
+                  >
+                    최신순
+                  </a>
+                  <span class="text-muted">·</span>
+                  <a
+                    href={`${Astro.url.pathname}?order=asc`}
+                    class:list={[order === 'asc' ? 'text-ink font-medium' : 'text-muted']}
+                  >
+                    오래된순
+                  </a>
+                </div>
+              </div>
+              {displayEpisodes.map((episode, i) => (
                 <EpisodeRow workId={work!.id} episode={episode} first={i === 0} />
               ))}
             </div>
