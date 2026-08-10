@@ -161,12 +161,6 @@ class Episode(SQLModel, table=True):
         UniqueConstraint("public_id", name="uq_episodes_public_id"),
         # work_id별 에피소드 조회 (FK엔 인덱스 자동생성 안 됨 - DB_SCHEMA §6)
         Index("idx_episodes_work_id", "work_id"),
-        # 공개된 에피소드의 published_at 정렬/범위 조회 (partial)
-        Index(
-            "idx_episodes_published_at",
-            "published_at",
-            postgresql_where=text("is_published = true"),
-        ),
         # work_id별 공개 에피소드만 조회 (idx_episodes_work_id와 별개 partial)
         Index(
             "idx_episodes_published",
@@ -240,8 +234,18 @@ class Episode(SQLModel, table=True):
         default=False,
         sa_column=Column(Boolean, nullable=False, server_default=text("false")),
     )
-    # 예약 공개 시각(스케줄러가 도달 시 is_published 전환 - 그룹 E)
+    # 예약 공개 시각(스케줄러가 도달 시 is_published 전환 - 그룹 E). 비공개 전환 시
+    # episode_service가 항상 NULL로 민다(과거 값이 남으면 스케줄러가 다음 틱에 자동
+    # 재공개함) - 그래서 재공개하면 이 컬럼은 "새 공개 시각"으로 다시 스탬프된다.
     published_at: datetime | None = Field(
+        default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
+    )
+    # 최초 공개 시각(E3, 독자 표시 전용). published_at과 달리 한 번 채워지면 재공개해도
+    # 갱신되지 않는다(episode_service가 NULL일 때만 스탬프) - 독자 회차 목록의 날짜
+    # 표시가 재공개마다 튀는 걸 막는다. 스케줄러 트리거·예약 로직은 여전히 published_at을
+    # 쓴다(이 컬럼은 표시에만 관여, 폴링 조건엔 안 들어감) - 인덱스 없음(표시용 단일 컬럼
+    # 읽기라 목록 정렬은 sort_order가 담당, 이 컬럼으로 필터/정렬하는 쿼리 없음).
+    first_published_at: datetime | None = Field(
         default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
     )
     created_at: datetime | None = Field(default=None, sa_column=_created_at_column())

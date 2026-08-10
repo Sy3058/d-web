@@ -41,7 +41,11 @@ async def publish_due_episodes(session: AsyncSession) -> int:
     원자 UPDATE 1문이라 멱등: 한 번 true가 된 행은 WHERE에서 영구히 빠지고,
     재시작·중복 발화·밀린 틱 몰아치기 전부 무해하다. 시각 비교는 DB now() 기준
     (앱 시계 불사용). published_at은 공개 후 "공개 시각" 데이터로 역할이 바뀌므로
-    지우지 않는다(독자 정렬·표시가 소비 - idx_episodes_published_at).
+    지우지 않는다(스케줄러 자신의 다음 폴링 조건 - WHERE is_published=false에서
+    영구히 빠지는 판단 근거). 독자 표시용 날짜는 first_published_at이 따로 맡는다
+    (E3) - coalesce라 이미 값이 있으면 유지, 없으면 DB의 실제 공개 전환 시각으로
+    최초 스탬프한다. 예약 목표 시각을 복사하면 빈 본문 등으로 공개가 늦어진 회차의
+    날짜가 실제 최초 노출보다 과거로 표시된다.
     """
     result = await session.exec(
         update(Episode)
@@ -61,7 +65,10 @@ async def publish_due_episodes(session: AsyncSession) -> int:
             # 순간 삭제한 회차가 다음 틱에 독자에게 공개된다.
             Episode.deleted_at.is_(None),
         )
-        .values(is_published=True)
+        .values(
+            is_published=True,
+            first_published_at=func.coalesce(Episode.first_published_at, func.now()),
+        )
         .execution_options(synchronize_session=False)
     )
     await session.commit()

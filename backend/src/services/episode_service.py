@@ -333,7 +333,16 @@ async def update_episode(episode: Episode, data: EpisodeUpdate, session: AsyncSe
         if changes["is_published"]:
             planned = changes.get("published_at", episode.published_at)
             if planned is None or planned > datetime.now(UTC):
-                changes["published_at"] = datetime.now(UTC)
+                planned = datetime.now(UTC)
+                changes["published_at"] = planned
+            # E3: 최초 공개 시각은 한 번만 스탬프(재공개해도 안 갱신) - 독자 표시용.
+            # func.coalesce 대신 Python 값인 이유: 이 아래 두 커밋 경로 중 ORM setattr
+            # 경로(:setattr(episode, field, value))는 SQL 표현식을 대입하면 SQLAlchemy가
+            # 그대로 바인드 파라미터로 취급해 깨진다 - Core update().values()에서만
+            # SQL 표현식이 안전하다. published_at과 동일하게 이미 로드된 episode
+            # 인스턴스 값으로 판단(기존 코드와 같은 위험 감수 수준 - 아래 참고).
+            if episode.first_published_at is None:
+                changes["first_published_at"] = planned
         else:
             # 페이로드에 published_at이 동봉돼도 무시하고 항상 예약 해제. 동봉 값은
             # 대부분 관리자 폼의 stale 에코인데, 과거 시각이 남으면 E1 폴링이 내린

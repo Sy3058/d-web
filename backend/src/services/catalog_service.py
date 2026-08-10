@@ -42,8 +42,9 @@ def public_episode_filters() -> list:
     걸어주므로 원칙상 첫 조건만으로 충분하지만, 그러면 "삭제 ⟹ 비공개" 불변식이 깨지는
     순간 노출 경로 전부가 동시에 뚫린다. 노출은 되돌릴 수 없어 한 줄을 더 쓴다.
 
-    is_published = true를 그대로 포함하므로 partial 인덱스(idx_episodes_published,
-    idx_episodes_published_at)의 조건을 여전히 만족한다 - 플래너가 계속 인덱스를 탄다.
+    is_published = true를 그대로 포함하므로 partial 인덱스(idx_episodes_published)의
+    조건을 여전히 만족한다 - 플래너가 계속 인덱스를 탄다. (idx_episodes_published_at은
+    소비처가 없어 E3에서 제거됨 - 독자 목록은 sort_order로만 정렬한다.)
     """
     return [Episode.is_published.is_(True), Episode.deleted_at.is_(None)]
 
@@ -96,6 +97,7 @@ def _to_episode_summary(
         is_purchased=False,  # M2는 결제 없음(M3에서 실제 구매 여부로 대체)
         # 실효가 계산은 여기(서버) 한 곳 - episodes.price NULL이면 작품 기준가(models/work.py).
         price=None if ep.is_free else (ep.price if ep.price is not None else base_price),
+        first_published_at=ep.first_published_at,
     )
 
 
