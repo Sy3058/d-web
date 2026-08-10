@@ -241,6 +241,37 @@ async def test_detail_episode_free_locked_purchased_flags(
     assert episodes[locked_ep.public_id]["is_purchased"] is False
 
 
+async def test_detail_episode_exposes_first_published_at(
+    async_client: AsyncClient, db_session: AsyncSession, user: User
+):
+    # E3: 목록 표시용 날짜는 published_at이 아니라 first_published_at에서 온다 -
+    # 둘을 다른 값으로 심어 필드가 실제로 first_published_at을 읽는지 판별력 있게 확인.
+    work = await _make_work(db_session, user)
+    first = datetime(2026, 1, 1, tzinfo=UTC)
+    latest = datetime(2026, 8, 1, tzinfo=UTC)
+    ep = await _make_episode(db_session, work, published_at=latest, first_published_at=first)
+
+    resp = await async_client.get(f"{WORKS_URL}/{work.id}")
+    body = resp.json()["episodes"][0]
+    assert body["public_id"] == ep.public_id
+    assert datetime.fromisoformat(body["first_published_at"]) == first
+
+
+async def test_detail_episode_first_published_at_null_when_unset(
+    async_client: AsyncClient, db_session: AsyncSession, user: User
+):
+    # 정상 쓰기 경로(episode_service)를 거치면 공개 회차는 항상 first_published_at이
+    # 스탬프되지만, ORM 직접 생성(이 테스트 파일의 방식)으로는 그 불변식이 강제되지
+    # 않는 상태도 만들 수 있다 - API가 이런 케이스에서도 500 없이 null을 그대로 반환하는지
+    # 방어적으로 확인(백필 사각지대와 같은 모양의 데이터).
+    work = await _make_work(db_session, user)
+    await _make_episode(db_session, work)
+
+    resp = await async_client.get(f"{WORKS_URL}/{work.id}")
+    body = resp.json()["episodes"][0]
+    assert body["first_published_at"] is None
+
+
 async def test_detail_episode_thumbnail_url_from_public_bucket(
     async_client: AsyncClient, db_session: AsyncSession, user: User, monkeypatch
 ):
