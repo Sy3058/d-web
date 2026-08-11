@@ -5,10 +5,12 @@
 """
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest_asyncio
 from httpx import AsyncClient
+from sqlalchemy import event
+from sqlalchemy.ext.asyncio import AsyncEngine
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -22,6 +24,31 @@ INT32_MAX = 2_147_483_647
 
 def _progress_url(episode_id: uuid.UUID | str) -> str:
     return f"/episodes/{episode_id}/progress"
+
+
+def _work_progress_url(work_id: uuid.UUID | str) -> str:
+    return f"/works/{work_id}/progress"
+
+
+async def _save_progress(
+    db_session: AsyncSession,
+    user: User,
+    episode_id: uuid.UUID,
+    *,
+    updated_at: datetime,
+    progress_id: uuid.UUID | None = None,
+) -> ViewerProgress:
+    progress = ViewerProgress(
+        id=progress_id,
+        user_id=user.id,
+        episode_id=episode_id,
+        page_no=1,
+        updated_at=updated_at,
+    )
+    db_session.add(progress)
+    await db_session.commit()
+    await db_session.refresh(progress)
+    return progress
 
 
 async def _authed(client: AsyncClient, user: User) -> None:
@@ -241,6 +268,187 @@ async def test_missing_progress_message_differs_from_missing_episode(
 
     assert no_progress.status_code == no_episode.status_code == 404
     assert no_progress.json()["detail"] != no_episode.json()["detail"]
+
+
+# ---------------------------------------------------------------------------
+# GET /works/{work_id}/progress - 작품 단위 진행도 (M2 E4)
+# ---------------------------------------------------------------------------
+
+
+async def test_get_work_progress_requires_login(
+    async_client: AsyncClient, db_session: AsyncSession, user: User
+):
+    work = await make_work(db_session, user)
+
+    resp = await async_client.get(_work_progress_url(work.id))
+
+    assert resp.status_code == 401
+
+
+async def test_get_work_progress_returns_empty_state(
+    async_client: AsyncClient, db_session: AsyncSession, user: User
+):
+    work = await make_work(db_session, user)
+    await _authed(async_client, user)
+
+    resp = await async_client.get(_work_progress_url(work.id))
+
+    assert resp.status_code == 200
+    assert resp.json() == {"read_episode_ids": [], "last_episode": None}
+    assert resp.headers["cache-control"] == "no-store"
+
+
+async def test_get_work_progress_rejects_unavailable_work(
+    async_client: AsyncClient, db_session: AsyncSession, user: User
+):
+    unpublished = await make_work(db_session, user, is_published=False)
+    deleted = await make_work(db_session, user, deleted_at=datetime.now(UTC))
+    await _authed(async_client, user)
+
+    for work_id in (unpublished.id, deleted.id, uuid.uuid4()):
+        resp = await async_client.get(_work_progress_url(work_id))
+        assert resp.status_code == 404
+        assert resp.headers["cache-control"] == "no-store"
+
+
+async def test_get_work_progress_returns_all_read_episodes_and_latest(
+    async_client: AsyncClient, db_session: AsyncSession, user: User
+):
+    work = await make_work(db_session, user)
+    older = await make_episode(db_session, work)
+    latest = await make_episode(db_session, work)
+    now = datetime.now(UTC)
+    await _save_progress(db_session, user, older.id, updated_at=now - timedelta(minutes=1))
+    await _save_progress(db_session, user, latest.id, updated_at=now)
+    await _authed(async_client, user)
+
+    resp = await async_client.get(_work_progress_url(work.id))
+
+    assert resp.status_code == 200
+    assert resp.json() == {
+        "read_episode_ids": [str(latest.id), str(older.id)],
+        "last_episode": {"id": str(latest.id), "public_id": latest.public_id},
+    }
+    assert "page_no" not in resp.text
+
+
+async def test_get_work_progress_tie_breaks_by_progress_id(
+    async_client: AsyncClient, db_session: AsyncSession, user: User
+):
+    work = await make_work(db_session, user)
+    lower = await make_episode(db_session, work)
+    higher = await make_episode(db_session, work)
+    same_time = datetime.now(UTC)
+    await _save_progress(
+        db_session,
+        user,
+        lower.id,
+        updated_at=same_time,
+        progress_id=uuid.UUID(int=1),
+    )
+    await _save_progress(
+        db_session,
+        user,
+        higher.id,
+        updated_at=same_time,
+        progress_id=uuid.UUID(int=2),
+    )
+    await _authed(async_client, user)
+
+    resp = await async_client.get(_work_progress_url(work.id))
+
+    assert resp.status_code == 200
+    assert resp.json()["last_episode"] == {
+        "id": str(higher.id),
+        "public_id": higher.public_id,
+    }
+
+
+async def test_get_work_progress_isolates_user_and_work(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+    user: User,
+    other_user: User,
+):
+    target_work = await make_work(db_session, user)
+    own_episode = await make_episode(db_session, target_work)
+    other_work = await make_work(db_session, user)
+    other_work_episode = await make_episode(db_session, other_work)
+    now = datetime.now(UTC)
+    await _save_progress(db_session, user, own_episode.id, updated_at=now)
+    await _save_progress(db_session, user, other_work_episode.id, updated_at=now)
+    await _save_progress(db_session, other_user, own_episode.id, updated_at=now)
+    await _authed(async_client, user)
+
+    resp = await async_client.get(_work_progress_url(target_work.id))
+
+    assert resp.status_code == 200
+    assert resp.json()["read_episode_ids"] == [str(own_episode.id)]
+
+
+async def test_get_work_progress_excludes_unavailable_episodes(
+    async_client: AsyncClient, db_session: AsyncSession, user: User
+):
+    work = await make_work(db_session, user)
+    visible = await make_episode(db_session, work)
+    unpublished = await make_episode(db_session, work, is_published=False)
+    deleted = await make_episode(
+        db_session,
+        work,
+        is_published=True,
+        deleted_at=datetime.now(UTC),
+    )
+    now = datetime.now(UTC)
+    await _save_progress(db_session, user, visible.id, updated_at=now - timedelta(minutes=2))
+    await _save_progress(db_session, user, unpublished.id, updated_at=now - timedelta(minutes=1))
+    await _save_progress(db_session, user, deleted.id, updated_at=now)
+    await _authed(async_client, user)
+
+    resp = await async_client.get(_work_progress_url(work.id))
+
+    assert resp.status_code == 200
+    assert resp.json() == {
+        "read_episode_ids": [str(visible.id)],
+        "last_episode": {"id": str(visible.id), "public_id": visible.public_id},
+    }
+
+
+async def test_get_work_progress_query_starts_from_saved_progress(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+    test_engine: AsyncEngine,
+    user: User,
+):
+    """미열람 공개 회차를 LEFT JOIN으로 전량 materialize한 성능 회귀를 막는다."""
+    work = await make_work(db_session, user)
+    read = await make_episode(db_session, work)
+    for index in range(12):
+        await make_episode(db_session, work, title=f"미열람 {index}")
+    await _save_progress(db_session, user, read.id, updated_at=datetime.now(UTC))
+    await _authed(async_client, user)
+
+    statements: list[str] = []
+
+    def capture_statement(_conn, _cursor, statement, _parameters, _context, _executemany):
+        statements.append(" ".join(statement.lower().split()))
+
+    event.listen(test_engine.sync_engine, "before_cursor_execute", capture_statement)
+    try:
+        resp = await async_client.get(_work_progress_url(work.id))
+    finally:
+        event.remove(test_engine.sync_engine, "before_cursor_execute", capture_statement)
+
+    assert resp.status_code == 200
+    assert resp.json()["read_episode_ids"] == [str(read.id)]
+
+    progress_selects = [
+        statement
+        for statement in statements
+        if statement.startswith("select") and "viewer_progress" in statement
+    ]
+    assert len(progress_selects) == 1
+    assert "from viewer_progress join episodes" in progress_selects[0]
+    assert "left outer join" not in progress_selects[0]
 
 
 # ---------------------------------------------------------------------------

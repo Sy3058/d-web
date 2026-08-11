@@ -22,6 +22,16 @@ class ProgressRead(BaseModel):
     updated_at: datetime
 
 
+class LastReadEpisode(BaseModel):
+    id: uuid.UUID
+    public_id: int
+
+
+class WorkProgressRead(BaseModel):
+    read_episode_ids: list[uuid.UUID]
+    last_episode: LastReadEpisode | None
+
+
 class EpisodeContent(BaseModel):
     """무료 구간 본문 응답 (M2 B2). 회차 메타·네비는 GET /works/{id}(A2)가 담당한다."""
 
