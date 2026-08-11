@@ -5,7 +5,7 @@
 | 모듈 | Backend / Commission |
 | 관련 마일스톤 | [M2](../../../milestones/M2_foundation.md) 그룹 G (2026-07-29 카드 모델 재정의) |
 | 작성 시점 | M2 G PR1 (2026-07-29) |
-| 상태 | 구현 + Opus 코드 리뷰(Critical 0 / Major 2 / Minor 3 - 코드 반영분 전부 처리, 뮤테이션 3건 red 실증). `pytest` 451 passed(신규 22), ruff·`alembic check` 클린. **DB 마이그레이션 1개**(테이블 2: commission_items·site_texts) |
+| 상태 | 구현 + 코드 리뷰 반영. PR2 머지 전 리뷰에서 컬렉션 벌크 재정렬과 서버 `sort_order` 배정을 추가(커미션 24 / 전체 backend 466 passed, 변경 범위 ruff 클린). **DB 마이그레이션 1개**(기존 테이블 2: commission_items·site_texts, PR2 추가 migration 없음) |
 | 관련 문서 | DB_SCHEMA.md §2 commission_items·site_texts, M2_foundation.md 그룹 G, DECISIONS "랜딩 페이지 구성 + 커미션 단계 분리" |
 
 크레페식 커미션 홍보 카드(제목·가격/기간 자유문자열·샘플 이미지·슬롯 마감)와 작가가 admin에서 편집하는 사이트 문구(랜딩 소개·커미션 유의사항)의 백엔드. **작가는 리포에 접근할 수 없다**는 사실이 세션 중 확인돼 원래 결정 4(마크다운 content collection)를 폐기하고 DB + admin 편집으로 재설계했다(경위·council 리뷰는 M2_foundation 그룹 G 절에 반영 예정 - PR4).
@@ -18,17 +18,18 @@
 |------|------|
 | `backend/src/models/commission.py` | `CommissionItem` / `SiteTextKey`(StrEnum) / `SiteText` |
 | `backend/migrations/versions/20260728_1728_commission_items_and_site_texts.py` | 테이블 2개 (리비전 `7f25d827c9ab`) |
-| `backend/src/schemas/commission.py` | admin Create/Update/Read(+`sample_images` key·URL 쌍) / 공개 `PublicCommissionItem`(URL만) / `SiteTextRead`·`SiteTextUpdate` |
-| `backend/src/services/commission_service.py` | CRUD·원자 append·삭제분 공개 버킷 정리·ON CONFLICT upsert |
-| `backend/src/routers/admin_commission.py` | owner 전용 7개 엔드포인트 |
+| `backend/src/schemas/commission.py` | admin Create/Update/Reorder/Read(+`sample_images` key·URL 쌍) / 공개 `PublicCommissionItem`(URL만) / `SiteTextRead`·`SiteTextUpdate` |
+| `backend/src/services/commission_service.py` | CRUD·벌크 재정렬·원자 append·삭제분 공개 버킷 정리·ON CONFLICT upsert |
+| `backend/src/routers/admin_commission.py` | owner 전용 8개 엔드포인트 |
 | `backend/src/routers/commission.py` | 공개 2개 엔드포인트 |
 | `backend/src/lib/exceptions.py` | `CommissionConflictError`(409)·`CommissionValidationError`(422) 추가 |
 | `backend/src/services/r2_service.py` | `commission_sample_key()` 추가 |
-| `backend/tests/test_commission.py` | 22케이스 |
+| `backend/tests/test_commission.py` | 24케이스 |
 
 | 엔드포인트 | 인증 | 역할 |
 |-----------|------|------|
 | `GET/POST /admin/commission-items` | owner | 목록(sort_order순)·생성 |
+| `PUT /admin/commission-items` | owner | 카드 전량 ID 순서로 sort_order 원자 재배정 |
 | `PUT/DELETE /admin/commission-items/{id}` | owner | 부분수정(매니페스트 축소 포함)·하드 삭제 |
 | `POST /admin/commission-items/{id}/images` | owner | 샘플 1장 업로드(변환→공개 버킷→원자 append) |
 | `GET/PUT /admin/site-texts/{key}` | owner | 문구 조회(행 없음=빈 기본값)·upsert |
@@ -55,7 +56,7 @@
 `PublicCommissionItem`은 `sample_image_urls`(공개 URL 배열)만 싣는다. 공개 버킷이라 보안 목적이 아니라 "독자 응답에 R2 키 부재"(B2 계약)와 표면을 일치시키는 목적. admin 응답은 반대로 `sample_image_keys`(재배열 PUT용)와 `sample_images[]`(key·URL 쌍 - 렌더용)를 함께 싣는다 - **PR2 인계 계약: 재배열·삭제 PUT은 `sample_image_keys` 기준, 렌더는 `sample_images` 기준**(리뷰 FYI).
 
 ### 동시성: last-write-wins + append만 원자화
-작가 1인이라 낙관적 잠금은 두지 않는다(계획 v2 확정). 단 샘플 append는 `episode_service.append_image`의 조건부 UPDATE(`jsonb_array_length == expected_len AND < 상한`)를 복제해 원자화 - 덮어쓰기는 되돌릴 수 있지만 매니페스트에서 유실된 키는 미참조 파일로 남기 때문.
+작가 1인이라 일반 메타 수정에는 낙관적 잠금을 두지 않는다. 샘플 append는 조건부 UPDATE로 원자화한다. 카드 순서는 컬렉션 전체의 속성이므로 전량 ID 집합 검사를 낙관적 동시성 검사로 사용하고 한 트랜잭션에서 `1..N`으로 재배정한다. 생성·개별 수정 입력에는 `sort_order`를 노출하지 않고 생성 시 서버가 max+1을 배정한다.
 
 ---
 

@@ -37,6 +37,12 @@ function Dashboard() {
       <Link to="/episodes/new" className="text-blue-600 hover:underline">
         새 에피소드
       </Link>
+      <Link to="/commission" className="text-blue-600 hover:underline">
+        커미션 관리
+      </Link>
+      <Link to="/site-texts" className="text-blue-600 hover:underline">
+        사이트 문구 편집
+      </Link>
       <button
         onClick={handleLogout}
         disabled={logout.isPending}
