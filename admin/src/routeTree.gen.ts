@@ -12,9 +12,13 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthRouteImport } from './routes/_auth'
 import { Route as AuthIndexRouteImport } from './routes/_auth/index'
+import { Route as AuthSiteTextsRouteImport } from './routes/_auth/site-texts'
 import { Route as AuthWorksIndexRouteImport } from './routes/_auth/works/index'
+import { Route as AuthCommissionIndexRouteImport } from './routes/_auth/commission/index'
 import { Route as AuthWorksNewRouteImport } from './routes/_auth/works/new'
 import { Route as AuthEpisodesNewRouteImport } from './routes/_auth/episodes/new'
+import { Route as AuthCommissionNewRouteImport } from './routes/_auth/commission/new'
+import { Route as AuthCommissionItemIdRouteImport } from './routes/_auth/commission/$itemId'
 import { Route as AuthWorksWorkIdIndexRouteImport } from './routes/_auth/works/$workId/index'
 import { Route as AuthWorksWorkIdEpisodesIndexRouteImport } from './routes/_auth/works/$workId/episodes/index'
 import { Route as AuthWorksWorkIdEpisodesUploadRouteImport } from './routes/_auth/works/$workId/episodes/upload'
@@ -34,9 +38,19 @@ const AuthIndexRoute = AuthIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AuthRoute,
 } as any)
+const AuthSiteTextsRoute = AuthSiteTextsRouteImport.update({
+  id: '/site-texts',
+  path: '/site-texts',
+  getParentRoute: () => AuthRoute,
+} as any)
 const AuthWorksIndexRoute = AuthWorksIndexRouteImport.update({
   id: '/works/',
   path: '/works/',
+  getParentRoute: () => AuthRoute,
+} as any)
+const AuthCommissionIndexRoute = AuthCommissionIndexRouteImport.update({
+  id: '/commission/',
+  path: '/commission/',
   getParentRoute: () => AuthRoute,
 } as any)
 const AuthWorksNewRoute = AuthWorksNewRouteImport.update({
@@ -47,6 +61,16 @@ const AuthWorksNewRoute = AuthWorksNewRouteImport.update({
 const AuthEpisodesNewRoute = AuthEpisodesNewRouteImport.update({
   id: '/episodes/new',
   path: '/episodes/new',
+  getParentRoute: () => AuthRoute,
+} as any)
+const AuthCommissionNewRoute = AuthCommissionNewRouteImport.update({
+  id: '/commission/new',
+  path: '/commission/new',
+  getParentRoute: () => AuthRoute,
+} as any)
+const AuthCommissionItemIdRoute = AuthCommissionItemIdRouteImport.update({
+  id: '/commission/$itemId',
+  path: '/commission/$itemId',
   getParentRoute: () => AuthRoute,
 } as any)
 const AuthWorksWorkIdIndexRoute = AuthWorksWorkIdIndexRouteImport.update({
@@ -76,8 +100,12 @@ const AuthWorksWorkIdEpisodesEpisodeIdRoute =
 export interface FileRoutesByFullPath {
   '/': typeof AuthIndexRoute
   '/login': typeof LoginRoute
+  '/site-texts': typeof AuthSiteTextsRoute
+  '/commission/$itemId': typeof AuthCommissionItemIdRoute
+  '/commission/new': typeof AuthCommissionNewRoute
   '/episodes/new': typeof AuthEpisodesNewRoute
   '/works/new': typeof AuthWorksNewRoute
+  '/commission/': typeof AuthCommissionIndexRoute
   '/works/': typeof AuthWorksIndexRoute
   '/works/$workId/': typeof AuthWorksWorkIdIndexRoute
   '/works/$workId/episodes/$episodeId': typeof AuthWorksWorkIdEpisodesEpisodeIdRoute
@@ -86,9 +114,13 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
+  '/site-texts': typeof AuthSiteTextsRoute
   '/': typeof AuthIndexRoute
+  '/commission/$itemId': typeof AuthCommissionItemIdRoute
+  '/commission/new': typeof AuthCommissionNewRoute
   '/episodes/new': typeof AuthEpisodesNewRoute
   '/works/new': typeof AuthWorksNewRoute
+  '/commission': typeof AuthCommissionIndexRoute
   '/works': typeof AuthWorksIndexRoute
   '/works/$workId': typeof AuthWorksWorkIdIndexRoute
   '/works/$workId/episodes/$episodeId': typeof AuthWorksWorkIdEpisodesEpisodeIdRoute
@@ -99,9 +131,13 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_auth': typeof AuthRouteWithChildren
   '/login': typeof LoginRoute
+  '/_auth/site-texts': typeof AuthSiteTextsRoute
   '/_auth/': typeof AuthIndexRoute
+  '/_auth/commission/$itemId': typeof AuthCommissionItemIdRoute
+  '/_auth/commission/new': typeof AuthCommissionNewRoute
   '/_auth/episodes/new': typeof AuthEpisodesNewRoute
   '/_auth/works/new': typeof AuthWorksNewRoute
+  '/_auth/commission/': typeof AuthCommissionIndexRoute
   '/_auth/works/': typeof AuthWorksIndexRoute
   '/_auth/works/$workId/': typeof AuthWorksWorkIdIndexRoute
   '/_auth/works/$workId/episodes/$episodeId': typeof AuthWorksWorkIdEpisodesEpisodeIdRoute
@@ -113,8 +149,12 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/login'
+    | '/site-texts'
+    | '/commission/$itemId'
+    | '/commission/new'
     | '/episodes/new'
     | '/works/new'
+    | '/commission/'
     | '/works/'
     | '/works/$workId/'
     | '/works/$workId/episodes/$episodeId'
@@ -123,9 +163,13 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/login'
+    | '/site-texts'
     | '/'
+    | '/commission/$itemId'
+    | '/commission/new'
     | '/episodes/new'
     | '/works/new'
+    | '/commission'
     | '/works'
     | '/works/$workId'
     | '/works/$workId/episodes/$episodeId'
@@ -135,9 +179,13 @@ export interface FileRouteTypes {
     | '__root__'
     | '/_auth'
     | '/login'
+    | '/_auth/site-texts'
     | '/_auth/'
+    | '/_auth/commission/$itemId'
+    | '/_auth/commission/new'
     | '/_auth/episodes/new'
     | '/_auth/works/new'
+    | '/_auth/commission/'
     | '/_auth/works/'
     | '/_auth/works/$workId/'
     | '/_auth/works/$workId/episodes/$episodeId'
@@ -173,11 +221,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthIndexRouteImport
       parentRoute: typeof AuthRoute
     }
+    '/_auth/site-texts': {
+      id: '/_auth/site-texts'
+      path: '/site-texts'
+      fullPath: '/site-texts'
+      preLoaderRoute: typeof AuthSiteTextsRouteImport
+      parentRoute: typeof AuthRoute
+    }
     '/_auth/works/': {
       id: '/_auth/works/'
       path: '/works'
       fullPath: '/works/'
       preLoaderRoute: typeof AuthWorksIndexRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/commission/': {
+      id: '/_auth/commission/'
+      path: '/commission'
+      fullPath: '/commission/'
+      preLoaderRoute: typeof AuthCommissionIndexRouteImport
       parentRoute: typeof AuthRoute
     }
     '/_auth/works/new': {
@@ -192,6 +254,20 @@ declare module '@tanstack/react-router' {
       path: '/episodes/new'
       fullPath: '/episodes/new'
       preLoaderRoute: typeof AuthEpisodesNewRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/commission/new': {
+      id: '/_auth/commission/new'
+      path: '/commission/new'
+      fullPath: '/commission/new'
+      preLoaderRoute: typeof AuthCommissionNewRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/commission/$itemId': {
+      id: '/_auth/commission/$itemId'
+      path: '/commission/$itemId'
+      fullPath: '/commission/$itemId'
+      preLoaderRoute: typeof AuthCommissionItemIdRouteImport
       parentRoute: typeof AuthRoute
     }
     '/_auth/works/$workId/': {
@@ -226,9 +302,13 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthRouteChildren {
+  AuthSiteTextsRoute: typeof AuthSiteTextsRoute
   AuthIndexRoute: typeof AuthIndexRoute
+  AuthCommissionItemIdRoute: typeof AuthCommissionItemIdRoute
+  AuthCommissionNewRoute: typeof AuthCommissionNewRoute
   AuthEpisodesNewRoute: typeof AuthEpisodesNewRoute
   AuthWorksNewRoute: typeof AuthWorksNewRoute
+  AuthCommissionIndexRoute: typeof AuthCommissionIndexRoute
   AuthWorksIndexRoute: typeof AuthWorksIndexRoute
   AuthWorksWorkIdIndexRoute: typeof AuthWorksWorkIdIndexRoute
   AuthWorksWorkIdEpisodesEpisodeIdRoute: typeof AuthWorksWorkIdEpisodesEpisodeIdRoute
@@ -237,9 +317,13 @@ interface AuthRouteChildren {
 }
 
 const AuthRouteChildren: AuthRouteChildren = {
+  AuthSiteTextsRoute: AuthSiteTextsRoute,
   AuthIndexRoute: AuthIndexRoute,
+  AuthCommissionItemIdRoute: AuthCommissionItemIdRoute,
+  AuthCommissionNewRoute: AuthCommissionNewRoute,
   AuthEpisodesNewRoute: AuthEpisodesNewRoute,
   AuthWorksNewRoute: AuthWorksNewRoute,
+  AuthCommissionIndexRoute: AuthCommissionIndexRoute,
   AuthWorksIndexRoute: AuthWorksIndexRoute,
   AuthWorksWorkIdIndexRoute: AuthWorksWorkIdIndexRoute,
   AuthWorksWorkIdEpisodesEpisodeIdRoute: AuthWorksWorkIdEpisodesEpisodeIdRoute,

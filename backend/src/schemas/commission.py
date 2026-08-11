@@ -18,8 +18,6 @@ SHORT_TEXT_MAX = 100
 # 플레인 텍스트 상한(Text 컬럼 무한 입력 차단 - DoS 방어). 소개·유의사항 용도로 넉넉.
 DESCRIPTION_MAX = 2_000
 SITE_TEXT_MAX = 10_000
-# sort_order 상한 = int32 (하한만 걸면 초과 값이 DB에서 500 - MISTAKES 정수 상한 규칙).
-_INT32_MAX = 2_147_483_647
 
 
 class CommissionItemCreate(BaseModel):
@@ -29,7 +27,6 @@ class CommissionItemCreate(BaseModel):
     price_text: str = Field(min_length=1, max_length=SHORT_TEXT_MAX)
     duration_text: str | None = Field(default=None, max_length=SHORT_TEXT_MAX)
     is_open: bool = True
-    sort_order: int = Field(default=0, ge=0, le=_INT32_MAX)
     # sample_image_keys는 생성 입력에 없다 - 업로드 엔드포인트가 append하는 매니페스트라
     # 여기 열면 임의 키 주입 통로가 된다(EpisodeCreate가 thumbnail을 빼는 것과 같은 이유).
 
@@ -44,11 +41,10 @@ class CommissionItemUpdate(BaseModel):
     price_text: str | None = Field(default=None, min_length=1, max_length=SHORT_TEXT_MAX)
     duration_text: str | None = Field(default=None, max_length=SHORT_TEXT_MAX)
     is_open: bool | None = None
-    sort_order: int | None = Field(default=None, ge=0, le=_INT32_MAX)
     sample_image_keys: list[str] | None = None
 
     # WorkUpdate와 같은 규칙: `X | None`의 None은 "생략" 표현이지 null 대입 허용이 아니다.
-    _NON_NULLABLE = frozenset({"title", "price_text", "is_open", "sort_order", "sample_image_keys"})
+    _NON_NULLABLE = frozenset({"title", "price_text", "is_open", "sample_image_keys"})
 
     @model_validator(mode="after")
     def _reject_explicit_null(self) -> "CommissionItemUpdate":
@@ -56,6 +52,16 @@ class CommissionItemUpdate(BaseModel):
             if getattr(self, name) is None:
                 raise ValueError(f"{name}에는 null을 지정할 수 없습니다 (생략 = 미변경)")
         return self
+
+
+class CommissionItemReorder(BaseModel):
+    """카드 재배열 - 카드 전량을 원하는 순서로 나열한 id 목록.
+
+    개별 create/update에는 sort_order를 노출하지 않는다. 순서는 컬렉션 전체의 속성이며,
+    전량 집합 검사가 다른 탭의 추가·삭제를 감지하는 낙관적 동시성 검사 역할을 한다.
+    """
+
+    item_ids: list[uuid.UUID] = Field(min_length=1)
 
 
 class CommissionSampleImage(BaseModel):

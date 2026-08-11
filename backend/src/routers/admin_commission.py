@@ -25,6 +25,7 @@ from src.models.user import User
 from src.schemas.commission import (
     AdminCommissionItemRead,
     CommissionItemCreate,
+    CommissionItemReorder,
     CommissionItemUpdate,
     SiteTextRead,
     SiteTextUpdate,
@@ -65,6 +66,17 @@ async def create_commission_item(
     body: CommissionItemCreate, owner: OwnerDep, session: SessionDep
 ) -> CommissionItem:
     return await commission_service.create_item(body, session)
+
+
+@router.put("/commission-items", response_model=list[AdminCommissionItemRead])
+async def reorder_commission_items(
+    body: CommissionItemReorder, owner: OwnerDep, session: SessionDep
+) -> list[CommissionItem]:
+    """카드 전량을 원하는 순서로 받아 한 트랜잭션에서 1..N으로 재배정한다."""
+    try:
+        return list(await commission_service.reorder_items(body.item_ids, session))
+    except CommissionConflictError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
 
 
 @router.put("/commission-items/{item_id}", response_model=AdminCommissionItemRead)

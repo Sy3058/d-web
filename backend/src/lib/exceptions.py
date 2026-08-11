@@ -71,7 +71,8 @@ class EpisodeValidationError(ValueError):
 class CommissionConflictError(Exception):
     """커미션 카드 상태 충돌 (router → 409) - M2 그룹 G.
 
-    샘플 이미지 append 경합(조건부 UPDATE rowcount=0)·카드당 장수 상한 도달.
+    샘플 이미지 append 경합(조건부 UPDATE rowcount=0)·카드당 장수 상한 도달·
+    재배열 요청의 카드 집합 불일치.
     EpisodeConflictError와 같은 성질 - 재시도하면 해소되는 충돌.
     """
 

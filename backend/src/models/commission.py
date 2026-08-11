@@ -69,7 +69,7 @@ class CommissionItem(SQLModel, table=True):
         default=True,
         sa_column=Column(Boolean, nullable=False, server_default=text("true")),
     )
-    # 공개 목록 정렬 키(오름차순). 재배열은 admin PUT이 항목별로 갱신한다.
+    # 공개 목록 정렬 키(오름차순). 생성 시 서버가 max+1, 재배열은 컬렉션 PUT이 1..N으로 갱신한다.
     sort_order: int = Field(
         default=0,
         sa_column=Column(Integer, nullable=False, server_default=text("0")),

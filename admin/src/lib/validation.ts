@@ -64,3 +64,36 @@ export const episodePublishSchema = z
   });
 
 export type EpisodePublishInput = z.infer<typeof episodePublishSchema>;
+
+// 백엔드 schemas/commission.py·commission_service.py 상수와 같은 값
+// (TITLE_MAX·SHORT_TEXT_MAX·DESCRIPTION_MAX·MAX_SAMPLES_PER_ITEM).
+export const COMMISSION_TITLE_MAX = 200;
+export const COMMISSION_SHORT_TEXT_MAX = 100;
+export const COMMISSION_DESCRIPTION_MAX = 2000;
+export const SITE_TEXT_MAX = 10_000;
+// 등록 화면(로컬 스테이징)·수정 화면(SampleImageManager) 둘 다 이 값을 참조한다 - 한쪽만
+// 고치면 두 화면의 상한이 갈라진다.
+export const MAX_SAMPLES_PER_ITEM = 10;
+
+// description·duration_text는 서버에서 nullable이지만 min_length가 없어 빈 문자열도
+// 유효하다(WorkForm의 synopsis와 같은 이유로 null 변환을 생략 - 값이 있으나 비어 있으나
+// 서버 검증·표시 의미가 동일). sort_order는 폼에 없다(목록 ▲▼ 이동이 별도로 관리).
+export const commissionItemSchema = z.object({
+  title: z
+    .string()
+    .min(1, '제목을 입력해 주세요.')
+    .max(COMMISSION_TITLE_MAX, `제목은 ${COMMISSION_TITLE_MAX}자 이하여야 합니다.`),
+  description: z
+    .string()
+    .max(COMMISSION_DESCRIPTION_MAX, `소개는 ${COMMISSION_DESCRIPTION_MAX}자 이하여야 합니다.`),
+  price_text: z
+    .string()
+    .min(1, '가격 표기를 입력해 주세요.')
+    .max(COMMISSION_SHORT_TEXT_MAX, `가격 표기는 ${COMMISSION_SHORT_TEXT_MAX}자 이하여야 합니다.`),
+  duration_text: z
+    .string()
+    .max(COMMISSION_SHORT_TEXT_MAX, `소요 기간은 ${COMMISSION_SHORT_TEXT_MAX}자 이하여야 합니다.`),
+  is_open: z.boolean(),
+});
+
+export type CommissionItemInput = z.infer<typeof commissionItemSchema>;

@@ -35,6 +35,7 @@ logger = structlog.get_logger(__name__)
 MAX_SAMPLES_PER_ITEM = 10
 
 _STALE_ITEM = "커미션 카드가 다른 요청으로 먼저 변경되었습니다 - 새로고침 후 다시 시도하세요"
+_REORDER_SET_MISMATCH = "목록이 바뀌었습니다(카드 추가·삭제) - 새로고침 후 다시 정렬해 주세요"
 
 
 async def list_items(session: AsyncSession) -> Sequence[CommissionItem]:
@@ -50,10 +51,40 @@ async def get_item(item_id: uuid.UUID, session: AsyncSession) -> CommissionItem 
 
 
 async def create_item(body: CommissionItemCreate, session: AsyncSession) -> CommissionItem:
-    item = CommissionItem(**body.model_dump())
+    order_stmt = select(func.coalesce(func.max(CommissionItem.sort_order), 0))
+    next_sort_order = (await session.exec(order_stmt)).one() + 1
+    item = CommissionItem(**body.model_dump(), sort_order=next_sort_order)
     session.add(item)
     await session.commit()
     return item
+
+
+async def reorder_items(
+    item_ids: Sequence[uuid.UUID], session: AsyncSession
+) -> Sequence[CommissionItem]:
+    """요청 순서대로 sort_order를 1..N으로 원자 재배정한다.
+
+    카드 전량과 정확히 같은 집합만 받는다. 부분 목록을 적용하면 다른 탭에서 추가·삭제된
+    카드를 stale한 화면이 조용히 밀어낼 수 있으므로 집합 불일치는 409 충돌이다.
+    """
+    current = await list_items(session)
+    requested = list(item_ids)
+    if len(requested) != len(set(requested)) or set(requested) != {item.id for item in current}:
+        raise CommissionConflictError(_REORDER_SET_MISMATCH)
+
+    for position, item_id in enumerate(requested, start=1):
+        await session.exec(
+            update(CommissionItem)
+            .where(CommissionItem.id == item_id)
+            .values(sort_order=position)
+            .execution_options(synchronize_session=False)
+        )
+    await session.commit()
+    # bulk UPDATE는 identity map의 기존 인스턴스를 갱신하지 않고, 이 세션은 commit 후에도
+    # 만료되지 않는다. 재조회 응답에 옛 sort_order가 섞이지 않게 한 번에 만료한다.
+    for item in current:
+        session.expire(item)
+    return await list_items(session)
 
 
 def _validate_samples(current: list[str], new: list[str]) -> None:

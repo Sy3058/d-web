@@ -31,3 +31,15 @@ export type EpisodeImageUrl = components['schemas']['EpisodeImageUrl'];
 // 본문(TipTap/ProseMirror JSON 문서). 백엔드 content는 dict[str, Any]라 codegen이
 // 열린 레코드로 뽑는다 - 에디터는 TipTap의 JSONContent로 다루므로 경계에서 캐스팅한다.
 export type ContentDoc = components['schemas']['AdminEpisodeRead']['content'];
+
+// PR2 인계 계약(IMPLEMENTATION_COMMISSION_API.md): 재배열·삭제 PUT은 sample_image_keys 기준,
+// 렌더는 sample_images(key·URL 쌍) 기준.
+export type CommissionItem = components['schemas']['AdminCommissionItemRead'];
+export type CommissionItemCreate = components['schemas']['CommissionItemCreate'];
+export type CommissionItemReorder = components['schemas']['CommissionItemReorder'];
+export type CommissionItemUpdate = components['schemas']['CommissionItemUpdate'];
+export type CommissionSampleImage = components['schemas']['CommissionSampleImage'];
+
+export type SiteTextKey = components['schemas']['SiteTextKey'];
+export type SiteText = components['schemas']['SiteTextRead'];
+export type SiteTextUpdate = components['schemas']['SiteTextUpdate'];

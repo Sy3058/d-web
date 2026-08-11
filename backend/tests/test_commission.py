@@ -108,6 +108,7 @@ async def test_admin_reader_forbidden_403(async_client: AsyncClient, existing_us
     for method, url, kwargs in [
         ("get", ITEMS_URL, {}),
         ("post", ITEMS_URL, {"json": {"title": "x", "price_text": "y"}}),
+        ("put", ITEMS_URL, {"json": {"item_ids": [dummy]}}),
         ("put", f"{ITEMS_URL}/{dummy}", {"json": {"title": "x"}}),
         ("delete", f"{ITEMS_URL}/{dummy}", {}),
         ("post", f"{ITEMS_URL}/{dummy}/images", {"files": {"image": ("s.png", b"x", "image/png")}}),
@@ -126,7 +127,7 @@ async def test_admin_reader_forbidden_403(async_client: AsyncClient, existing_us
 async def test_create_item_defaults(owner_client: AsyncClient):
     body = await _create_item(owner_client)
     assert body["is_open"] is True
-    assert body["sort_order"] == 0
+    assert body["sort_order"] == 1
     assert body["sample_image_keys"] == []
     assert body["sample_images"] == []
     assert body["description"] is None
@@ -158,12 +159,42 @@ async def test_update_item_explicit_null_422(owner_client: AsyncClient):
     assert resp.status_code == 422
 
 
-async def test_list_items_sorted(owner_client: AsyncClient):
-    for order, title in [(2, "셋째"), (0, "첫째"), (1, "둘째")]:
-        await _create_item(owner_client, title=title, sort_order=order)
+async def test_create_item_assigns_incrementing_sort_order(owner_client: AsyncClient):
+    first = await _create_item(owner_client, title="첫째")
+    second = await _create_item(owner_client, title="둘째")
+    assert first["sort_order"] == 1
+    assert second["sort_order"] == 2
+
+
+async def test_reorder_items_rewrites_sort_order(owner_client: AsyncClient):
+    a = await _create_item(owner_client, title="A")
+    b = await _create_item(owner_client, title="B")
+    c = await _create_item(owner_client, title="C")
+
+    resp = await owner_client.put(ITEMS_URL, json={"item_ids": [c["id"], a["id"], b["id"]]})
+    assert resp.status_code == 200
+    assert [item["id"] for item in resp.json()] == [c["id"], a["id"], b["id"]]
+    assert [item["sort_order"] for item in resp.json()] == [1, 2, 3]
+
     resp = await owner_client.get(ITEMS_URL)
     assert resp.status_code == 200
-    assert [i["title"] for i in resp.json()] == ["첫째", "둘째", "셋째"]
+    assert [item["id"] for item in resp.json()] == [c["id"], a["id"], b["id"]]
+
+
+async def test_reorder_items_rejects_partial_duplicate_and_foreign_sets(owner_client: AsyncClient):
+    a = await _create_item(owner_client, title="A")
+    b = await _create_item(owner_client, title="B")
+    outsider = str(uuid.uuid4())
+
+    partial = await owner_client.put(ITEMS_URL, json={"item_ids": [a["id"]]})
+    duplicate = await owner_client.put(ITEMS_URL, json={"item_ids": [a["id"], a["id"]]})
+    foreign = await owner_client.put(ITEMS_URL, json={"item_ids": [a["id"], outsider]})
+    assert partial.status_code == 409
+    assert duplicate.status_code == 409
+    assert foreign.status_code == 409
+
+    unchanged = await owner_client.get(ITEMS_URL)
+    assert [item["id"] for item in unchanged.json()] == [a["id"], b["id"]]
 
 
 async def test_delete_item_cleans_public_samples(
@@ -305,8 +336,8 @@ async def test_public_list_shape(
     monkeypatch,
 ):
     monkeypatch.setattr(r2_service.settings, "public_asset_base_url", PUBLIC_BASE)
-    first = await _create_item(owner_client, title="열림", sort_order=0)
-    closed = await _create_item(owner_client, title="마감", sort_order=1, is_open=False)
+    first = await _create_item(owner_client, title="열림")
+    closed = await _create_item(owner_client, title="마감", is_open=False)
     key = f"commission/{first['id']}/a.webp"
     await _set_sample_keys(db_session, first["id"], [key])
 

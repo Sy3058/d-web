@@ -414,6 +414,129 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/commission-items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Commission Items */
+        get: operations["list_commission_items_admin_commission_items_get"];
+        /**
+         * Reorder Commission Items
+         * @description 카드 전량을 원하는 순서로 받아 한 트랜잭션에서 1..N으로 재배정한다.
+         */
+        put: operations["reorder_commission_items_admin_commission_items_put"];
+        /** Create Commission Item */
+        post: operations["create_commission_item_admin_commission_items_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/commission-items/{item_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Update Commission Item */
+        put: operations["update_commission_item_admin_commission_items__item_id__put"];
+        post?: never;
+        /** Delete Commission Item */
+        delete: operations["delete_commission_item_admin_commission_items__item_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/commission-items/{item_id}/images": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload Commission Sample
+         * @description 샘플 1장 업로드: 변환 → 공개 버킷 → sample_image_keys 끝에 원자 append
+         *     (admin_episodes.upload_episode_image와 같은 구조 - 주석 근거는 그쪽 참조).
+         */
+        post: operations["upload_commission_sample_admin_commission_items__item_id__images_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/site-texts/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Site Text
+         * @description 행 없음 = 404가 아니라 빈 기본값 응답 - 행은 시딩하지 않고 PUT이 upsert하므로
+         *     첫 편집 진입이 여기서 막히면 안 된다(models/commission.py SiteText docstring).
+         */
+        get: operations["get_site_text_admin_site_texts__key__get"];
+        /** Put Site Text */
+        put: operations["put_site_text_admin_site_texts__key__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/commission-items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Commission Items
+         * @description 카드 전량(마감 포함 - 마감 배지 표시). 정렬은 sort_order(서비스).
+         */
+        get: operations["list_commission_items_commission_items_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/site-texts/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Site Text
+         * @description 무등록 key = 422(SiteTextKey enum 자동 검증), 미저장 슬롯 = 404(FE 존 접기).
+         */
+        get: operations["get_site_text_site_texts__key__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/works": {
         parameters: {
             query?: never;
@@ -545,6 +668,40 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AdminCommissionItemRead */
+        AdminCommissionItemRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Title */
+            title: string;
+            /** Description */
+            description: string | null;
+            /** Price Text */
+            price_text: string;
+            /** Duration Text */
+            duration_text: string | null;
+            /** Sample Image Keys */
+            sample_image_keys: string[];
+            /** Is Open */
+            is_open: boolean;
+            /** Sort Order */
+            sort_order: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Sample Images */
+            readonly sample_images: components["schemas"]["CommissionSampleImage"][];
+        };
         /**
          * AdminEpisodeRead
          * @description 관리자(owner) 응답 **전용** - 이름부터 Admin: image_keys(R2 키)를 노출하므로
@@ -608,6 +765,11 @@ export interface components {
              */
             stage: "totp" | "totp_setup" | "complete";
         };
+        /** Body_upload_commission_sample_admin_commission_items__item_id__images_post */
+        Body_upload_commission_sample_admin_commission_items__item_id__images_post: {
+            /** Image */
+            image: string;
+        };
         /** Body_upload_cover_admin_works__work_id__cover_post */
         Body_upload_cover_admin_works__work_id__cover_post: {
             /** Image */
@@ -617,6 +779,65 @@ export interface components {
         Body_upload_episode_image_admin_works__work_id__episodes__episode_id__images_post: {
             /** Image */
             image: string;
+        };
+        /** CommissionItemCreate */
+        CommissionItemCreate: {
+            /** Title */
+            title: string;
+            /** Description */
+            description?: string | null;
+            /** Price Text */
+            price_text: string;
+            /** Duration Text */
+            duration_text?: string | null;
+            /**
+             * Is Open
+             * @default true
+             */
+            is_open: boolean;
+        };
+        /**
+         * CommissionItemReorder
+         * @description 카드 재배열 - 카드 전량을 원하는 순서로 나열한 id 목록.
+         *
+         *     개별 create/update에는 sort_order를 노출하지 않는다. 순서는 컬렉션 전체의 속성이며,
+         *     전량 집합 검사가 다른 탭의 추가·삭제를 감지하는 낙관적 동시성 검사 역할을 한다.
+         */
+        CommissionItemReorder: {
+            /** Item Ids */
+            item_ids: string[];
+        };
+        /**
+         * CommissionItemUpdate
+         * @description 부분 수정. 생략 = 미변경(exclude_unset). sample_image_keys는 기존 키의 중복 없는
+         *     부분집합만(재배열·삭제 허용, 신규 주입 금지 - service 검증). 제거분은 커밋 성공 후
+         *     공개 버킷에서 삭제된다(commission_service).
+         */
+        CommissionItemUpdate: {
+            /** Title */
+            title?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Price Text */
+            price_text?: string | null;
+            /** Duration Text */
+            duration_text?: string | null;
+            /** Is Open */
+            is_open?: boolean | null;
+            /** Sample Image Keys */
+            sample_image_keys?: string[] | null;
+        };
+        /**
+         * CommissionSampleImage
+         * @description 샘플 1장의 키 + 공개 URL 쌍(admin 전용). EpisodeImageUrl과 같은 근거 - 재배열·삭제
+         *     UI가 "이 이미지 = 어느 키" 매핑을 알아야 PUT(sample_image_keys)을 만들 수 있다.
+         *     url은 공개 버킷 고정 URL(만료 없음). public_asset_base_url 미설정이면 None.
+         */
+        CommissionSampleImage: {
+            /** Key */
+            key: string;
+            /** Url */
+            url: string | null;
         };
         /**
          * EpisodeContent
@@ -735,6 +956,8 @@ export interface components {
             is_purchased: boolean;
             /** Price */
             price: number | null;
+            /** First Published At */
+            first_published_at: string | null;
         };
         /**
          * EpisodeUpdate
@@ -818,6 +1041,30 @@ export interface components {
             /** Page No */
             page_no: number;
         };
+        /**
+         * PublicCommissionItem
+         * @description 독자용 카드. 서비스가 명시적 kwargs로 조립한다(schemas/catalog.py와 같은 방식).
+         *     is_open=false여도 목록에 남는다 - 마감 배지 표시(크레페식 슬롯 상태).
+         */
+        PublicCommissionItem: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Title */
+            title: string;
+            /** Description */
+            description: string | null;
+            /** Price Text */
+            price_text: string;
+            /** Duration Text */
+            duration_text: string | null;
+            /** Sample Image Urls */
+            sample_image_urls: string[];
+            /** Is Open */
+            is_open: boolean;
+        };
         /** PublicTag */
         PublicTag: {
             /**
@@ -860,6 +1107,31 @@ export interface components {
             password: string;
             /** Nickname */
             nickname: string;
+        };
+        /**
+         * SiteTextKey
+         * @description 사이트 문구 슬롯. VARCHAR(50) 저장 + 앱 enum 검증(네이티브 PG enum 아님 -
+         *     MISTAKES StrEnum 패턴). 슬롯 추가는 멤버만 늘리면 되고 마이그레이션이 없다.
+         *     후보: 약관·개인정보처리방침(M7 법무 문서 - 같은 모양이라 여기로 흡수 가능).
+         * @enum {string}
+         */
+        SiteTextKey: "landing_intro" | "commission_notes";
+        /**
+         * SiteTextRead
+         * @description admin·공개 공용(민감 필드 없음). updated_at이 None이면 아직 저장된 적 없는
+         *     슬롯이다 - admin GET이 행 없음을 404 대신 빈 기본값으로 응답하는 시딩 규약.
+         */
+        SiteTextRead: {
+            key: components["schemas"]["SiteTextKey"];
+            /** Body */
+            body: string;
+            /** Updated At */
+            updated_at: string | null;
+        };
+        /** SiteTextUpdate */
+        SiteTextUpdate: {
+            /** Body */
+            body: string;
         };
         /** TagRead */
         TagRead: {
@@ -1856,6 +2128,308 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EpisodeImageUrl"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_commission_items_admin_commission_items_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminCommissionItemRead"][];
+                };
+            };
+        };
+    };
+    reorder_commission_items_admin_commission_items_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CommissionItemReorder"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminCommissionItemRead"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_commission_item_admin_commission_items_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CommissionItemCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminCommissionItemRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_commission_item_admin_commission_items__item_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CommissionItemUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminCommissionItemRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_commission_item_admin_commission_items__item_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_commission_sample_admin_commission_items__item_id__images_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_commission_sample_admin_commission_items__item_id__images_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminCommissionItemRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_site_text_admin_site_texts__key__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: components["schemas"]["SiteTextKey"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SiteTextRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_site_text_admin_site_texts__key__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: components["schemas"]["SiteTextKey"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SiteTextUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SiteTextRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_commission_items_commission_items_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicCommissionItem"][];
+                };
+            };
+        };
+    };
+    get_site_text_site_texts__key__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: components["schemas"]["SiteTextKey"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SiteTextRead"];
                 };
             };
             /** @description Validation Error */
