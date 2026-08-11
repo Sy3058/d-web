@@ -17,10 +17,11 @@ from src.lib.auth import get_current_user
 from src.lib.db import get_session
 from src.models.user import User
 from src.models.viewer import ViewerProgress
-from src.schemas.viewer import ProgressRead, ProgressUpdate
+from src.schemas.viewer import LastReadEpisode, ProgressRead, ProgressUpdate, WorkProgressRead
 from src.services import progress_service
 
 router = APIRouter(prefix="/episodes", tags=["progress"])
+work_router = APIRouter(prefix="/works", tags=["progress"])
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 CurrentUserDep = Annotated[User, Depends(get_current_user)]
@@ -77,3 +78,32 @@ async def read_progress(
         raise _PROGRESS_NOT_FOUND
     _no_store(response)
     return _to_read(progress)
+
+
+@work_router.get("/{work_id}/progress", response_model=WorkProgressRead)
+async def read_work_progress(
+    work_id: uuid.UUID,
+    current_user: CurrentUserDep,
+    session: SessionDep,
+    response: Response,
+) -> WorkProgressRead:
+    progress = await progress_service.get_work_progress(current_user.id, work_id, session)
+    if progress is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="작품을 찾을 수 없습니다",
+            headers={"Cache-Control": "no-store"},
+        )
+    _no_store(response)
+    last_episode = (
+        None
+        if progress.last_episode is None
+        else LastReadEpisode(
+            id=progress.last_episode.id,
+            public_id=progress.last_episode.public_id,
+        )
+    )
+    return WorkProgressRead(
+        read_episode_ids=progress.read_episode_ids,
+        last_episode=last_episode,
+    )

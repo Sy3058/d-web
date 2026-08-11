@@ -1,6 +1,7 @@
-"""뷰어 진행도 저장/조회 서비스 (M2 그룹 C1)."""
+"""뷰어 진행도 저장/조회 서비스 (M2 그룹 C1, E4)."""
 
 import uuid
+from dataclasses import dataclass
 
 from sqlalchemy import func
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -8,7 +9,20 @@ from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.models.viewer import ViewerProgress
+from src.models.work import Episode, Work
 from src.services import catalog_service
+
+
+@dataclass(frozen=True)
+class LastReadEpisodeSnapshot:
+    id: uuid.UUID
+    public_id: int
+
+
+@dataclass(frozen=True)
+class WorkProgressSnapshot:
+    read_episode_ids: list[uuid.UUID]
+    last_episode: LastReadEpisodeSnapshot | None
 
 
 async def upsert_progress(
@@ -53,3 +67,55 @@ async def get_progress(
         )
     )
     return result.first()
+
+
+async def get_work_progress(
+    user_id: uuid.UUID, work_id: uuid.UUID, session: AsyncSession
+) -> WorkProgressSnapshot | None:
+    """공개 작품의 사용자별 읽은 회차와 마지막 읽은 회차를 조회한다.
+
+    먼저 PK로 공개 작품 존재를 확인하고, 진행도는 ViewerProgress에서 시작해 실제로 읽은
+    행만 가져온다. Work에서 공개 Episode 전체를 LEFT JOIN하면 진행도 0건인 사용자도 작품의
+    모든 회차를 DB에서 앱으로 전송하게 되므로 피한다. 두 번째 쿼리에도 작품 공개 필터를
+    반복해 두 SELECT 사이에 비공개 전환이 일어나도 개인 진행도를 fail-closed로 숨긴다.
+    """
+    work_exists = await session.exec(
+        select(Work.id).where(Work.id == work_id, *catalog_service.public_work_filters())
+    )
+    if work_exists.first() is None:
+        return None
+
+    rows = (
+        await session.exec(
+            select(
+                ViewerProgress.episode_id,
+                Episode.public_id,
+                ViewerProgress.updated_at,
+                ViewerProgress.id,
+            )
+            .select_from(ViewerProgress)
+            .join(Episode, Episode.id == ViewerProgress.episode_id)
+            .join(Work, Work.id == Episode.work_id)
+            .where(
+                ViewerProgress.user_id == user_id,
+                Episode.work_id == work_id,
+                *catalog_service.public_episode_filters(),
+                *catalog_service.public_work_filters(),
+            )
+            .order_by(
+                ViewerProgress.updated_at.desc(),
+                ViewerProgress.id.desc(),
+            )
+        )
+    ).all()
+    if not rows:
+        return WorkProgressSnapshot(read_episode_ids=[], last_episode=None)
+
+    latest_episode_id, latest_public_id, _, _ = rows[0]
+    return WorkProgressSnapshot(
+        read_episode_ids=[episode_id for episode_id, _, _, _ in rows],
+        last_episode=LastReadEpisodeSnapshot(
+            id=latest_episode_id,
+            public_id=latest_public_id,
+        ),
+    )

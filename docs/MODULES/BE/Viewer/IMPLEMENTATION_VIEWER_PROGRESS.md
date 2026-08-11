@@ -1,11 +1,11 @@
-# 뷰어 진행도 (M2 그룹 C1)
+# 뷰어 진행도 (M2 그룹 C1, E4 BE)
 
 | 항목 | 내용 |
 |------|------|
 | 모듈 | Backend / Viewer |
-| 관련 마일스톤 | [M2](../../../milestones/M2_foundation.md) 그룹 C - C1 |
-| 작성 시점 | M2 C1 (2026-07-20) |
-| 상태 | 구현 + Opus 계획 검증 → Sonnet 구현 → Opus 코드 리뷰(xhigh) 발견 8건 전부 반영. `pytest` 337 passed(신규 17), ruff·`alembic check` 클린. **DB 마이그레이션 1개**(신규 테이블 + episode_id 인덱스) |
+| 관련 마일스톤 | [M2](../../../milestones/M2_foundation.md) 그룹 C - C1, 그룹 E - E4 |
+| 작성 시점 | M2 C1 (2026-07-20), E4 BE (2026-08-11) |
+| 상태 | C1 회차 단위 저장·복원과 E4 작품 단위 조회 구현. E4는 신규 마이그레이션·dependency 없이 backend 전체 gate 통과 |
 | 관련 문서 | DB_SCHEMA.md §2 viewer_progress, M2_foundation.md 그룹 C, MISTAKES.md |
 
 독자가 회차를 읽은 마지막 위치(문서 최상위 블록 인덱스)를 저장·복원하는 API. 그룹 B(회차 콘텐츠 API)가 아직 없는 상태에서 그룹 D(공개 버킷)와 병렬로 진행했다.
@@ -18,17 +18,18 @@
 |------|------|
 | `backend/src/models/viewer.py` | `ViewerProgress`(신규 테이블) |
 | `backend/migrations/versions/20260719_1757_viewer_progress.py` | `viewer_progress` 테이블 생성(FK CASCADE 2개, UNIQUE) |
-| `backend/src/schemas/viewer.py` | `ProgressUpdate`(page_no ge=0) / `ProgressRead` |
-| `backend/src/services/progress_service.py` | `upsert_progress`(공개성 게이트 + ON CONFLICT DO UPDATE) / `get_progress` |
+| `backend/src/schemas/viewer.py` | `ProgressUpdate` / `ProgressRead` / `WorkProgressRead` |
+| `backend/src/services/progress_service.py` | 회차 단위 upsert·조회 / 작품 단위 읽은 회차·최근 회차 조회 |
 | `backend/src/services/catalog_service.py` | `public_episode_exists()` 추가 |
-| `backend/src/routers/progress.py` | `PUT`/`GET /episodes/{id}/progress` |
+| `backend/src/routers/progress.py` | `PUT`/`GET /episodes/{id}/progress`, `GET /works/{id}/progress` |
 | `backend/tests/factories.py` | `make_work`/`make_episode` 공용 팩토리(test_catalog와 공유) |
-| `backend/tests/test_progress.py` | 17케이스 |
+| `backend/tests/test_progress.py` | 26케이스(E4 쿼리 방향 회귀 포함) |
 
 | 엔드포인트 | 인증 | 역할 |
 |-----------|------|------|
 | `PUT /episodes/{id}/progress` | 필수 | 진행도 upsert. 회차가 공개+미삭제가 아니면 404. 응답 `no-store` |
 | `GET /episodes/{id}/progress` | 필수 | 저장된 진행도 조회. 행 없으면 404. 응답 `no-store` |
+| `GET /works/{id}/progress` | 필수 | 공개·미삭제 회차의 읽은 ID 목록과 최근 회차 반환. 행 없으면 빈 값 200. 응답 `no-store` |
 
 ---
 
@@ -45,6 +46,18 @@ PUT은 저장 자체를 막는 게이트라 `public_episode_exists()`를 매번 
 
 ### `session.exec()` vs `session.execute()`
 `on_conflict_do_update().returning(...)` 문을 처음엔 `session.execute()`로 실행했는데 sqlmodel이 deprecation 경고를 띄웠다. sqlmodel `AsyncSession.exec()` 소스(`sqlmodel/ext/asyncio/session.py`)를 확인한 결과 `UpdateBase`(Insert/Update/Delete 전체) 오버로드가 공식 지원돼, `session.exec(stmt)`로 교체했다(레포 전체가 `exec()`를 관례로 쓰는 것과도 일치, 동작은 동일 - `.scalars().one()`은 그대로 필요).
+
+### E4 작품 단위 조회 = 공개 작품 확인 + 읽은 진행도 조회 (2026-08-11)
+
+`GET /works/{work_id}/progress`는 공개·미삭제 작품 PK를 먼저 확인하고, 작품이 있으면 `ViewerProgress → Episode → Work` inner join으로 요청 사용자가 실제로 읽은 행만 조회한다.
+
+- 첫 쿼리 작품 행 없음: 비공개·삭제·미존재이므로 404
+- 두 번째 쿼리 진행도 없음: `read_episode_ids=[]`, `last_episode=null`로 200
+- 진행도 있음: `updated_at DESC`, `viewer_progress.id DESC` 순으로 읽은 회차와 최근 회차 반환
+
+최초 구현은 DB 왕복 한 번을 위해 `Work → 공개 Episode 전체 → ViewerProgress` LEFT JOIN을 사용했지만, 진행도 0건인 사용자도 작품의 공개 회차 전량을 생성·정렬·전송하는 성능 Major가 리뷰에서 발견됐다. PK 존재 확인 1회가 늘어나는 대신 두 번째 조회 비용을 읽은 진행도 행에 맞추는 단순한 2쿼리 구조로 교체했다. 두 쿼리 사이에 작품이 비공개 전환되는 경우도 fail-closed가 되도록 두 번째 쿼리에 작품 공개 필터를 다시 적용한다.
+
+회귀 테스트는 공개 회차 13개·진행도 1개 조건에서 응답이 1개뿐임을 확인하고, 실행 SQL이 `FROM viewer_progress JOIN episodes`이며 LEFT JOIN을 포함하지 않는지 검증한다. 응답에는 이어 보기 링크에 필요한 회차 `id`·`public_id`만 넣고 `page_no`, 원고 JSONB, 이미지 키는 싣지 않는다. 개인 응답은 성공과 404 모두 `Cache-Control: no-store`다.
 
 ---
 
@@ -75,3 +88,4 @@ PUT은 저장 자체를 막는 게이트라 `public_episode_exists()`를 매번 
 |------|--------|
 | 그룹 B(회차 콘텐츠 API) 완성 후 `public_episode_exists()`와 B의 로딩 조회 통합 여부 재검토 | B1/B2 착수 시 |
 | FE debounce 저장 호출 + 재진입 복원 UI | 그룹 F (뷰어 아일랜드) |
+| 작품 단위 진행률 바 + 이어 보기 React 섬 | 그룹 E4 FE |

@@ -202,7 +202,7 @@ M2 착수 전 확정. presigned·표지·콘텐츠 모델은 기존 결정(DECIS
 - **구현에서 확정(2026-08-10, 2026-08-11 리뷰 보완)**: #85 경로 실측 결과 재공개 시 `published_at`이 갱신되므로 독자 표시용 `first_published_at`을 분리했다. 즉시 공개와 예약 공개 모두 최초 1회만 스탬프하며 재공개에서는 유지한다. 예약 공개가 빈 본문 등으로 늦어지면 예약 목표가 아니라 DB의 실제 공개 전환 시각을 기록한다. 기본 최신순은 쿼리 없는 canonical URL, 오래된순은 `?order=asc`를 사용한다.
 - DoD: pytest(`first_published_at` 노출·값·지연 예약 실제 전환 시각), `?order=asc|desc` 각각 순서 단언(**생성 순서·날짜·`sort_order`를 다 다른 방향**으로 깔아 판별력 확보 - 2026-07-30 판별력 0 사고 재발 방지), 첫 화 링크가 정렬과 무관하게 동일, `astro check`/`build`/`test`.
 
-### E4. 이어 보기 + 작품 단위 진행률 바 (2026-08-03 결정, 미착수)
+### E4. 이어 보기 + 작품 단위 진행률 바 (BE 완료 2026-08-11, FE 미착수)
 - 선행: C1(`viewer_progress`), E3
 - 산출물: `GET /works/{work_id}/progress`(**인증 필수** - 읽은 회차 id 목록 + 마지막 본 회차 1건을 한 번에) + FE React 섬(`client:idle`, `credentials: 'include'`). 작품 단위 바는 `읽은 회차 수 / 전체 회차 수`.
 - 마이그레이션 불요 - `viewer_progress.updated_at`(`onupdate=func.now()`)이 이미 있어 "마지막 본 회차"를 특정할 수 있다.
@@ -210,6 +210,16 @@ M2 착수 전 확정. presigned·표지·콘텐츠 모델은 기존 결정(DECIS
 - 비로그인은 대상이 아니다(`viewer_progress`가 `user_id` 기반, 뷰어도 `isLoggedIn` 후에만 저장). 401이면 아무것도 렌더하지 않는다.
 - 회차 **내부** 진행률(%)은 이 그룹에 넣지 않는다(M3 이연). 서버 픽셀 누적은 글 블록 높이를 알 수 없어 불가능하고, 클라이언트 스크롤 비율은 뷰어가 이미지 공간을 예약하지 않아 지금은 값이 못 미덥다. 근거와 M3 착수 순서는 DECISIONS 같은 절 참조.
 - DoD: pytest(삭제·비공개 회차 제외, 비인증 401), 비로그인 시 미렌더, **SSR 응답 HTML에 진행도 문자열이 없음**을 단언.
+
+#### E4 실행 계획 (2026-08-11 확정)
+
+- **브랜치와 PR을 BE/FE로 순차 분리**한다. `be/feat/m2-e4-work-progress`를 먼저 main에 머지한 뒤, 갱신한 main에서 `fe/feat/m2-e4-work-progress`를 분기한다. FE 병렬 mock·스택 PR은 계약 드리프트와 이력 정리 비용 때문에 사용하지 않는다.
+- **BE 계약**: `GET /works/{work_id}/progress`는 인증 필수·`Cache-Control: no-store`. 공개·미삭제 작품이 아니면 404, 진행도 행이 없으면 200으로 `read_episode_ids=[]`, `last_episode=null`을 반환한다. `last_episode`는 FE가 SSR 배열과 재조인하지 않고 링크를 만들 수 있도록 `id`와 `public_id`를 포함한다.
+- **BE 조회 범위**: 요청 사용자 + 요청 작품에 속한 공개·미삭제 회차만 포함한다. 읽은 회차 목록과 `updated_at DESC` 기준 마지막 회차를 한 번에 반환하며, 동률은 진행도 PK로 결정적으로 해소한다. 다른 사용자·다른 작품·비공개·soft delete 회차는 제외한다. DB 마이그레이션과 신규 dependency는 없다.
+- **FE 계약 소비**: 작품 상세 SSR은 공개 데이터만 유지하고 `WorkProgress` React 섬에 `workId`와 공개 회차 총수만 props로 넘긴다. 섬은 `client:idle`로 개인 API를 호출한다. 비로그인 힌트가 없으면 요청하지 않고, stale 힌트의 401은 미렌더한다. 로그인 사용자는 진행도 0건이면 0% 바만 보고, 마지막 회차가 있을 때만 `/works/{work_id}/{public_id}` 이어 보기 링크를 본다.
+- **캐시 불변식**: 개인 응답은 no-store이고 개인 값·읽은 회차 id·이어 보기 링크를 SSR HTML에 넣지 않는다. 공개 SSR(최대 60초)과 개인 API 사이의 짧은 시차로 분자가 분모를 넘지 않도록 FE 표시값을 총 공개 회차 수로 clamp한다.
+- **PR별 완료 게이트**: BE는 `test_progress.py` 집중 테스트 후 backend 전체 gate, FE는 순수 계산·401·빈 상태·링크·SSR 비노출 테스트 후 frontend 전체 gate를 통과한다. 두 PR 모두 관련 IMPLEMENTATION 문서와 이 마일스톤 상태를 자기 범위에 맞게 갱신한다.
+- **BE 구현 결과(2026-08-11)**: 공개 작품 PK 확인 후 `ViewerProgress → Episode → Work` inner join으로 공개·미삭제 회차 중 요청 사용자가 읽은 행만 `updated_at DESC, viewer_progress.id DESC`로 반환한다. 최초 LEFT JOIN 구조가 미열람 공개 회차까지 전량 materialize하는 성능 Major를 리뷰에서 발견해 2쿼리로 교체했으며, 두 번째 쿼리에서도 작품 공개 상태를 재검증한다. 신규 마이그레이션·dependency 없음. `test_progress.py` 26개(쿼리 방향 회귀 포함)와 backend 전체 gate 통과. 상세: `docs/MODULES/BE/Viewer/IMPLEMENTATION_VIEWER_PROGRESS.md`.
 
 ---
 

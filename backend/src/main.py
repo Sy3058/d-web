@@ -83,6 +83,7 @@ app.include_router(works.router)
 app.include_router(tags.router)
 app.include_router(episodes.router)
 app.include_router(progress.router)
+app.include_router(progress.work_router)
 
 
 @app.get("/")
