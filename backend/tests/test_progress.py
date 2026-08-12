@@ -327,7 +327,11 @@ async def test_get_work_progress_returns_all_read_episodes_and_latest(
     assert resp.status_code == 200
     assert resp.json() == {
         "read_episode_ids": [str(latest.id), str(older.id)],
-        "last_episode": {"id": str(latest.id), "public_id": latest.public_id},
+        "last_episode": {
+            "id": str(latest.id),
+            "public_id": latest.public_id,
+            "title": latest.title,
+        },
     }
     assert "page_no" not in resp.text
 
@@ -361,6 +365,7 @@ async def test_get_work_progress_tie_breaks_by_progress_id(
     assert resp.json()["last_episode"] == {
         "id": str(higher.id),
         "public_id": higher.public_id,
+        "title": higher.title,
     }
 
 
@@ -409,7 +414,11 @@ async def test_get_work_progress_excludes_unavailable_episodes(
     assert resp.status_code == 200
     assert resp.json() == {
         "read_episode_ids": [str(visible.id)],
-        "last_episode": {"id": str(visible.id), "public_id": visible.public_id},
+        "last_episode": {
+            "id": str(visible.id),
+            "public_id": visible.public_id,
+            "title": visible.title,
+        },
     }
 
 
