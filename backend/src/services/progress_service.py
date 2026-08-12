@@ -17,6 +17,7 @@ from src.services import catalog_service
 class LastReadEpisodeSnapshot:
     id: uuid.UUID
     public_id: int
+    title: str
 
 
 @dataclass(frozen=True)
@@ -90,6 +91,7 @@ async def get_work_progress(
             select(
                 ViewerProgress.episode_id,
                 Episode.public_id,
+                Episode.title,
                 ViewerProgress.updated_at,
                 ViewerProgress.id,
             )
@@ -111,11 +113,12 @@ async def get_work_progress(
     if not rows:
         return WorkProgressSnapshot(read_episode_ids=[], last_episode=None)
 
-    latest_episode_id, latest_public_id, _, _ = rows[0]
+    latest_episode_id, latest_public_id, latest_title, _, _ = rows[0]
     return WorkProgressSnapshot(
-        read_episode_ids=[episode_id for episode_id, _, _, _ in rows],
+        read_episode_ids=[episode_id for episode_id, _, _, _, _ in rows],
         last_episode=LastReadEpisodeSnapshot(
             id=latest_episode_id,
             public_id=latest_public_id,
+            title=latest_title,
         ),
     )

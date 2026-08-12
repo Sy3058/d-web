@@ -101,6 +101,7 @@ async def read_work_progress(
         else LastReadEpisode(
             id=progress.last_episode.id,
             public_id=progress.last_episode.public_id,
+            title=progress.last_episode.title,
         )
     )
     return WorkProgressRead(

@@ -53,11 +53,11 @@ PUT은 저장 자체를 막는 게이트라 `public_episode_exists()`를 매번 
 
 - 첫 쿼리 작품 행 없음: 비공개·삭제·미존재이므로 404
 - 두 번째 쿼리 진행도 없음: `read_episode_ids=[]`, `last_episode=null`로 200
-- 진행도 있음: `updated_at DESC`, `viewer_progress.id DESC` 순으로 읽은 회차와 최근 회차 반환
+- 진행도 있음: `updated_at DESC`, `viewer_progress.id DESC` 순으로 읽은 회차와 최근 회차 반환. 최근 회차는 FE가 무엇을 이어 보는지 표시할 수 있도록 `id`·`public_id`·`title`을 포함
 
 최초 구현은 DB 왕복 한 번을 위해 `Work → 공개 Episode 전체 → ViewerProgress` LEFT JOIN을 사용했지만, 진행도 0건인 사용자도 작품의 공개 회차 전량을 생성·정렬·전송하는 성능 Major가 리뷰에서 발견됐다. PK 존재 확인 1회가 늘어나는 대신 두 번째 조회 비용을 읽은 진행도 행에 맞추는 단순한 2쿼리 구조로 교체했다. 두 쿼리 사이에 작품이 비공개 전환되는 경우도 fail-closed가 되도록 두 번째 쿼리에 작품 공개 필터를 다시 적용한다.
 
-회귀 테스트는 공개 회차 13개·진행도 1개 조건에서 응답이 1개뿐임을 확인하고, 실행 SQL이 `FROM viewer_progress JOIN episodes`이며 LEFT JOIN을 포함하지 않는지 검증한다. 응답에는 이어 보기 링크에 필요한 회차 `id`·`public_id`만 넣고 `page_no`, 원고 JSONB, 이미지 키는 싣지 않는다. 개인 응답은 성공과 404 모두 `Cache-Control: no-store`다.
+회귀 테스트는 공개 회차 13개·진행도 1개 조건에서 응답이 1개뿐임을 확인하고, 실행 SQL이 `FROM viewer_progress JOIN episodes`이며 LEFT JOIN을 포함하지 않는지 검증한다. 응답에는 이어 보기 링크와 문구에 필요한 회차 `id`·`public_id`·`title`만 넣고 `page_no`, 원고 JSONB, 이미지 키는 싣지 않는다. 제목은 이미 조인한 `Episode`에서 함께 선택하므로 추가 DB 왕복은 없다. 개인 응답은 성공과 404 모두 `Cache-Control: no-store`다.
 
 ---
 

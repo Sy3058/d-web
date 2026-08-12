@@ -3,6 +3,7 @@ export const prerender = false;
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import CoverImage from '../../components/works/CoverImage.astro';
 import EpisodeRow from '../../components/works/EpisodeRow.astro';
+import WorkProgress from '../../components/works/WorkProgress';
 import Badge from '../../components/ui/Badge.astro';
 import Chip from '../../components/ui/Chip.astro';
 import {
@@ -39,12 +40,15 @@ applyCatalogCache(Astro.response, { error: loadError, notFound: !work });
 // 보기"는 이 원본 배열의 [0]을 써야 정렬 토글과 무관하게 항상 같은 회차를 가리킨다.
 // 뒤집힌 배열에서 [0]을 뽑으면 desc일 때 마지막 화가 "첫 화"로 둔갑한다.
 const order = parseOrder(Astro.url.searchParams.get('order'));
-const firstEpisode = work?.episodes[0] ?? null;
 const displayEpisodes = work ? orderEpisodes(work.episodes, order) : [];
 const freeCount = work ? work.episodes.filter((ep) => ep.is_free).length : 0;
 ---
 
-<BaseLayout title={work ? work.title : '작품을 찾을 수 없어요'} canonicalPath={Astro.url.pathname}>
+<BaseLayout
+  title={work ? work.title : '작품을 찾을 수 없어요'}
+  canonicalPath={Astro.url.pathname}
+  reserveFloatingCtaSpace={Boolean(work?.episodes.length)}
+>
   <div class="max-w-[1140px] mx-auto px-6 py-12">
     {
       loadError ? (
@@ -77,19 +81,20 @@ const freeCount = work ? work.episodes.filter((ep) => ep.is_free).length : 0;
             <p class="text-sm text-muted">아직 등록된 회차가 없어요.</p>
           ) : (
             <div>
+              <WorkProgress
+                workId={work.id}
+                episodes={work.episodes.map((episode) => ({
+                  id: episode.id,
+                  publicId: episode.public_id,
+                  title: episode.title,
+                }))}
+                client:idle
+              />
               <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
                 <div class="flex items-center gap-3">
                   <span class="text-sm text-muted">
                     총 {work.episodes.length}화 · 무료 {freeCount}화
                   </span>
-                  {firstEpisode && (
-                    <a
-                      href={`/works/${work.id}/${firstEpisode.public_id}`}
-                      class="text-sm text-ink underline underline-offset-2"
-                    >
-                      {firstEpisode.is_free ? '첫 화 무료로 보기' : '첫 화 보기'}
-                    </a>
-                  )}
                 </div>
                 <div class="flex items-center gap-2 text-sm">
                   <a

@@ -25,6 +25,7 @@ class ProgressRead(BaseModel):
 class LastReadEpisode(BaseModel):
     id: uuid.UUID
     public_id: int
+    title: str
 
 
 class WorkProgressRead(BaseModel):
