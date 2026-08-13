@@ -21,8 +21,19 @@ export interface SiteTextRead {
   updated_at: string | null;
 }
 
+export interface ArtistProfileRead {
+  name: string;
+  profile_image_url: string | null;
+  twitter_url: string | null;
+  postype_url: string | null;
+}
+
 export async function getCommissionItems(): Promise<PublicCommissionItem[]> {
   return api.get<PublicCommissionItem[]>('/commission-items');
+}
+
+export async function getArtistProfile(): Promise<ArtistProfileRead> {
+  return api.get<ArtistProfileRead>('/artist-profile');
 }
 
 export function isNotFoundError(error: unknown): boolean {

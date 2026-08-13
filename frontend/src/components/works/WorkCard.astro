@@ -11,11 +11,14 @@ interface Props {
 const { work } = Astro.props;
 ---
 
-<a href={`/works/${work.id}`} class="group block">
-  <CoverImage src={work.cover_image_url} alt={work.title} />
-  <div class="mt-3 space-y-1.5">
+<a
+  href={`/works/${work.id}`}
+  class="group block overflow-hidden rounded-control border border-line bg-paper"
+>
+  <CoverImage src={work.cover_image_url} alt={work.title} class="rounded-none" />
+  <div class="space-y-3 p-3 sm:p-4">
     <div class="flex items-start justify-between gap-2">
-      <h3 class="text-body-md text-ink font-medium truncate group-hover:underline underline-offset-4">
+      <h3 class="truncate text-sm font-semibold leading-snug text-ink group-hover:underline sm:text-base">
         {work.title}
       </h3>
       <Badge variant="neutral" class="shrink-0">{statusLabel(work.status)}</Badge>

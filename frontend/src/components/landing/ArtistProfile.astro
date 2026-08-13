@@ -1,0 +1,67 @@
+---
+import type { ArtistProfileRead } from '../../lib/commission';
+
+interface Props {
+  body: string;
+  profile: ArtistProfileRead;
+}
+
+const { body, profile } = Astro.props;
+const initial = Array.from(profile.name.trim())[0] ?? '작';
+const socialLinks = [
+  { label: 'Twitter', href: profile.twitter_url },
+  { label: 'Postype', href: profile.postype_url },
+].filter((link): link is { label: string; href: string } => Boolean(link.href));
+---
+
+<aside
+  class="mx-auto mt-8 flex max-w-[1140px] items-center gap-4 rounded-control border border-line bg-paper p-4 sm:gap-5 sm:p-5"
+  aria-label="작가 소개"
+>
+  <div
+    class:list={[
+      'relative size-16 shrink-0 overflow-hidden rounded-full',
+      profile.profile_image_url ? 'bg-hover' : 'bg-ink-strong',
+    ]}
+  >
+    {
+      profile.profile_image_url && (
+        <img
+          src={profile.profile_image_url}
+          alt={`${profile.name} 프로필`}
+          loading="lazy"
+          class="absolute inset-0 z-10 size-full object-cover"
+          onerror="this.style.display='none'; this.parentElement?.classList.remove('bg-hover'); this.parentElement?.classList.add('bg-ink-strong'); this.nextElementSibling?.removeAttribute('hidden')"
+        />
+      )
+    }
+    <span
+      class="absolute inset-0 flex items-center justify-center text-headline-md text-paper"
+      aria-hidden="true"
+      hidden={Boolean(profile.profile_image_url)}
+    >
+      {initial}
+    </span>
+  </div>
+  <div class="min-w-0 flex-1">
+    <h2 class="mt-1 text-headline-md text-ink">{profile.name}</h2>
+    <p class="mt-2 whitespace-pre-line text-sm leading-relaxed text-ink">{body}</p>
+    {
+      socialLinks.length > 0 && (
+        <div class="mt-3 flex flex-wrap gap-2" aria-label="작가 외부 채널">
+          {socialLinks.map((link) => (
+          <a
+            href={link.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="inline-flex items-center gap-1.5 rounded-control border border-line px-3 py-1.5 text-sm font-medium text-ink transition-colors hover:bg-hover"
+          >
+            {link.label}
+            <span aria-hidden="true">↗</span>
+          </a>
+          ))}
+        </div>
+      )
+    }
+  </div>
+</aside>
