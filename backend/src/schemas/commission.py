@@ -8,9 +8,17 @@ sample_image_urls(공개 URL 배열)만 내보내고 key 문자열은 싣지 않
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    HttpUrl,
+    computed_field,
+    field_validator,
+    model_validator,
+)
 
-from src.models.commission import SiteTextKey
+from src.models.commission import SiteTextSlotKey
 from src.services import r2_service
 
 TITLE_MAX = 200
@@ -116,7 +124,7 @@ class SiteTextRead(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-    key: SiteTextKey
+    key: SiteTextSlotKey
     body: str
     updated_at: datetime | None
 
@@ -124,3 +132,24 @@ class SiteTextRead(BaseModel):
 class SiteTextUpdate(BaseModel):
     # 빈 문자열 허용 - 문구 비우기(FE는 빈 body를 존 접기로 처리).
     body: str = Field(max_length=SITE_TEXT_MAX)
+
+
+class ArtistProfileRead(BaseModel):
+    name: str
+    profile_image_url: str | None
+    twitter_url: str | None
+    postype_url: str | None
+
+
+class ArtistProfileUpdate(BaseModel):
+    name: str = Field(min_length=1, max_length=SHORT_TEXT_MAX)
+    twitter_url: HttpUrl | None = None
+    postype_url: HttpUrl | None = None
+
+    @field_validator("name")
+    @classmethod
+    def _strip_nonempty_name(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("작가명은 공백일 수 없습니다")
+        return value

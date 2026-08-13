@@ -20,10 +20,12 @@ from src.lib.exceptions import (
     ImageValidationError,
 )
 from src.lib.uploads import R2_UNAVAILABLE, read_image_upload
-from src.models.commission import CommissionItem, SiteText, SiteTextKey
+from src.models.commission import CommissionItem, SiteText, SiteTextSlotKey
 from src.models.user import User
 from src.schemas.commission import (
     AdminCommissionItemRead,
+    ArtistProfileRead,
+    ArtistProfileUpdate,
     CommissionItemCreate,
     CommissionItemReorder,
     CommissionItemUpdate,
@@ -128,7 +130,7 @@ async def upload_commission_sample(
 
 @router.get("/site-texts/{key}", response_model=SiteTextRead)
 async def get_site_text(
-    key: SiteTextKey, owner: OwnerDep, session: SessionDep
+    key: SiteTextSlotKey, owner: OwnerDep, session: SessionDep
 ) -> SiteText | SiteTextRead:
     """행 없음 = 404가 아니라 빈 기본값 응답 - 행은 시딩하지 않고 PUT이 upsert하므로
     첫 편집 진입이 여기서 막히면 안 된다(models/commission.py SiteText docstring)."""
@@ -140,6 +142,33 @@ async def get_site_text(
 
 @router.put("/site-texts/{key}", response_model=SiteTextRead)
 async def put_site_text(
-    key: SiteTextKey, body: SiteTextUpdate, owner: OwnerDep, session: SessionDep
+    key: SiteTextSlotKey, body: SiteTextUpdate, owner: OwnerDep, session: SessionDep
 ) -> SiteText:
     return await commission_service.upsert_site_text(key, body.body, session)
+
+
+@router.get("/artist-profile", response_model=ArtistProfileRead)
+async def get_artist_profile(owner: OwnerDep, session: SessionDep) -> ArtistProfileRead:
+    return await commission_service.get_artist_profile(session)
+
+
+@router.put("/artist-profile", response_model=ArtistProfileRead)
+async def put_artist_profile(
+    body: ArtistProfileUpdate, owner: OwnerDep, session: SessionDep
+) -> ArtistProfileRead:
+    return await commission_service.upsert_artist_profile(body, session)
+
+
+@router.post("/artist-profile/image", response_model=ArtistProfileRead)
+async def upload_artist_profile_image(
+    image: UploadFile, owner: OwnerDep, session: SessionDep
+) -> ArtistProfileRead:
+    try:
+        data = await read_image_upload(image)
+        webp = await convert_to_webp(data)
+    except ImageValidationError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+    try:
+        return await commission_service.upload_artist_profile_image(webp, session)
+    except R2NotConfiguredError as exc:
+        raise R2_UNAVAILABLE from exc

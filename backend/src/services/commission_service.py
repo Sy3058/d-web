@@ -12,6 +12,7 @@ import uuid
 from collections.abc import Sequence
 
 import structlog
+from pydantic import HttpUrl, TypeAdapter, ValidationError
 from sqlalchemy import update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.sql import func
@@ -20,8 +21,10 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.config import settings
 from src.lib.exceptions import CommissionConflictError, CommissionValidationError
-from src.models.commission import CommissionItem, SiteText, SiteTextKey
+from src.models.commission import CommissionItem, SiteText, SiteTextKey, SiteTextSlotKey
 from src.schemas.commission import (
+    ArtistProfileRead,
+    ArtistProfileUpdate,
     CommissionItemCreate,
     CommissionItemUpdate,
     PublicCommissionItem,
@@ -36,6 +39,14 @@ MAX_SAMPLES_PER_ITEM = 10
 
 _STALE_ITEM = "커미션 카드가 다른 요청으로 먼저 변경되었습니다 - 새로고침 후 다시 시도하세요"
 _REORDER_SET_MISMATCH = "목록이 바뀌었습니다(카드 추가·삭제) - 새로고침 후 다시 정렬해 주세요"
+
+_ARTIST_PROFILE_DEFAULTS = {
+    SiteTextKey.ARTIST_NAME: "도군",
+    SiteTextKey.ARTIST_PROFILE_IMAGE_KEY: "",
+    SiteTextKey.ARTIST_TWITTER_URL: "https://twitter.com/",
+    SiteTextKey.ARTIST_POSTYPE_URL: "https://www.postype.com/",
+}
+_HTTP_URL_ADAPTER = TypeAdapter(HttpUrl)
 
 
 async def list_items(session: AsyncSession) -> Sequence[CommissionItem]:
@@ -206,11 +217,11 @@ async def list_public_items(session: AsyncSession) -> list[PublicCommissionItem]
 # ── 사이트 문구 ───────────────────────────────────────────────────────────────
 
 
-async def get_site_text(key: SiteTextKey, session: AsyncSession) -> SiteText | None:
+async def get_site_text(key: SiteTextSlotKey, session: AsyncSession) -> SiteText | None:
     return await session.get(SiteText, key.value)
 
 
-async def upsert_site_text(key: SiteTextKey, body: str, session: AsyncSession) -> SiteText:
+async def upsert_site_text(key: SiteTextSlotKey, body: str, session: AsyncSession) -> SiteText:
     """문구 upsert(행 없으면 생성). progress_service와 같은 ON CONFLICT 단일 문장 -
     check-then-insert로 갈라 쓰면 동시 첫 저장 두 건이 PK 충돌 500을 낸다.
 
@@ -227,3 +238,80 @@ async def upsert_site_text(key: SiteTextKey, body: str, session: AsyncSession) -
     row = result.scalars().one()
     await session.commit()
     return row
+
+
+async def get_artist_profile(session: AsyncSession) -> ArtistProfileRead:
+    keys = tuple(key.value for key in _ARTIST_PROFILE_DEFAULTS)
+    result = await session.exec(select(SiteText).where(SiteText.key.in_(keys)))
+    stored = {row.key: row.body for row in result.all()}
+
+    def value(key: SiteTextKey) -> str:
+        return stored.get(key.value, _ARTIST_PROFILE_DEFAULTS[key])
+
+    def safe_url(key: SiteTextKey) -> str | None:
+        raw = value(key)
+        if not raw:
+            return None
+        try:
+            return str(_HTTP_URL_ADAPTER.validate_python(raw))
+        except ValidationError:
+            return None
+
+    return ArtistProfileRead(
+        name=value(SiteTextKey.ARTIST_NAME).strip()
+        or _ARTIST_PROFILE_DEFAULTS[SiteTextKey.ARTIST_NAME],
+        profile_image_url=r2_service.public_url(value(SiteTextKey.ARTIST_PROFILE_IMAGE_KEY)),
+        twitter_url=safe_url(SiteTextKey.ARTIST_TWITTER_URL),
+        postype_url=safe_url(SiteTextKey.ARTIST_POSTYPE_URL),
+    )
+
+
+async def upsert_artist_profile(
+    body: ArtistProfileUpdate, session: AsyncSession
+) -> ArtistProfileRead:
+    values = {
+        SiteTextKey.ARTIST_NAME: body.name,
+        SiteTextKey.ARTIST_TWITTER_URL: str(body.twitter_url) if body.twitter_url else "",
+        SiteTextKey.ARTIST_POSTYPE_URL: str(body.postype_url) if body.postype_url else "",
+    }
+    stmt = pg_insert(SiteText).values(
+        [{"key": key.value, "body": value} for key, value in values.items()]
+    )
+    stmt = stmt.on_conflict_do_update(
+        index_elements=[SiteText.key],
+        set_={"body": stmt.excluded.body, "updated_at": func.now()},
+    )
+    await session.exec(stmt)
+    await session.commit()
+    return await get_artist_profile(session)
+
+
+async def upload_artist_profile_image(webp: bytes, session: AsyncSession) -> ArtistProfileRead:
+    old_row = await session.get(SiteText, SiteTextKey.ARTIST_PROFILE_IMAGE_KEY.value)
+    old_key = old_row.body if old_row else ""
+    await session.rollback()
+
+    new_key = r2_service.artist_profile_image_key()
+    await r2_service.upload_bytes(new_key, webp, bucket=settings.r2_public_bucket)
+
+    stmt = pg_insert(SiteText).values(
+        key=SiteTextKey.ARTIST_PROFILE_IMAGE_KEY.value,
+        body=new_key,
+    )
+    stmt = stmt.on_conflict_do_update(
+        index_elements=[SiteText.key],
+        set_={"body": stmt.excluded.body, "updated_at": func.now()},
+    )
+    await session.exec(stmt)
+    await session.commit()
+
+    if old_key and old_key != new_key:
+        try:
+            await r2_service.delete_object(old_key, bucket=settings.r2_public_bucket)
+        except Exception:  # noqa: BLE001 - DB 커밋 뒤 정리 실패는 업로드 성공을 뒤집지 않음
+            logger.warning(
+                "artist_profile_image_cleanup_failed",
+                key=old_key,
+                exc_info=True,
+            )
+    return await get_artist_profile(session)

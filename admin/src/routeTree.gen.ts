@@ -13,6 +13,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthRouteImport } from './routes/_auth'
 import { Route as AuthIndexRouteImport } from './routes/_auth/index'
 import { Route as AuthSiteTextsRouteImport } from './routes/_auth/site-texts'
+import { Route as AuthArtistProfileRouteImport } from './routes/_auth/artist-profile'
 import { Route as AuthWorksIndexRouteImport } from './routes/_auth/works/index'
 import { Route as AuthCommissionIndexRouteImport } from './routes/_auth/commission/index'
 import { Route as AuthWorksNewRouteImport } from './routes/_auth/works/new'
@@ -41,6 +42,11 @@ const AuthIndexRoute = AuthIndexRouteImport.update({
 const AuthSiteTextsRoute = AuthSiteTextsRouteImport.update({
   id: '/site-texts',
   path: '/site-texts',
+  getParentRoute: () => AuthRoute,
+} as any)
+const AuthArtistProfileRoute = AuthArtistProfileRouteImport.update({
+  id: '/artist-profile',
+  path: '/artist-profile',
   getParentRoute: () => AuthRoute,
 } as any)
 const AuthWorksIndexRoute = AuthWorksIndexRouteImport.update({
@@ -100,6 +106,7 @@ const AuthWorksWorkIdEpisodesEpisodeIdRoute =
 export interface FileRoutesByFullPath {
   '/': typeof AuthIndexRoute
   '/login': typeof LoginRoute
+  '/artist-profile': typeof AuthArtistProfileRoute
   '/site-texts': typeof AuthSiteTextsRoute
   '/commission/$itemId': typeof AuthCommissionItemIdRoute
   '/commission/new': typeof AuthCommissionNewRoute
@@ -114,6 +121,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
+  '/artist-profile': typeof AuthArtistProfileRoute
   '/site-texts': typeof AuthSiteTextsRoute
   '/': typeof AuthIndexRoute
   '/commission/$itemId': typeof AuthCommissionItemIdRoute
@@ -131,6 +139,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_auth': typeof AuthRouteWithChildren
   '/login': typeof LoginRoute
+  '/_auth/artist-profile': typeof AuthArtistProfileRoute
   '/_auth/site-texts': typeof AuthSiteTextsRoute
   '/_auth/': typeof AuthIndexRoute
   '/_auth/commission/$itemId': typeof AuthCommissionItemIdRoute
@@ -149,6 +158,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/login'
+    | '/artist-profile'
     | '/site-texts'
     | '/commission/$itemId'
     | '/commission/new'
@@ -163,6 +173,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/login'
+    | '/artist-profile'
     | '/site-texts'
     | '/'
     | '/commission/$itemId'
@@ -179,6 +190,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/_auth'
     | '/login'
+    | '/_auth/artist-profile'
     | '/_auth/site-texts'
     | '/_auth/'
     | '/_auth/commission/$itemId'
@@ -226,6 +238,13 @@ declare module '@tanstack/react-router' {
       path: '/site-texts'
       fullPath: '/site-texts'
       preLoaderRoute: typeof AuthSiteTextsRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/artist-profile': {
+      id: '/_auth/artist-profile'
+      path: '/artist-profile'
+      fullPath: '/artist-profile'
+      preLoaderRoute: typeof AuthArtistProfileRouteImport
       parentRoute: typeof AuthRoute
     }
     '/_auth/works/': {
@@ -302,6 +321,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthRouteChildren {
+  AuthArtistProfileRoute: typeof AuthArtistProfileRoute
   AuthSiteTextsRoute: typeof AuthSiteTextsRoute
   AuthIndexRoute: typeof AuthIndexRoute
   AuthCommissionItemIdRoute: typeof AuthCommissionItemIdRoute
@@ -317,6 +337,7 @@ interface AuthRouteChildren {
 }
 
 const AuthRouteChildren: AuthRouteChildren = {
+  AuthArtistProfileRoute: AuthArtistProfileRoute,
   AuthSiteTextsRoute: AuthSiteTextsRoute,
   AuthIndexRoute: AuthIndexRoute,
   AuthCommissionItemIdRoute: AuthCommissionItemIdRoute,

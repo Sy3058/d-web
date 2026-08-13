@@ -2,21 +2,29 @@ import { useEffect, useRef, useState } from 'react';
 import Cropper, { type Area } from 'react-easy-crop';
 import { getCroppedImageFile } from '../../lib/cropImage';
 
-// 웹툰 표지 관례(세로가 긴 3:4)로 고정. 다른 비율이 필요해지면 여기 상수만 바꾸면 된다.
-const COVER_ASPECT = 3 / 4;
-
 // 서버에 올라가는 건 크롭된 결과물이지 이 원본이 아니다(cropImage가 1600px로 캡한다).
 // 그래서 이 상한은 백엔드 용량 제한의 미러가 아니라, 브라우저가 거대한 이미지를 디코드하다
 // 탭이 죽는 걸 막는 클라이언트 쪽 방어선이다.
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
 const MAX_FILE_MB = MAX_FILE_BYTES / (1024 * 1024);
 
-interface CoverCropModalProps {
+interface ImageCropModalProps {
+  title: string;
+  aspect: number;
+  cropShape?: 'rect' | 'round';
+  outputFileName: string;
   onClose: () => void;
-  onComplete: (file: File) => void;
+  onComplete: (file: File) => void | Promise<void>;
 }
 
-export function CoverCropModal({ onClose, onComplete }: CoverCropModalProps) {
+export function ImageCropModal({
+  title,
+  aspect,
+  cropShape = 'rect',
+  outputFileName,
+  onClose,
+  onComplete,
+}: ImageCropModalProps) {
   const [step, setStep] = useState<'select' | 'crop'>('select');
   const [rawImageUrl, setRawImageUrl] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
@@ -26,6 +34,7 @@ export function CoverCropModal({ onClose, onComplete }: CoverCropModalProps) {
   const [zoom, setZoom] = useState(1);
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const processingRef = useRef(false);
 
   // blob URL은 명시적으로 revoke하지 않으면 원본(최대 20MB)이 페이지 수명 내내 메모리에
   // 남는다. 정리 시점을 상태가 아니라 ref로 잡는 이유: useEffect([url])로 걸면
@@ -59,17 +68,19 @@ export function CoverCropModal({ onClose, onComplete }: CoverCropModalProps) {
   };
 
   const handleComplete = async () => {
-    if (!rawImageUrl || !croppedAreaPixels) return;
+    if (!rawImageUrl || !croppedAreaPixels || processingRef.current) return;
+    processingRef.current = true;
     setIsProcessing(true);
     setCropError(null);
     try {
-      const file = await getCroppedImageFile(rawImageUrl, croppedAreaPixels);
-      onComplete(file);
+      const file = await getCroppedImageFile(rawImageUrl, croppedAreaPixels, outputFileName);
+      await onComplete(file);
     } catch {
       // canvas.toBlob이 null을 주거나(브라우저 캔버스 면적 상한 초과) 이미지 디코드가
       // 실패하는 경우 - 안 잡으면 '완료'가 아무 반응 없이 먹통이 된다.
       setCropError('이미지를 자르지 못했습니다. 다른 이미지를 사용해 주세요.');
     } finally {
+      processingRef.current = false;
       setIsProcessing(false);
     }
   };
@@ -78,10 +89,11 @@ export function CoverCropModal({ onClose, onComplete }: CoverCropModalProps) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="flex w-full max-w-md flex-col gap-4 rounded bg-white p-6">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-bold">표지 설정</h2>
+          <h2 className="text-lg font-bold">{title}</h2>
           <button
             type="button"
             onClick={onClose}
+            disabled={isProcessing}
             className="text-gray-500 hover:text-gray-800"
             aria-label="닫기"
           >
@@ -118,6 +130,7 @@ export function CoverCropModal({ onClose, onComplete }: CoverCropModalProps) {
               <button
                 type="button"
                 onClick={onClose}
+                disabled={isProcessing}
                 className="rounded border border-gray-300 px-3 py-2"
               >
                 취소
@@ -141,7 +154,8 @@ export function CoverCropModal({ onClose, onComplete }: CoverCropModalProps) {
                 image={rawImageUrl}
                 crop={crop}
                 zoom={zoom}
-                aspect={COVER_ASPECT}
+                aspect={aspect}
+                cropShape={cropShape}
                 onCropChange={setCrop}
                 onZoomChange={setZoom}
                 onCropComplete={(_, areaPixels) => setCroppedAreaPixels(areaPixels)}
@@ -163,6 +177,7 @@ export function CoverCropModal({ onClose, onComplete }: CoverCropModalProps) {
               <button
                 type="button"
                 onClick={onClose}
+                disabled={isProcessing}
                 className="rounded border border-gray-300 px-3 py-2"
               >
                 취소

@@ -497,6 +497,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/artist-profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Artist Profile */
+        get: operations["get_artist_profile_admin_artist_profile_get"];
+        /** Put Artist Profile */
+        put: operations["put_artist_profile_admin_artist_profile_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/artist-profile/image": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Upload Artist Profile Image */
+        post: operations["upload_artist_profile_image_admin_artist_profile_image_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/commission-items": {
         parameters: {
             query?: never;
@@ -526,9 +561,26 @@ export interface paths {
         };
         /**
          * Get Site Text
-         * @description 무등록 key = 422(SiteTextKey enum 자동 검증), 미저장 슬롯 = 404(FE 존 접기).
+         * @description 무등록 key = 422(문구 슬롯 enum 검증), 미저장 슬롯 = 404(FE 존 접기).
          */
         get: operations["get_site_text_site_texts__key__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/artist-profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Artist Profile */
+        get: operations["get_artist_profile_artist_profile_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -640,6 +692,23 @@ export interface paths {
         get: operations["read_progress_episodes__episode_id__progress_get"];
         /** Update Progress */
         put: operations["update_progress_episodes__episode_id__progress_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/works/{work_id}/progress": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Work Progress */
+        get: operations["read_work_progress_works__work_id__progress_get"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -764,6 +833,31 @@ export interface components {
              * @enum {string}
              */
             stage: "totp" | "totp_setup" | "complete";
+        };
+        /** ArtistProfileRead */
+        ArtistProfileRead: {
+            /** Name */
+            name: string;
+            /** Profile Image Url */
+            profile_image_url: string | null;
+            /** Twitter Url */
+            twitter_url: string | null;
+            /** Postype Url */
+            postype_url: string | null;
+        };
+        /** ArtistProfileUpdate */
+        ArtistProfileUpdate: {
+            /** Name */
+            name: string;
+            /** Twitter Url */
+            twitter_url?: string | null;
+            /** Postype Url */
+            postype_url?: string | null;
+        };
+        /** Body_upload_artist_profile_image_admin_artist_profile_image_post */
+        Body_upload_artist_profile_image_admin_artist_profile_image_post: {
+            /** Image */
+            image: string;
         };
         /** Body_upload_commission_sample_admin_commission_items__item_id__images_post */
         Body_upload_commission_sample_admin_commission_items__item_id__images_post: {
@@ -1006,6 +1100,18 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
+        /** LastReadEpisode */
+        LastReadEpisode: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Public Id */
+            public_id: number;
+            /** Title */
+            title: string;
+        };
         /** LoginRequest */
         LoginRequest: {
             /**
@@ -1109,25 +1215,23 @@ export interface components {
             nickname: string;
         };
         /**
-         * SiteTextKey
-         * @description 사이트 문구 슬롯. VARCHAR(50) 저장 + 앱 enum 검증(네이티브 PG enum 아님 -
-         *     MISTAKES StrEnum 패턴). 슬롯 추가는 멤버만 늘리면 되고 마이그레이션이 없다.
-         *     후보: 약관·개인정보처리방침(M7 법무 문서 - 같은 모양이라 여기로 흡수 가능).
-         * @enum {string}
-         */
-        SiteTextKey: "landing_intro" | "commission_notes";
-        /**
          * SiteTextRead
          * @description admin·공개 공용(민감 필드 없음). updated_at이 None이면 아직 저장된 적 없는
          *     슬롯이다 - admin GET이 행 없음을 404 대신 빈 기본값으로 응답하는 시딩 규약.
          */
         SiteTextRead: {
-            key: components["schemas"]["SiteTextKey"];
+            key: components["schemas"]["SiteTextSlotKey"];
             /** Body */
             body: string;
             /** Updated At */
             updated_at: string | null;
         };
+        /**
+         * SiteTextSlotKey
+         * @description 범용 사이트 문구 API에서 공개 편집할 수 있는 플레인 텍스트 슬롯.
+         * @enum {string}
+         */
+        SiteTextSlotKey: "landing_intro" | "commission_notes";
         /** SiteTextUpdate */
         SiteTextUpdate: {
             /** Body */
@@ -1277,6 +1381,12 @@ export interface components {
             page: number;
             /** Size */
             size: number;
+        };
+        /** WorkProgressRead */
+        WorkProgressRead: {
+            /** Read Episode Ids */
+            read_episode_ids: string[];
+            last_episode: components["schemas"]["LastReadEpisode"] | null;
         };
         /** WorkRead */
         WorkRead: {
@@ -2331,7 +2441,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                key: components["schemas"]["SiteTextKey"];
+                key: components["schemas"]["SiteTextSlotKey"];
             };
             cookie?: never;
         };
@@ -2362,7 +2472,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                key: components["schemas"]["SiteTextKey"];
+                key: components["schemas"]["SiteTextSlotKey"];
             };
             cookie?: never;
         };
@@ -2379,6 +2489,92 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SiteTextRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_artist_profile_admin_artist_profile_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtistProfileRead"];
+                };
+            };
+        };
+    };
+    put_artist_profile_admin_artist_profile_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ArtistProfileUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtistProfileRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_artist_profile_image_admin_artist_profile_image_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_artist_profile_image_admin_artist_profile_image_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtistProfileRead"];
                 };
             };
             /** @description Validation Error */
@@ -2417,7 +2613,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                key: components["schemas"]["SiteTextKey"];
+                key: components["schemas"]["SiteTextSlotKey"];
             };
             cookie?: never;
         };
@@ -2439,6 +2635,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_artist_profile_artist_profile_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtistProfileRead"];
                 };
             };
         };
@@ -2642,6 +2858,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProgressRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_work_progress_works__work_id__progress_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                work_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkProgressRead"];
                 };
             };
             /** @description Validation Error */

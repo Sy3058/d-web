@@ -40,6 +40,8 @@ export type CommissionItemReorder = components['schemas']['CommissionItemReorder
 export type CommissionItemUpdate = components['schemas']['CommissionItemUpdate'];
 export type CommissionSampleImage = components['schemas']['CommissionSampleImage'];
 
-export type SiteTextKey = components['schemas']['SiteTextKey'];
+export type SiteTextKey = components['schemas']['SiteTextSlotKey'];
 export type SiteText = components['schemas']['SiteTextRead'];
 export type SiteTextUpdate = components['schemas']['SiteTextUpdate'];
+export type ArtistProfile = components['schemas']['ArtistProfileRead'];
+export type ArtistProfileUpdate = components['schemas']['ArtistProfileUpdate'];

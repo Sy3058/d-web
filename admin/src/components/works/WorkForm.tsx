@@ -5,7 +5,7 @@ import { TAG_NAME_MAX, workSchema, type WorkInput } from '../../lib/validation';
 import { WORK_STATUS_OPTIONS } from '../../lib/workStatus';
 import type { WorkStatus } from '../../types';
 import { TagInput } from './TagInput';
-import { CoverCropModal } from './CoverCropModal';
+import { ImageCropModal } from '../common/ImageCropModal';
 
 // Chrome은 기본 select 화살표에 padding-right를 적용하지 않아 화살표가 테두리에 딱 붙는다.
 // 기본 화살표를 끄고(appearance-none) 직접 그려 위치를 잡는다. select가 둘이라 마크업을 뺐다.
@@ -77,7 +77,7 @@ export function WorkForm({
     },
   });
 
-  // CoverCropModal과 같은 이유로 ref에 들고 명시적으로 revoke한다(교체·해제·언마운트).
+  // ImageCropModal과 같은 이유로 ref에 들고 명시적으로 revoke한다(교체·해제·언마운트).
   // useEffect([coverPreview])로 걸면 StrictMode의 mount→cleanup→mount에서 화면이 아직
   // 쓰는 URL을 revoke해 미리보기가 깨진다.
   const previewUrlRef = useRef<string | null>(null);
@@ -279,7 +279,13 @@ export function WorkForm({
       </button>
 
       {isCropModalOpen && (
-        <CoverCropModal onClose={() => setCropModalOpen(false)} onComplete={handleCropComplete} />
+        <ImageCropModal
+          title="표지 설정"
+          aspect={3 / 4}
+          outputFileName="cover.jpg"
+          onClose={() => setCropModalOpen(false)}
+          onComplete={handleCropComplete}
+        />
       )}
     </form>
   );
