@@ -17,7 +17,7 @@
 
 - **개발 방식: 컨테이너 외부 dev 서버** - compose는 통합 확인용, 일상 개발은 `docker compose up postgres` + 로컬 dev 서버. Dockerfile은 프로덕션 빌드라 hot reload 없음.
 - **admin 라우팅: 서브도메인 `admin.localhost`** - 스테이징/프로덕션 `admin.도메인` 구조와 동일 패턴 유지 (`/admin` 경로 방식 탈락).
-- **이미지 구성**: backend는 `python:3.12-slim` + uv, frontend/admin은 pnpm 빌드 → nginx 정적 서빙 (멀티스테이지).
+- **이미지 구성**: backend는 `python:3.12-slim` + uv, frontend는 Astro Node standalone, admin은 nginx 정적 서빙 (멀티스테이지).
 
 ## 구현 내용
 
@@ -30,10 +30,14 @@
 
 ### 2. Caddy 로컬 라우팅 (Caddyfile)
 
-- `localhost` → frontend:80
+- `localhost` → frontend:4321
 - `admin.localhost` → admin:80 (`/etc/hosts`에 `127.0.0.1 admin.localhost` 필요)
 - `api.localhost` → api:8000
 - 로컬은 HTTP만. 자동 HTTPS는 D4 (VPS Caddy + Let's Encrypt)에서.
+
+M2 G부터 `/`, `/commission`이 admin 편집 데이터를 SSR로 반영하므로 frontend 최종 이미지는 nginx가 아니라 `@astrojs/node` standalone 서버를 실행한다. frontend healthcheck는 API 의존 SSR 경로 대신 `/favicon.svg`를 확인해 Node 프로세스 readiness와 API 상태를 분리한다.
+
+브라우저는 호스트에서 접근 가능한 `PUBLIC_API_URL`을 쓰고, frontend SSR Node는 compose DNS의 `API_INTERNAL_URL=http://api:8000`을 쓴다. 두 주소를 분리해 컨테이너 안의 `localhost`가 frontend 자신을 가리키는 오류를 막는다.
 
 ### 3. 코드리뷰(Opus) 반영 보안 수정
 

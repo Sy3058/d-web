@@ -127,14 +127,14 @@
 - 결정: **컨테이너 외부 dev 서버** - 일상 개발 시 `docker compose up postgres`만 띄우고 api/frontend/admin은 로컬에서 각각 실행. `docker compose up`은 전체 스택 통합 확인 용도.
 - 메모:
   - backend Dockerfile: `python:3.12-slim` + uv, `src.main:app` 모듈 경로
-  - frontend Dockerfile: 멀티스테이지 빌드 (Node 24 pnpm build → nginx:alpine 정적 서빙)
+  - frontend Dockerfile: 멀티스테이지 빌드 (Node 24 pnpm build → Astro Node standalone, M2 G에서 SSR 런타임으로 전환)
   - admin Dockerfile: 동일 패턴 (Vite SPA → nginx:alpine, try_files /index.html)
   - compose 내 DATABASE_URL은 `postgres` 컨테이너 호스트명으로 오버라이드 (backend/.env의 localhost 값을 덮어씀)
   - Astro SSR 페이지(M1 이후) 추가 시 `@astrojs/node` 어댑터 + Dockerfile Node 서버 방식으로 전환 필요
 
 ### C2. Caddy 로컬 라우팅 ✅
 - 선행: C1
-- 산출물: `Caddyfile` (api → api:8000, frontend → frontend:80, admin.localhost → admin:80)
+- 산출물: `Caddyfile` (api → api:8000, frontend → frontend:4321, admin.localhost → admin:80)
 - DoD: localhost로 3개 서비스 라우팅 정상
 - 결정: **서브도메인 `admin.localhost`** - 스테이징/프로덕션 구조(admin.도메인)와 동일 패턴 유지
 - 메모:

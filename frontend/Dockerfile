@@ -13,9 +13,21 @@ COPY admin/ ./admin/
 RUN pnpm install --frozen-lockfile
 RUN pnpm --filter frontend build
 
-FROM nginx:alpine
+FROM node:24-alpine
 
-COPY --from=builder /app/frontend/dist /usr/share/nginx/html
-COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf
+WORKDIR /app
 
-EXPOSE 80
+# @astrojs/node standalone 산출물은 일부 패키지를 런타임 external import한다. pnpm의
+# frontend/node_modules symlink가 루트 .pnpm 저장소를 가리키므로 둘을 함께 복사한다.
+COPY --from=builder --chown=node:node /app/node_modules ./node_modules
+COPY --from=builder --chown=node:node /app/frontend/node_modules ./frontend/node_modules
+COPY --from=builder --chown=node:node /app/frontend/dist ./frontend/dist
+
+ENV HOST=0.0.0.0
+ENV PORT=4321
+
+EXPOSE 4321
+
+USER node
+
+CMD ["node", "./frontend/dist/server/entry.mjs"]

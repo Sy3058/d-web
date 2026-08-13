@@ -1,9 +1,138 @@
 ---
+export const prerender = false;
+
 import BaseLayout from '../layouts/BaseLayout.astro';
+import Button from '../components/ui/Button.astro';
+import Badge from '../components/ui/Badge.astro';
+import CoverImage from '../components/works/CoverImage.astro';
+import WorkCard from '../components/works/WorkCard.astro';
+import CommissionCard from '../components/commission/CommissionCard.astro';
+import { getWorks, statusLabel, type WorkListResponse } from '../lib/catalog';
+import {
+  getCommissionItems,
+  getSiteText,
+  selectLandingCommissions,
+  splitLandingWorks,
+} from '../lib/commission';
+import { applyCatalogCache } from '../lib/http';
+
+const [worksResult, introResult, commissionResult] = await Promise.allSettled([
+  getWorks(1),
+  getSiteText('landing_intro'),
+  getCommissionItems(),
+]);
+
+const emptyWorks: WorkListResponse = { items: [], total: 0, page: 1, size: 24 };
+const works = worksResult.status === 'fulfilled' ? worksResult.value : emptyWorks;
+const intro = introResult.status === 'fulfilled' ? introResult.value : null;
+const commissions = commissionResult.status === 'fulfilled' ? commissionResult.value : [];
+const worksError = worksResult.status === 'rejected';
+const introError = introResult.status === 'rejected';
+const commissionError = commissionResult.status === 'rejected';
+const missingIntro = introResult.status === 'fulfilled' && introResult.value === null;
+const { recent, others } = splitLandingWorks(works.items);
+const landingCommissions = selectLandingCommissions(commissions);
+
+applyCatalogCache(Astro.response, {
+  error: worksError || introError || commissionError || missingIntro,
+});
 ---
 
-<BaseLayout title="홈">
-  <div class="max-w-[1140px] mx-auto px-6 py-16">
-    <h1 class="text-3xl font-semibold tracking-tight text-ink">도군</h1>
+<BaseLayout
+  title="홈"
+  description="도군의 웹툰 작품과 커미션 소식을 만나보세요."
+  canonicalPath={Astro.url.pathname}
+>
+  <div class="mx-auto max-w-[1140px] px-5 py-12 sm:px-6 sm:py-16">
+    <section class="grid items-center gap-10 lg:grid-cols-[minmax(0,1fr)_220px] lg:gap-14">
+      <div class="order-2 lg:order-1">
+        <p class="text-label-md text-muted">WEBTOON ARTIST</p>
+        <h1 class="mt-3 text-display-lg text-ink">도군</h1>
+        {
+          introError ? (
+            <p class="mt-6 text-sm text-muted">
+              소개를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.
+            </p>
+          ) : intro?.body ? (
+            <p class="mt-6 max-w-[720px] whitespace-pre-line text-body-lg text-ink">{intro.body}</p>
+          ) : null
+        }
+
+        <div class="mt-8 flex flex-wrap gap-3">
+          <Button href="/works">전체 작품 보기</Button>
+          <Button href="/commission" variant="secondary">커미션 보기</Button>
+        </div>
+      </div>
+
+      <div class="order-1 mx-auto w-full max-w-[220px] lg:order-2">
+        {
+          worksError ? (
+            <div class="flex aspect-[3/4] items-center justify-center rounded-surface bg-hover px-6 text-center text-sm text-muted">
+              작품 정보를 불러오지 못했어요.
+            </div>
+          ) : recent ? (
+            <a href={`/works/${recent.id}`} class="group block">
+              <CoverImage src={recent.cover_image_url} alt={recent.title} />
+              <div class="mt-4 flex items-start justify-between gap-3">
+                <div>
+                  <p class="text-label-md text-muted">최근 등록 작품</p>
+                  <h2 class="mt-1 text-headline-md text-ink group-hover:underline underline-offset-4">
+                    {recent.title}
+                  </h2>
+                </div>
+                <Badge variant="neutral" class="shrink-0">{statusLabel(recent.status)}</Badge>
+              </div>
+            </a>
+          ) : (
+            <div class="flex aspect-[3/4] items-center justify-center rounded-surface bg-hover px-6 text-center text-sm text-muted">
+              새 작품을 준비하고 있어요.
+            </div>
+          )
+        }
+      </div>
+    </section>
+
+    {
+      !worksError && others.length > 0 && (
+        <section class="mt-20 border-t border-line pt-14" aria-labelledby="other-works-title">
+          <div class="flex items-end justify-between gap-4">
+            <h2 id="other-works-title" class="text-headline-md text-ink">다른 작품</h2>
+            <Button href="/works" variant="ghost">전체 보기</Button>
+          </div>
+          <div class="mt-8 grid grid-cols-2 gap-x-6 gap-y-10 sm:grid-cols-3 lg:grid-cols-4">
+            {others.map((work) => <WorkCard work={work} />)}
+          </div>
+        </section>
+      )
+    }
+
+    <section class="mt-16 border-t border-line pt-12" aria-labelledby="landing-commission-title">
+      <div class="flex flex-wrap items-end justify-between gap-6">
+        <div class="max-w-[640px]">
+          <p class="text-label-md text-muted">COMMISSION</p>
+          <h2 id="landing-commission-title" class="mt-2 text-headline-lg text-ink">커미션</h2>
+          <p class="mt-4 text-body-md text-ink">
+            작업 유형과 가격, 샘플을 확인할 수 있어요. 온라인 신청 기능은 준비 중이에요.
+          </p>
+        </div>
+        <Button href="/commission" variant="secondary">전체 보기</Button>
+      </div>
+
+      {
+        commissionError ? (
+          <p class="mt-8 text-sm text-muted">
+            커미션 정보를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.
+          </p>
+        ) : landingCommissions.length > 0 ? (
+          <div class="mt-8 grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-4">
+            {landingCommissions.map((item) => <CommissionCard item={item} />)}
+          </div>
+        ) : (
+          <div class="mt-8 flex min-h-36 items-center justify-center rounded-control border border-line px-6 text-center text-sm text-muted">
+            커미션 안내를 준비하고 있어요.
+          </div>
+        )
+      }
+    </section>
   </div>
 </BaseLayout>

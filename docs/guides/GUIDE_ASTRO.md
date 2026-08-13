@@ -48,6 +48,7 @@
 - **주의 1**: `astro:env/server`에서 무엇이든 import하면 *스키마의 모든 secret이 검증*된다 → 빌드 시 더미값이 필요할 수 있음(`validateSecrets`).
 - **주의 2**: `astro:env`는 Astro 컨텍스트(컴포넌트·라우트·엔드포인트·미들웨어)에서만. `astro.config.mjs`·외부 스크립트에선 못 씀 → `process.env` / Vite `loadEnv()`.
 - **이 프로젝트 적용**: 현재 `import.meta.env.PUBLIC_API_URL` 사용 중(`GoogleButton.astro`). 타입 안전을 강화하려면 `astro:env`로 이전 가능(선택). **`SECRET_*`를 `.astro` 정적 페이지에서 접근 금지** 규칙은 그대로 유지(`frontend/CLAUDE.md`).
+- **Node SSR 런타임(2026-08-13 확인)**: `@astrojs/node` standalone의 런타임 환경변수는 `process.env.API_INTERNAL_URL`로 읽는다. 이 adapter는 `.env`를 런타임에 자동 로드하지 않으므로 self-hosted Docker/compose의 `environment`에서 직접 주입한다. `import.meta.env.SSR` 분기 안에서만 `process.env`를 참조해 클라이언트 번들에 내부 주소가 들어가지 않게 한다. 브라우저용 `PUBLIC_API_URL`과 SSR용 `API_INTERNAL_URL`을 같은 값으로 강제하지 않는다.
 - 출처: https://docs.astro.build/en/guides/environment-variables/
 
 ### 4. 프리렌더 페이지엔 쿼리 파라미터가 없다 (검증 2026-07-19)

@@ -79,6 +79,10 @@
 
 ## Vite / Astro
 
+- **SSR 컨테이너와 브라우저에 같은 API base URL을 쓰면 `localhost`의 주체가 달라진다** (M2 G, 2026-08-13)
+  -> 브라우저의 `http://localhost:8000`은 호스트에 바인딩된 API를 가리키지만, frontend 컨테이너의 같은 주소는 frontend 자신을 가리킨다. Astro 페이지를 SSR로 전환하면 정적 빌드에서 숨어 있던 이 차이가 런타임 장애로 드러난다.
+  -> 브라우저용 `PUBLIC_API_URL`과 SSR용 `API_INTERNAL_URL`을 분리하고, Node standalone은 `process.env.API_INTERNAL_URL`, compose는 `http://api:8000`을 주입한다. 정적 자산 healthcheck만으로는 이 장애를 못 잡으므로 분기 단위 테스트와 서버/클라이언트 산출물 grep으로 내부 주소 노출·제거 여부를 검증한다.
+
 - `VITE_*` 환경변수는 **서버 시작 시점에 번들로 주입**된다
   -> `.env` 생성 전에 `pnpm dev`를 먼저 띄우면 env가 undefined로 뜬다
   -> **정정(2026-07-18 실측)**: "고쳐도 반영 안 되니 수동 재시작"이라고 적어뒀었는데, Vite 7.3은
