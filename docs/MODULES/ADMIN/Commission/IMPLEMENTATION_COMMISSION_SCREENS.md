@@ -5,7 +5,7 @@
 | 모듈 | Admin / Commission |
 | 관련 마일스톤 | [M2](../../../milestones/M2_foundation.md) 그룹 G |
 | 작성 시점 | M2 G PR2 (2026-08-05) |
-| 상태 | 구현 + 코드 리뷰 반영. 브랜치를 최신 `origin/main`(475d231)으로 fast-forward. 리뷰 후 카드 벌크 재정렬 API·서버 순서 배정과 등록 화면 샘플 이미지 사전 선택을 추가하고 `generate:types` 재생성. 최종 `pnpm --filter admin test` 106 passed, lint·build 클린 |
+| 상태 | 구현 + 코드 리뷰 반영. 독립 작가 프로필 화면·이미지 업로드 포함. 최종 `pnpm --filter admin test` 109 passed, lint·build 클린 |
 | 관련 문서 | `../../BE/Commission/IMPLEMENTATION_COMMISSION_API.md`(PR1 - 인계 계약 원문), M2_foundation.md 그룹 G |
 
 PR1(#107)이 만든 커미션 카드·사이트 문구 API를 소비하는 admin 화면. 최초 구현은 PR1 API만 소비했으나, 머지 전 리뷰에서 개별 PUT 두 건으로는 순서 변경의 원자성을 보장할 수 없음을 확인해 컬렉션 벌크 재정렬 API와 서버 순서 배정을 같은 PR에 보강했다.
@@ -19,7 +19,8 @@ PR1(#107)이 만든 커미션 카드·사이트 문구 API를 소비하는 admin
 | `admin/src/routes/_auth/commission/index.tsx` | 신설. 카드 목록 |
 | `admin/src/routes/_auth/commission/new.tsx` | 신설. 카드 등록 + 샘플 이미지 로컬 스테이징(등록 제출 시 함께 업로드) |
 | `admin/src/routes/_auth/commission/$itemId.tsx` | 신설. 카드 수정 + 샘플 이미지 관리 |
-| `admin/src/routes/_auth/site-texts.tsx` | 신설. 사이트 문구 2슬롯 편집 |
+| `admin/src/routes/_auth/site-texts.tsx` | 사이트 문구 2슬롯 편집 |
+| `admin/src/routes/_auth/artist-profile.tsx` | 독립 작가 프로필 수정 화면 |
 | `admin/src/routes/_auth/index.tsx` | 대시보드에 "커미션 관리"·"사이트 문구 편집" 링크 추가 |
 | `admin/src/components/commission/CommissionForm.tsx` | 신설. 등록/수정 공용 폼(RHF + Zod) |
 | `admin/src/components/commission/CommissionList.tsx` | 신설. 목록(마감 토글·순서 ▲▼·편집/삭제) |
@@ -27,8 +28,11 @@ PR1(#107)이 만든 커미션 카드·사이트 문구 API를 소비하는 admin
 | `admin/src/components/commission/SampleImageManager.tsx` | 신설. 샘플 이미지 업로드·재배열·삭제(카드 편집 화면 전용, 실제 네트워크 업로드) |
 | `admin/src/components/commission/SampleImageStaging.tsx` | 신설. 샘플 이미지 로컬 선택·미리보기·재배열·삭제(카드 등록 화면 전용, 네트워크 없음) |
 | `admin/src/components/commission/SiteTextEditor.tsx` | 신설. 문구 슬롯 1개 편집(로딩 게이트 + 폼) |
+| `admin/src/components/commission/ArtistProfileEditor.tsx` | 소개용 작가명·프로필 이미지 업로드·Twitter·Postype 폼 |
+| `admin/src/components/common/ImageCropModal.tsx` | 작품 표지·프로필 공용 선택·확대·크롭 모달 |
 | `admin/src/hooks/useCommissionItems.ts` | 신설. 목록·생성·수정·삭제·샘플 업로드 |
 | `admin/src/hooks/useSiteTexts.ts` | 신설. 문구 조회·upsert |
+| `admin/src/hooks/useArtistProfile.ts` | 작가 프로필 조회·일괄 upsert |
 | `admin/src/lib/validation.ts` | `commissionItemSchema` + 상수(TITLE_MAX·`MAX_SAMPLES_PER_ITEM` 등) 추가 |
 | `admin/src/types/index.ts` | `CommissionItem`·`SiteText` 등 별칭 추가 |
 | `admin/src/types/api.gen.ts` | `generate:types` 재생성(#107 커미션 + #108 회차 스키마 모두 반영) |
@@ -66,6 +70,8 @@ PR1(#107)이 만든 커미션 카드·사이트 문구 API를 소비하는 admin
 
 ### SiteText 편집은 RHF 미사용, `useEffect` 없이 데이터 로드 후에만 하위 컴포넌트 마운트
 필드가 textarea 하나뿐이라 폼 라이브러리를 얹을 이유가 없다. 처음에는 `useEffect(() => setBody(data.body), [data])`로 서버 값을 로컬 상태에 복사했으나, 새 eslint 규칙(`react-hooks/set-state-in-effect` - React Compiler 대비 룰)이 "effect 안에서 setState 동기 호출"을 에러로 잡았다. `works/$workId/index.tsx`의 `{work && <WorkForm .../>}` 패턴과 동일하게, 데이터가 로드된 뒤에만 마운트되는 `SiteTextForm` 하위 컴포넌트로 분리해 `useState(data.body)` 초기값이 마운트 시점에 한 번만 seed되도록 했다 - effect 자체가 불필요해진다.
+
+작가 프로필은 사이트 문구 화면과 분리한 `/artist-profile`에서 편집한다. 이름·외부 채널은 RHF + Zod를 사용하고 빈 URL 입력은 제출 경계에서 `null`로 바꾸며 클라이언트와 서버 모두 host가 있는 HTTP(S)만 허용한다. 이미지는 URL 입력이 아니라 공용 `ImageCropModal`에서 1:1 원형 가이드로 위치·확대를 조정한 뒤 multipart로 업로드하고, 서버가 WebP·공개 URL로 변환한 응답을 전용 query key에 반영한다. 같은 모달을 작품 표지는 3:4 사각형 설정으로 사용해 파일 선택·blob 정리·canvas 실패 처리를 한 곳에서 유지한다. 작가명은 랜딩의 작가 소개 스트립에만 반영하며 전역 브랜드명 `도군`은 바꾸지 않는다.
 
 ---
 

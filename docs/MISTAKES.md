@@ -34,6 +34,10 @@
 
 ## FastAPI
 
+- **내부 저장 키 enum을 범용 API path enum으로 재사용하면 전용 검증을 우회할 수 있다** (M2 G 작가 프로필, 2026-08-13)
+  -> `site_texts`의 내부 키 enum에 프로필 URL 키를 추가하자 기존 `PUT /admin/site-texts/{key}`도 이를 자동 허용해 전용 `ArtistProfileUpdate(HttpUrl)` 검증을 건너뛰었다.
+  -> DB가 받는 전체 키와 범용 API가 받는 편집 가능 슬롯 enum을 분리하고, 공개 응답 조립에서도 기존 잘못된 URL을 다시 검증해 숨긴다. path enum 확장 시 같은 enum을 쓰는 모든 라우트를 검색한다.
+
 - 고정 비싼 값(타이밍 평탄화 더미 해시 등 비번과 무관한 상수)은 **import 시 eager 생성**할 것
   → lazy 캐시(`global X; if X is None: X = bcrypt(...)`)로 미루면 첫 호출 때 bcrypt(~300ms)가 **이벤트 루프를 동기 블로킹**
   → 비용은 프로세스당 1회라 어차피 한 번 냄. lazy는 그 1회를 부팅(요청 안 받음, 무해)에서 요청 처리 중(유해)으로 옮길 뿐 → 손해
@@ -66,6 +70,10 @@
   → 패턴 인식: "매번 다른 테스트 1개만 실패 + 직후 전부 정상 + 실행 시간이 긴 파일에 실패 편중"은 임의 시점 일회성 **환경 이벤트**(시계·디스크·네트워크)의 서명이다. 코드 경로를 아무리 읽어도 안 나온다
 
 ## Astro / React
+
+- **React 아일랜드 전용 CSS import는 ClientRouter 왕복 뒤 사라질 수 있다** (M2 G 캐러셀, 2026-08-13)
+  -> 홈의 React 아일랜드가 import한 위치 CSS는 첫 진입에서는 정상이지만, 상세 페이지 이동 때 홈 전용 head 스타일이 제거된 뒤 홈으로 돌아오면 이미 실행된 모듈 스크립트가 재실행되지 않아 복구되지 않았다. absolute 카드의 `left`·`top`·`transform`이 사라져 표지가 전부 안 보이는 것처럼 됐다.
+  -> 여러 페이지에서 `BaseLayout`이 항상 읽는 `globals.css`로 페이지 왕복 뒤에도 필요한 규칙을 옮긴다. 단순히 홈 링크에 `data-astro-reload`를 붙여 전체 새로고침으로 숨기지 않는다.
 
 - **`@tiptap/core`의 `generateHTML`은 브라우저 전용 - Node(vitest 기본 `environment: node`) 환경에서 `ReferenceError: window is not defined`** (M2 F1, 2026-07-25)
   → ProseMirror `DOMSerializer.serializeFragment`가 실제 DOM을 요구한다(공식 문서의 "browser-only" 서술과 실측 일치). 서버(Node)에서도 렌더해야 하면 `@tiptap/html`(브라우저+Node 겸용)을 쓴다
