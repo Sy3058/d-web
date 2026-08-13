@@ -1,0 +1,78 @@
+---
+export const prerender = false;
+
+import BaseLayout from '../layouts/BaseLayout.astro';
+import CommissionCard from '../components/commission/CommissionCard.astro';
+import { commissionAvailability, getCommissionItems, getSiteText } from '../lib/commission';
+import { applyCatalogCache } from '../lib/http';
+
+const [itemsResult, notesResult] = await Promise.allSettled([
+  getCommissionItems(),
+  getSiteText('commission_notes'),
+]);
+
+const items = itemsResult.status === 'fulfilled' ? itemsResult.value : [];
+const notes = notesResult.status === 'fulfilled' ? notesResult.value : null;
+const itemsError = itemsResult.status === 'rejected';
+const notesError = notesResult.status === 'rejected';
+const missingNotes = notesResult.status === 'fulfilled' && notesResult.value === null;
+const availability = commissionAvailability(items);
+
+// 일부 존은 독립적으로 렌더하되 실패나 미저장 404가 있으면 페이지 전체를 캐시하지 않는다.
+// 그래야 작가의 첫 저장이나 장애 복구가 낡은 SSR HTML에 눌러붙지 않는다.
+applyCatalogCache(Astro.response, { error: itemsError || notesError || missingNotes });
+---
+
+<BaseLayout
+  title="커미션"
+  description="도군의 커미션 가격, 예상 일정, 작업 예시와 모집 상태를 확인하세요."
+  canonicalPath={Astro.url.pathname}
+>
+  <div class="mx-auto max-w-[1140px] px-5 py-6 sm:px-6">
+    <header class="max-w-[720px]">
+      <p class="text-label-md text-muted">COMMISSION</p>
+      <h1 class="mt-3 text-headline-lg text-ink sm:text-display-lg">커미션</h1>
+      <p class="mt-5 text-body-lg text-ink">
+        작업 유형과 샘플을 확인해 주세요. 온라인 신청 기능은 준비하고 있어요.
+      </p>
+    </header>
+
+    <section class="mt-16" aria-labelledby="commission-list-title">
+      <div class="flex flex-wrap items-end justify-between gap-3">
+        <h2 id="commission-list-title" class="text-headline-md text-ink">작업 안내</h2>
+        {
+          availability === 'closed' && (
+            <p class="text-sm text-muted">현재 모든 커미션이 마감되었어요.</p>
+          )
+        }
+      </div>
+
+      {
+        itemsError ? (
+          <p class="mt-8 text-sm text-muted">
+            일시적인 오류로 커미션 정보를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.
+          </p>
+        ) : availability === 'empty' ? (
+          <p class="mt-8 text-sm text-muted">아직 등록된 커미션이 없어요.</p>
+        ) : (
+          <div class="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-5 lg:grid-cols-4">
+            {items.map((item) => <CommissionCard item={item} />)}
+          </div>
+        )
+      }
+    </section>
+
+    {
+      notesError ? (
+        <p class="mt-16 text-sm text-muted">
+          유의사항을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.
+        </p>
+      ) : notes?.body ? (
+        <section class="mt-16 max-w-[720px] border-t border-line pt-10" aria-labelledby="commission-notes-title">
+          <h2 id="commission-notes-title" class="text-headline-md text-ink">유의사항</h2>
+          <p class="mt-5 whitespace-pre-line text-body-md text-ink">{notes.body}</p>
+        </section>
+      ) : null
+    }
+  </div>
+</BaseLayout>

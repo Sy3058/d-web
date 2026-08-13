@@ -71,6 +71,7 @@ export const COMMISSION_TITLE_MAX = 200;
 export const COMMISSION_SHORT_TEXT_MAX = 100;
 export const COMMISSION_DESCRIPTION_MAX = 2000;
 export const SITE_TEXT_MAX = 10_000;
+export const ARTIST_NAME_MAX = 100;
 // 등록 화면(로컬 스테이징)·수정 화면(SampleImageManager) 둘 다 이 값을 참조한다 - 한쪽만
 // 고치면 두 화면의 상한이 갈라진다.
 export const MAX_SAMPLES_PER_ITEM = 10;
@@ -97,3 +98,30 @@ export const commissionItemSchema = z.object({
 });
 
 export type CommissionItemInput = z.infer<typeof commissionItemSchema>;
+
+const optionalHttpUrl = z
+  .string()
+  .refine(
+    (value) => {
+      if (value === '') return true;
+      try {
+        const url = new URL(value);
+        return (url.protocol === 'http:' || url.protocol === 'https:') && Boolean(url.hostname);
+      } catch {
+        return false;
+      }
+    },
+    '올바른 http:// 또는 https:// URL을 입력해 주세요.',
+  );
+
+export const artistProfileSchema = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(1, '작가명을 입력해 주세요.')
+    .max(ARTIST_NAME_MAX, `작가명은 ${ARTIST_NAME_MAX}자 이하여야 합니다.`),
+  twitter_url: optionalHttpUrl,
+  postype_url: optionalHttpUrl,
+});
+
+export type ArtistProfileInput = z.infer<typeof artistProfileSchema>;

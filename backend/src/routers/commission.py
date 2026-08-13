@@ -11,8 +11,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.lib.db import get_session
-from src.models.commission import SiteText, SiteTextKey
-from src.schemas.commission import PublicCommissionItem, SiteTextRead
+from src.models.commission import SiteText, SiteTextSlotKey
+from src.schemas.commission import ArtistProfileRead, PublicCommissionItem, SiteTextRead
 from src.services import commission_service
 
 router = APIRouter(tags=["commission"])
@@ -35,9 +35,14 @@ async def list_commission_items(session: SessionDep) -> list[PublicCommissionIte
 
 
 @router.get("/site-texts/{key}", response_model=SiteTextRead)
-async def get_site_text(key: SiteTextKey, session: SessionDep) -> SiteText:
-    """무등록 key = 422(SiteTextKey enum 자동 검증), 미저장 슬롯 = 404(FE 존 접기)."""
+async def get_site_text(key: SiteTextSlotKey, session: SessionDep) -> SiteText:
+    """무등록 key = 422(문구 슬롯 enum 검증), 미저장 슬롯 = 404(FE 존 접기)."""
     row = await commission_service.get_site_text(key, session)
     if row is None:
         raise _TEXT_NOT_FOUND
     return row
+
+
+@router.get("/artist-profile", response_model=ArtistProfileRead)
+async def get_artist_profile(session: SessionDep) -> ArtistProfileRead:
+    return await commission_service.get_artist_profile(session)

@@ -16,15 +16,15 @@
 
 | 파일 | 내용 |
 |------|------|
-| `backend/src/models/commission.py` | `CommissionItem` / `SiteTextKey`(StrEnum) / `SiteText` |
+| `backend/src/models/commission.py` | `CommissionItem` / 내부 `SiteTextKey` / 문구 API 전용 `SiteTextSlotKey` / `SiteText` |
 | `backend/migrations/versions/20260728_1728_commission_items_and_site_texts.py` | 테이블 2개 (리비전 `7f25d827c9ab`) |
-| `backend/src/schemas/commission.py` | admin Create/Update/Reorder/Read(+`sample_images` key·URL 쌍) / 공개 `PublicCommissionItem`(URL만) / `SiteTextRead`·`SiteTextUpdate` |
+| `backend/src/schemas/commission.py` | 커미션 DTO / 사이트 문구 DTO / `ArtistProfileRead`·`ArtistProfileUpdate` |
 | `backend/src/services/commission_service.py` | CRUD·벌크 재정렬·원자 append·삭제분 공개 버킷 정리·ON CONFLICT upsert |
-| `backend/src/routers/admin_commission.py` | owner 전용 8개 엔드포인트 |
-| `backend/src/routers/commission.py` | 공개 2개 엔드포인트 |
+| `backend/src/routers/admin_commission.py` | owner 전용 커미션·문구·작가 프로필 엔드포인트 |
+| `backend/src/routers/commission.py` | 공개 커미션·문구·작가 프로필 엔드포인트 |
 | `backend/src/lib/exceptions.py` | `CommissionConflictError`(409)·`CommissionValidationError`(422) 추가 |
 | `backend/src/services/r2_service.py` | `commission_sample_key()` 추가 |
-| `backend/tests/test_commission.py` | 24케이스 |
+| `backend/tests/test_commission.py` | 30케이스 |
 
 | 엔드포인트 | 인증 | 역할 |
 |-----------|------|------|
@@ -33,8 +33,11 @@
 | `PUT/DELETE /admin/commission-items/{id}` | owner | 부분수정(매니페스트 축소 포함)·하드 삭제 |
 | `POST /admin/commission-items/{id}/images` | owner | 샘플 1장 업로드(변환→공개 버킷→원자 append) |
 | `GET/PUT /admin/site-texts/{key}` | owner | 문구 조회(행 없음=빈 기본값)·upsert |
+| `GET/PUT /admin/artist-profile` | owner | 소개용 작가명·외부 채널 조회·upsert |
+| `POST /admin/artist-profile/image` | owner | 프로필 이미지 변환·공개 버킷 업로드·기존 객체 정리 |
 | `GET /commission-items` | 불요 | 공개 카드 목록(마감 포함, URL만) |
 | `GET /site-texts/{key}` | 불요 | 공개 문구(무등록 key 422, 미저장 404 no-store) |
+| `GET /artist-profile` | 불요 | 공개 작가 프로필(미저장 필드는 기본값) |
 
 ---
 
@@ -51,6 +54,8 @@
 
 ### SiteText 시딩 규약: 행 없음 ≠ 404 (admin 한정)
 행은 시딩하지 않는다. admin GET은 행 없음을 `{key, body: "", updated_at: null}`로 응답해 첫 편집 진입이 막히지 않게 하고, PUT이 `ON CONFLICT DO UPDATE` upsert로 생성한다(check-then-insert는 동시 첫 저장 PK 충돌 500). `updated_at`은 `set_`에 명시 - `onupdate=func.now()`는 ON CONFLICT SET절에 발동하지 않는다(C1과 동일 함정, 테스트로 고정). **공개** GET은 미저장 슬롯을 404(no-store)로 - FE가 존을 접는 신호다.
+
+작가 프로필도 같은 테이블의 내부 키를 사용해 신규 마이그레이션 없이 저장한다. 공개·admin 조회는 이를 단일 DTO로 조립하며, 행이 없을 때 기존 랜딩과 같은 소개명과 Twitter·Postype 서비스 홈을 기본값으로 준다. PUT은 이름·외부 채널을 한 문장에서 upsert하고 URL은 서버에서 HTTP(S)만 허용한다. 프로필 이미지는 URL 입력을 받지 않고 서버 경유 업로드에서 WebP로 변환해 `artist-profile/{uuid}.webp` 고유 키로 공개 버킷에 저장한다. DB 커밋 뒤 이전 객체를 정리하므로 CDN 캐시와 끊어진 참조를 피한다. 범용 `/site-texts/{key}`는 `SiteTextSlotKey`의 소개·유의사항 두 키만 받아 프로필 전용 검증을 우회할 수 없다. 공개 응답 조립도 기존 DB의 잘못된 외부 채널 URL을 `null`로 축소한다.
 
 ### 공개 응답 계약: 키 문자열 미노출
 `PublicCommissionItem`은 `sample_image_urls`(공개 URL 배열)만 싣는다. 공개 버킷이라 보안 목적이 아니라 "독자 응답에 R2 키 부재"(B2 계약)와 표면을 일치시키는 목적. admin 응답은 반대로 `sample_image_keys`(재배열 PUT용)와 `sample_images[]`(key·URL 쌍 - 렌더용)를 함께 싣는다 - **PR2 인계 계약: 재배열·삭제 PUT은 `sample_image_keys` 기준, 렌더는 `sample_images` 기준**(리뷰 FYI).

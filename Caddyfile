@@ -3,7 +3,7 @@
 # 스테이징/프로덕션 HTTPS 설정은 D4 (VPS Caddy + Let's Encrypt) 에서 진행
 
 http://localhost {
-    reverse_proxy frontend:80
+    reverse_proxy frontend:4321
 }
 
 http://admin.localhost {

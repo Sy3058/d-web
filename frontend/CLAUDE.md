@@ -23,10 +23,11 @@ Astro 관련 작업(페이지·SSR/`prerender`·env·라우팅·설정·통합) 
 ```
 frontend/src/
 ├── pages/                    # Astro 파일 라우팅
-│   ├── index.astro           # 홈 (SSG)
+│   ├── index.astro           # 홈 (SSR, 최근 등록 작품 + admin 편집 문구/커미션)
+│   ├── commission.astro      # 커미션 안내 (SSR)
 │   ├── works/
-│   │   ├── index.astro       # 작품 목록 (SSG, 하루 1회 재생성)
-│   │   └── [id].astro        # 작품 상세 (SSG)
+│   │   ├── index.astro       # 작품 목록 (SSR, 단기 HTTP 캐시)
+│   │   └── [id].astro        # 작품 상세 (SSR, 단기 HTTP 캐시)
 │   ├── works/[id]/episodes/[episodeId].astro  # 뷰어 (SSR)
 │   ├── auth/
 │   │   └── login.astro       # 로그인 + 구글 버튼 (SSG). 구글 콜백은 백엔드 수신(BFF), 프론트 콜백 페이지 없음. ?error=로 실패 표시
@@ -87,13 +88,14 @@ frontend/src/
 
 ### 3. 데이터 페칭 전략
 
-**SSG (정적 생성, 기본)**
-- 빌드 시점에 `await fetch()` → HTML에 포함
-- 작품 목록, 작품 상세 등
+**SSG (정적 생성)**
+- 배포 사이에 변하지 않는 페이지에만 사용
 
 **SSR (동적 렌더링, 선택적)**
 - `export const prerender = false`로 명시
-- 로그인 후 페이지 (구매 내역 등). 구글 OAuth 콜백은 백엔드가 받으므로 프론트 SSR 콜백 페이지 없음(BFF)
+- admin에서 편집하는 작품·문구·커미션, 로그인 후 페이지에 사용
+- 공개 조회 성공은 단기 HTTP 캐시를 적용하고 장애 응답과 최초 미저장 문구는 `no-store`로 둔다
+- 구글 OAuth 콜백은 백엔드가 받으므로 프론트 SSR 콜백 페이지 없음(BFF)
 
 **클라이언트 페칭 (React 섬)**
 - 댓글, 하트 같은 실시간 데이터

@@ -114,6 +114,9 @@ async def test_admin_reader_forbidden_403(async_client: AsyncClient, existing_us
         ("post", f"{ITEMS_URL}/{dummy}/images", {"files": {"image": ("s.png", b"x", "image/png")}}),
         ("get", "/admin/site-texts/landing_intro", {}),
         ("put", "/admin/site-texts/landing_intro", {"json": {"body": "x"}}),
+        ("get", "/admin/artist-profile", {}),
+        ("put", "/admin/artist-profile", {"json": {"name": "x"}}),
+        ("post", "/admin/artist-profile/image", {"files": {"image": ("p.png", b"x", "image/png")}}),
     ]:
         resp = await getattr(async_client, method)(url, **kwargs)
         assert resp.status_code == 403, (method, url)
@@ -421,3 +424,140 @@ async def test_site_text_rows_isolated_by_key(owner_client: AsyncClient, db_sess
     await owner_client.put("/admin/site-texts/landing_intro", json={"body": "소개"})
     row = await db_session.get(SiteText, "commission_notes")
     assert row is None  # 다른 슬롯에 흘러 쓰지 않음
+
+
+# ---------------------------------------------------------------------------
+# 작가 프로필
+# ---------------------------------------------------------------------------
+
+
+async def test_artist_profile_defaults(owner_client: AsyncClient, async_client: AsyncClient):
+    expected = {
+        "name": "도군",
+        "profile_image_url": None,
+        "twitter_url": "https://twitter.com/",
+        "postype_url": "https://www.postype.com/",
+    }
+    assert (await owner_client.get("/admin/artist-profile")).json() == expected
+
+    async_client.cookies.clear()
+    public = await async_client.get("/artist-profile")
+    assert public.status_code == 200
+    assert public.json() == expected
+
+
+async def test_artist_profile_update_roundtrip(
+    owner_client: AsyncClient, async_client: AsyncClient, db_session: AsyncSession
+):
+    body = {
+        "name": "새 작가명",
+        "twitter_url": "https://twitter.com/new-account",
+        "postype_url": None,
+    }
+    updated = await owner_client.put("/admin/artist-profile", json=body)
+    assert updated.status_code == 200
+    assert updated.json() == {**body, "profile_image_url": None}
+
+    async_client.cookies.clear()
+    assert (await async_client.get("/artist-profile")).json() == {
+        **body,
+        "profile_image_url": None,
+    }
+    assert (await db_session.get(SiteText, "artist_name")).body == "새 작가명"
+    assert (await db_session.get(SiteText, "artist_postype_url")).body == ""
+
+
+async def test_artist_profile_rejects_invalid_values(owner_client: AsyncClient):
+    blank_name = await owner_client.put("/admin/artist-profile", json={"name": ""})
+    assert blank_name.status_code == 422
+
+    invalid_url = await owner_client.put(
+        "/admin/artist-profile",
+        json={"name": "도군", "twitter_url": "javascript:alert(1)"},
+    )
+    assert invalid_url.status_code == 422
+
+    whitespace_name = await owner_client.put("/admin/artist-profile", json={"name": "   "})
+    assert whitespace_name.status_code == 422
+
+
+async def test_artist_profile_keys_rejected_by_generic_site_text_api(
+    owner_client: AsyncClient, async_client: AsyncClient
+):
+    response = await owner_client.put(
+        "/admin/site-texts/artist_twitter_url",
+        json={"body": "javascript:alert(1)"},
+    )
+    assert response.status_code == 422
+
+    async_client.cookies.clear()
+    public = await async_client.get("/site-texts/artist_name")
+    assert public.status_code == 422
+
+
+async def test_artist_profile_hides_invalid_stored_urls(
+    async_client: AsyncClient, db_session: AsyncSession
+):
+    db_session.add(SiteText(key="artist_twitter_url", body="javascript:alert(1)"))
+    await db_session.commit()
+
+    response = await async_client.get("/artist-profile")
+    assert response.status_code == 200
+    assert response.json()["twitter_url"] is None
+
+
+async def test_artist_profile_image_upload_replaces_public_object(
+    owner_client: AsyncClient,
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+    r2_calls: dict,
+    monkeypatch,
+):
+    monkeypatch.setattr(settings, "public_asset_base_url", PUBLIC_BASE)
+    db_session.add(SiteText(key="artist_profile_image_key", body="artist-profile/old.webp"))
+    await db_session.commit()
+
+    response = await owner_client.post(
+        "/admin/artist-profile/image",
+        files={"image": ("profile.png", _png(), "image/png")},
+    )
+    assert response.status_code == 200
+    key = (await db_session.get(SiteText, "artist_profile_image_key")).body
+    assert key.startswith("artist-profile/") and key.endswith(".webp")
+    assert response.json()["profile_image_url"] == f"{PUBLIC_BASE}/{key}"
+    assert r2_calls["upload"] == [{"key": key, "bucket": settings.r2_public_bucket}]
+    assert r2_calls["delete"] == [
+        {"key": "artist-profile/old.webp", "bucket": settings.r2_public_bucket}
+    ]
+
+    async_client.cookies.clear()
+    assert (await async_client.get("/artist-profile")).json()["profile_image_url"] == (
+        f"{PUBLIC_BASE}/{key}"
+    )
+
+
+async def test_artist_profile_image_cleanup_failure_does_not_reverse_success(
+    owner_client: AsyncClient,
+    db_session: AsyncSession,
+    r2_calls: dict,
+    monkeypatch,
+):
+    monkeypatch.setattr(settings, "public_asset_base_url", PUBLIC_BASE)
+    old_key = "artist-profile/old.webp"
+    db_session.add(SiteText(key="artist_profile_image_key", body=old_key))
+    await db_session.commit()
+
+    async def failing_delete(key: str, *, bucket: str | None = None) -> None:
+        raise RuntimeError(f"delete failed: {key} {bucket}")
+
+    monkeypatch.setattr(r2_service, "delete_object", failing_delete)
+    response = await owner_client.post(
+        "/admin/artist-profile/image",
+        files={"image": ("profile.png", _png(), "image/png")},
+    )
+
+    assert response.status_code == 200
+    new_key = (await db_session.get(SiteText, "artist_profile_image_key")).body
+    assert new_key != old_key
+    assert response.json()["profile_image_url"] == f"{PUBLIC_BASE}/{new_key}"
+    assert r2_calls["upload"] == [{"key": new_key, "bucket": settings.r2_public_bucket}]

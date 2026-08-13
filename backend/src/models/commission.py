@@ -97,6 +97,17 @@ class SiteTextKey(StrEnum):
 
     LANDING_INTRO = "landing_intro"  # 랜딩 히어로 옆 작가 소개
     COMMISSION_NOTES = "commission_notes"  # /commission 하단 유의사항·신청 방법
+    ARTIST_NAME = "artist_name"
+    ARTIST_PROFILE_IMAGE_KEY = "artist_profile_image_key"
+    ARTIST_TWITTER_URL = "artist_twitter_url"
+    ARTIST_POSTYPE_URL = "artist_postype_url"
+
+
+class SiteTextSlotKey(StrEnum):
+    """범용 사이트 문구 API에서 공개 편집할 수 있는 플레인 텍스트 슬롯."""
+
+    LANDING_INTRO = "landing_intro"
+    COMMISSION_NOTES = "commission_notes"
 
 
 class SiteText(SQLModel, table=True):

@@ -43,6 +43,9 @@ function Dashboard() {
       <Link to="/site-texts" className="text-blue-600 hover:underline">
         사이트 문구 편집
       </Link>
+      <Link to="/artist-profile" className="text-blue-600 hover:underline">
+        작가 프로필 수정
+      </Link>
       <button
         onClick={handleLogout}
         disabled={logout.isPending}

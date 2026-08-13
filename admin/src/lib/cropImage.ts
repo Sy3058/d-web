@@ -14,8 +14,7 @@ function loadImage(src: string): Promise<HTMLImageElement> {
 // 상한을 넘겨 422로 거부되는 경우도 애초에 안 생긴다.
 const MAX_OUTPUT_WIDTH = 1600;
 
-/** react-easy-crop이 계산한 픽셀 영역(croppedAreaPixels)을 실제로 canvas에 그려
- * 잘라낸 이미지 File로 만든다. 표지 업로드는 이 결과 파일을 그대로 서버에 보낸다. */
+/** react-easy-crop이 계산한 픽셀 영역을 canvas에 그려 업로드용 File로 만든다. */
 export async function getCroppedImageFile(
   imageSrc: string,
   area: Area,

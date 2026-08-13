@@ -1,9 +1,94 @@
 ---
+export const prerender = false;
+
 import BaseLayout from '../layouts/BaseLayout.astro';
+import Button from '../components/ui/Button.astro';
+import ArtistProfile from '../components/landing/ArtistProfile.astro';
+import WorkCarousel from '../components/works/WorkCarousel';
+import CommissionCard from '../components/commission/CommissionCard.astro';
+import { getWorks, type WorkListResponse } from '../lib/catalog';
+import {
+  getArtistProfile,
+  getCommissionItems,
+  getSiteText,
+  selectLandingCommissions,
+} from '../lib/commission';
+import { applyCatalogCache } from '../lib/http';
+
+const [worksResult, introResult, profileResult, commissionResult] = await Promise.allSettled([
+  getWorks(1),
+  getSiteText('landing_intro'),
+  getArtistProfile(),
+  getCommissionItems(),
+]);
+
+const emptyWorks: WorkListResponse = { items: [], total: 0, page: 1, size: 24 };
+const works = worksResult.status === 'fulfilled' ? worksResult.value : emptyWorks;
+const intro = introResult.status === 'fulfilled' ? introResult.value : null;
+const profile = profileResult.status === 'fulfilled' ? profileResult.value : null;
+const commissions = commissionResult.status === 'fulfilled' ? commissionResult.value : [];
+const worksError = worksResult.status === 'rejected';
+const introError = introResult.status === 'rejected';
+const profileError = profileResult.status === 'rejected';
+const commissionError = commissionResult.status === 'rejected';
+const missingIntro = introResult.status === 'fulfilled' && introResult.value === null;
+const landingCommissions = selectLandingCommissions(commissions);
+
+applyCatalogCache(Astro.response, {
+  error: worksError || introError || profileError || commissionError || missingIntro,
+});
 ---
 
-<BaseLayout title="홈">
-  <div class="max-w-[1140px] mx-auto px-6 py-16">
-    <h1 class="text-3xl font-semibold tracking-tight text-ink">도군</h1>
+<BaseLayout
+  title="홈"
+  description="도군의 웹툰 작품과 커미션 소식을 만나보세요."
+  canonicalPath={Astro.url.pathname}
+>
+  <div class="mx-auto max-w-[1140px] px-5 py-6 sm:px-6">
+    <h1 class="sr-only">도군 작품과 커미션</h1>
+    {
+      worksError ? (
+        <div class="flex min-h-[360px] items-center justify-center rounded-surface bg-hover px-6 text-center text-sm text-muted">
+          작품 정보를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.
+        </div>
+      ) : works.items.length > 0 ? (
+        <WorkCarousel works={works.items} client:load />
+      ) : (
+        <div class="flex min-h-[360px] items-center justify-center rounded-surface bg-hover px-6 text-center text-sm text-muted">
+          새 작품을 준비하고 있어요.
+        </div>
+      )
+    }
+
+    {intro?.body && profile && <ArtistProfile body={intro.body} profile={profile} />}
+
+    <section class="mt-8 border-t border-line pt-8" aria-labelledby="landing-commission-title">
+      <div class="flex flex-wrap items-end justify-between gap-6">
+        <div class="max-w-[640px]">
+          <p class="text-label-md text-muted">COMMISSION</p>
+          <h2 id="landing-commission-title" class="mt-2 text-headline-lg text-ink">커미션</h2>
+          <p class="mt-4 text-body-md text-ink">
+            작업 유형과 가격, 샘플을 확인할 수 있어요. 온라인 신청 기능은 준비 중이에요.
+          </p>
+        </div>
+        <Button href="/commission" variant="secondary">전체 보기</Button>
+      </div>
+
+      {
+        commissionError ? (
+          <p class="mt-8 text-sm text-muted">
+            커미션 정보를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.
+          </p>
+        ) : landingCommissions.length > 0 ? (
+          <div class="mt-8 grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-4">
+            {landingCommissions.map((item) => <CommissionCard item={item} />)}
+          </div>
+        ) : (
+          <div class="mt-8 flex min-h-36 items-center justify-center rounded-control border border-line px-6 text-center text-sm text-muted">
+            커미션 안내를 준비하고 있어요.
+          </div>
+        )
+      }
+    </section>
   </div>
 </BaseLayout>

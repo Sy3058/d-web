@@ -1,0 +1,53 @@
+---
+import Badge from '../ui/Badge.astro';
+import type { PublicCommissionItem } from '../../lib/commission';
+
+interface Props {
+  item: PublicCommissionItem;
+}
+
+const { item } = Astro.props;
+const thumbnailUrl = item.sample_image_urls[0] ?? null;
+---
+
+<article class="overflow-hidden rounded-control border border-line bg-paper" data-commission-id={item.id}>
+  {
+    thumbnailUrl ? (
+      <div class="relative aspect-[4/3] overflow-hidden bg-hover">
+        <img
+          src={thumbnailUrl}
+          alt={`${item.title} 샘플`}
+          loading="lazy"
+          class="h-full w-full object-cover"
+          onerror="this.style.display='none'; this.nextElementSibling.removeAttribute('hidden');"
+        />
+        <div
+          class="absolute inset-0 flex items-center justify-center bg-hover text-xs text-muted"
+          hidden
+        >
+          샘플 준비 중
+        </div>
+      </div>
+    ) : (
+      <div class="flex aspect-[4/3] items-center justify-center bg-hover text-xs text-muted">
+        샘플 준비 중
+      </div>
+    )
+  }
+
+  <div class="space-y-3 p-3 sm:p-4">
+    <h3 class="line-clamp-2 text-sm font-semibold leading-snug text-ink sm:text-base">
+      {item.title}
+    </h3>
+
+    <div class="flex flex-wrap items-center justify-between gap-2">
+      <p class="text-sm font-semibold text-ink tabular-nums">{item.price_text}</p>
+      <Badge variant={item.is_open ? 'outline' : 'locked'} class="shrink-0">
+        {item.is_open ? '모집 중' : '마감'}
+      </Badge>
+    </div>
+
+    {item.description && <p class="line-clamp-2 whitespace-pre-line text-sm leading-relaxed text-ink">{item.description}</p>}
+    {item.duration_text && <p class="text-xs text-muted">예상 기간 {item.duration_text}</p>}
+  </div>
+</article>

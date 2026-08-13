@@ -16,6 +16,7 @@ aioboto3는 대량 동시 업로드가 필요해질 때 재검토(1인 작가 �
   (episode_id=UUID 기준이라 독자 URL 조회키(public_id)와 무관하게 키가 안정)
 - 표지: works/{work_id}/cover.webp
 - 커미션 샘플(공개 버킷): commission/{item_id}/{uuid4hex}.webp (M2 그룹 G)
+- 작가 프로필(공개 버킷): artist-profile/{uuid4hex}.webp (M2 그룹 G)
 """
 
 import uuid
@@ -65,6 +66,11 @@ def commission_sample_key(item_id: uuid.UUID) -> str:
     불가능하고, 유일 키라 표지·썸네일(고정 키 덮어쓰기)과 달리 캐시 버스터가 필요 없다.
     """
     return f"commission/{item_id}/{uuid.uuid4().hex}.webp"
+
+
+def artist_profile_image_key() -> str:
+    """작가 프로필 이미지 신규 키. 고유 키로 CDN 캐시 갱신을 보장한다."""
+    return f"artist-profile/{uuid.uuid4().hex}.webp"
 
 
 def episode_thumb_key(work_id: uuid.UUID, episode_id: uuid.UUID) -> str:

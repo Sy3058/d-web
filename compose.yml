@@ -51,8 +51,13 @@ services:
     build:
       context: .
       dockerfile: frontend/Dockerfile
+    environment:
+      # PUBLIC_API_URL은 브라우저용 빌드 값, 이 주소는 SSR Node의 compose 내부 통신용이다.
+      API_INTERNAL_URL: http://api:8000
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://localhost/ || exit 1"]
+      # SSR 홈은 API 상태에 따라 실패할 수 있어 readiness와 콘텐츠 의존성을 분리한다.
+      # 정적 favicon 응답으로 Astro Node 프로세스와 정적 자산 서빙만 확인한다.
+      test: ["CMD", "node", "-e", "fetch('http://localhost:4321/favicon.svg').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
       interval: 10s
       timeout: 5s
       retries: 5
