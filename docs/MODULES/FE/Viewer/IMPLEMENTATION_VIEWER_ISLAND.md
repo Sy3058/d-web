@@ -4,11 +4,11 @@
 |------|------|
 | 모듈 | Frontend / Viewer (독자 열람 경로 - 콘텐츠 문서 렌더러) |
 | 관련 마일스톤 | [M2](../../../milestones/M2_foundation.md) 그룹 F (F1, WORK-05~08) |
-| 작성 시점 | M2 F1 (2026-07-25), 후속 보완 (2026-07-26 - §7) |
-| 상태 | 구현 + Opus 코드 리뷰(CODE_REVIEW_FE + GUIDE_REVIEW) 완료(Critical 0, Major 1 반영, FYI 3 반영). `astro check` 0 errors / 0 warnings / 1 hint(기존, 무관) + `vitest` 28/28 통과. **수동 e2e(브라우저 실기능)·회차당 전송 바이트 실측은 사용자 확인 대기**(Playwright 등 브라우저 자동화 미도입 결정에 따름). 2026-07-26 후속 보완으로 이전/다음 화 네비 + 진행도 복원 로직 갱신(§7) |
+| 작성 시점 | M2 F1 (2026-07-25), 후속 보완 (2026-07-26 - §7), 긴 블록 복원 보강 (2026-08-14 - §8) |
+| 상태 | 구현 + 리뷰 반영. 긴 단일 이미지 내부 추적·복원 자동 테스트와 사용자 브라우저 재진입 확인 통과(2026-08-15). M2 전체 수동 e2e는 그룹 H의 나머지 항목 확인 대기 |
 | 관련 문서 | M2_foundation.md 그룹 F·결정 1/3/6, IMPLEMENTATION_FREE_CONTENT_API.md(B2 계약 원본), IMPLEMENTATION_VIEWER_PROGRESS.md(C1 계약), IMPLEMENTATION_CATALOG_PAGES.md(E, SSR 셸/캐시 정책 원본), IMPLEMENTATION_EPISODE_CONTENT_MODEL.md(#76, 서버 스키마 원본) |
 
-비로그인 독자가 `/works/{id}/{episodeNo}`에서 회차 본문(글+이미지 혼합 TipTap 문서)을 읽는 페이지. B2가 절단·presigned 치환한 무료 구간을 아일랜드가 fetch해 렌더하고, 유료 경계가 있으면 말미에 잠금 placeholder를 보여준다. 로그인 상태면 읽은 위치(블록 인덱스)를 저장·복원한다(C1). 유료 구간 반환·결제 검증은 M3.
+비로그인 독자가 `/works/{id}/{publicId}`에서 회차 본문(글+이미지 혼합 TipTap 문서)을 읽는 페이지. B2가 절단·presigned 치환한 무료 구간을 아일랜드가 fetch해 렌더하고, 유료 경계가 있으면 말미에 잠금 placeholder를 보여준다. 로그인 상태면 읽은 위치(블록 인덱스 + 블록 내부 상대 위치)를 저장·복원한다(C1). 유료 구간 반환·결제 검증은 M3.
 
 ---
 
@@ -17,11 +17,11 @@
 | 파일 | 내용 |
 |------|------|
 | `frontend/package.json` | `@tiptap/core`·`@tiptap/starter-kit`·`@tiptap/extension-link`·`@tiptap/pm` 3.27.4 고정(admin과 버전 통일 - 스키마 패리티), devDep `jsdom` 추가(테스트 전용 - §3) |
-| `frontend/src/pages/works/[id]/[episodeNo].astro` | SSR 셸(`prerender = false`) - 회차 메타·이전/다음 네비만. 본문은 `client:only="react"` 아일랜드가 담당 |
+| `frontend/src/pages/works/[id]/[publicId].astro` | SSR 셸(`prerender = false`) - 회차 메타·이전/다음 네비만. 본문은 `client:only="react"` 아일랜드가 담당 |
 | `frontend/src/components/viewer/Viewer.tsx` | 아일랜드 - B2 fetch, 최상위 블록 분할 렌더(image는 React `<img>` 직접 제어, 나머지는 `generateHTML` 조각), 잠금 placeholder, 진행도 저장·복원, 콘텐츠 보호 |
 | `frontend/src/components/viewer/extensions.ts` | 뷰어 전용 TipTap 렌더 스키마(서버 화이트리스트·admin 에디터와 1:1, image attrs만 `src` 예외) |
 | `frontend/src/components/viewer/extensions.test.ts` | `getSchema` 스키마 대조 테스트 + `generateHTML` 렌더 동작 테스트(rel/target 강제 확인) |
-| `frontend/src/lib/viewer.ts` | B2/C1 계약 타입 + `getEpisodeContent`/`getProgress`/`putProgress` + 순수 로직(`imageFetchPriority`/`clampBlockIndex`/`isLoggedIn`) |
+| `frontend/src/lib/viewer.ts` | B2/C1 계약 타입 + API 함수 + 이미지 우선순위, 블록 인덱스·내부 오프셋 계산 순수 로직 |
 | `frontend/src/lib/viewer.test.ts` | vitest 순수 로직 테스트 |
 
 새 의존성: `@tiptap/*` 4종(런타임) + `jsdom`(devDep, 테스트 전용). DB 마이그레이션: 없음(읽기 전용 FE).
@@ -49,6 +49,8 @@ B2 계약(#76 "서버·에디터·뷰어 3곳 동일 스키마"의 의도된 예
 ### 진행도 = "보이는 블록 중 최솟값"
 
 여러 블록이 동시에 뷰포트에 걸쳐 있을 때 IntersectionObserver가 관측한 인덱스 중 최댓값이 아니라 최솟값을 저장 위치로 삼는다. 최댓값을 쓰면 아직 안 읽은 블록이 뷰포트에 살짝 걸치자마자 진행도가 그리로 넘어가, 다음 방문 때 안 읽은 내용을 건너뛰는 문제가 생긴다. 이미 본 내용을 살짝 다시 보는 정도의 사소한 중복을 감수하는 보수적 선택이다.
+
+긴 블록이 뷰포트 상단을 포함할 때는 그 블록을 활성 블록으로 선택하고 내부 상대 위치를 함께 저장한다. 자세한 근거와 알고리즘은 §8에 기록한다.
 
 ### `client:only="react"` (client:load 아님)
 
@@ -88,8 +90,8 @@ Critical 0. `dangerouslySetInnerHTML`의 XSS 면적을 서버 화이트리스트
 ## 5. 검증
 
 - `pnpm --filter frontend astro check`: 0 errors / 0 warnings / 1 hint(기존, 무관)
-- `pnpm --filter frontend test`(vitest run): 28 passed
-- 수동 e2e(브라우저 실기능 - 스크롤 중 이미지 재요청 여부, Network 탭 fetchPriority/no-store, SSR 응답 본문 부재, 로그인 진행도 저장/복원, 드래그·우클릭 차단 등)와 회차당 전송 바이트·이미지 장수 실측(결정 6 재검토 조건, 5MB 초과 여부)은 **사용자가 직접 확인** - 프로젝트가 Playwright/chromium-cli 등 브라우저 자동화를 도입하지 않기로 한 결정에 따름. 결과가 오면 본 문서·M2_foundation.md에 반영 예정.
+- `pnpm --filter frontend test`(vitest run): 79 passed
+- 수동 e2e는 사용자가 직접 확인한다. 로그인 긴 이미지 내부 저장·재진입 복원은 2026-08-15 통과했다. 스크롤 중 이미지 재요청, Network 탭 fetchPriority/no-store, SSR 응답 본문 부재, 드래그·우클릭 차단과 회차당 전송 바이트·이미지 장수 등 M2 전체 항목은 그룹 H 결과를 따른다.
 
 ---
 
@@ -146,3 +148,25 @@ PLAUSIBLE 4건(§6 표 참조 - stale 클로저·진행도 중간값 저장·rAF
 - `pnpm --filter frontend test`(vitest run): 28 passed (회귀 없음, 신규 유닛 테스트는 추가하지 않음 - 순수 DOM 타이밍 로직이라 vitest 기본 환경 대상이 아니라 수동 확인 대상)
 - `pnpm --filter frontend astro check`: 0 errors / 0 warnings / 1 hint(기존, 무관)
 - 수동 e2e(스크롤 중 복원 위치 확인, 이전/다음 화 이동 시 아일랜드 재마운트 확인)는 **사용자가 직접 확인**(Playwright 미도입 결정 유지)
+
+---
+
+## 8. 긴 단일 이미지 내부 추적·복원 (2026-08-14)
+
+### 문제
+
+`398x5400`처럼 여러 웹툰 패널을 한 파일에 합친 원고는 화면상 많은 패널을 지나도 최상위 문서 블록은 이미지 1개다. 기존 `IntersectionObserver`는 그 이미지가 계속 뷰포트와 교차하는 동안 callback을 다시 호출하지 않고, 저장값도 같은 블록 인덱스에 머물러 재진입 시 이미지 시작으로 돌아갔다.
+
+### 구현
+
+- observer는 현재 보이는 블록 후보만 관리한다.
+- passive `scroll` 이벤트를 `requestAnimationFrame`당 한 번으로 제한해 뷰포트 상단을 포함하는 블록의 `getBoundingClientRect()`를 다시 읽는다.
+- `clamp(-rect.top / rect.height, 0, 1) * 10000`을 정수 `block_offset_bp`로 저장한다.
+- 복원 시 대상 이미지까지 로드·decode를 기다린 뒤 `blockDocumentTop + blockHeight * offset`으로 이동한다. 늦은 이미지 `load`에도 같은 상대 지점으로 재앵커한다.
+- 회차 전체 `scrollHeight`를 분모로 쓰지 않으므로 이 값은 M3의 전체 진행률이나 완독 상태가 아니다.
+
+### 자동 검증
+
+`viewer.test.ts`는 5400px 블록을 3240px 지나면 6000bp가 되고, 현재 렌더 높이에서 같은 상대 Y로 복원되는지와 0..10000 클램프를 검사한다. DOM 스크롤·이미지 로드 타이밍은 프로젝트 원칙대로 사용자 브라우저에서 확인했다.
+
+2026-08-15 리뷰에서 느린 진행도 GET보다 초기 observer PUT이 먼저 실행될 수 있는 경쟁을 발견했다. 복원 판정 전에는 위치 계산만 하고 저장을 잠그며, GET 결과 없음·사용자 선행 스크롤·복원 완료 중 하나로 판정된 뒤에만 PUT한다. jsdom 컴포넌트 테스트가 GET을 2초 지연해 그동안 PUT이 0회인지 검사한다. `putProgress` 요청 body에 두 위치 값이 함께 실리는지도 API mock으로 고정했다. 사용자 브라우저에서는 긴 이미지 중간에서 작품 상세로 나갔다 재진입해 같은 패널 부근으로 돌아오는 것을 확인했다.

@@ -4,11 +4,11 @@
 |------|------|
 | 모듈 | Backend / Viewer |
 | 관련 마일스톤 | [M2](../../../milestones/M2_foundation.md) 그룹 C - C1, 그룹 E - E4 |
-| 작성 시점 | M2 C1 (2026-07-20), E4 BE (2026-08-11) |
-| 상태 | C1 회차 단위 저장·복원과 E4 작품 단위 조회 구현. E4는 신규 마이그레이션·dependency 없이 backend 전체 gate 통과 |
+| 작성 시점 | M2 C1 (2026-07-20), E4 BE (2026-08-11), 긴 블록 복원 보강 (2026-08-14) |
+| 상태 | C1 회차 단위 저장·복원과 E4 작품 단위 조회 구현. 긴 블록 내부 상대 위치와 구버전 보존 계약 추가, Backend 전체 gate 통과 |
 | 관련 문서 | DB_SCHEMA.md §2 viewer_progress, M2_foundation.md 그룹 C, MISTAKES.md |
 
-독자가 회차를 읽은 마지막 위치(문서 최상위 블록 인덱스)를 저장·복원하는 API. 그룹 B(회차 콘텐츠 API)가 아직 없는 상태에서 그룹 D(공개 버킷)와 병렬로 진행했다.
+독자가 회차를 읽은 마지막 위치(문서 최상위 블록 인덱스 + 블록 내부 상대 위치)를 저장·복원하는 API. 그룹 B(회차 콘텐츠 API)가 아직 없는 상태에서 그룹 D(공개 버킷)와 병렬로 진행했다.
 
 ---
 
@@ -18,12 +18,13 @@
 |------|------|
 | `backend/src/models/viewer.py` | `ViewerProgress`(신규 테이블) |
 | `backend/migrations/versions/20260719_1757_viewer_progress.py` | `viewer_progress` 테이블 생성(FK CASCADE 2개, UNIQUE) |
+| `backend/migrations/versions/20260814_2100_viewer_progress_block_offset.py` | `block_offset_bp` 추가 + 0..10000 CHECK |
 | `backend/src/schemas/viewer.py` | `ProgressUpdate` / `ProgressRead` / `WorkProgressRead` |
 | `backend/src/services/progress_service.py` | 회차 단위 upsert·조회 / 작품 단위 읽은 회차·최근 회차 조회 |
 | `backend/src/services/catalog_service.py` | `public_episode_exists()` 추가 |
 | `backend/src/routers/progress.py` | `PUT`/`GET /episodes/{id}/progress`, `GET /works/{id}/progress` |
 | `backend/tests/factories.py` | `make_work`/`make_episode` 공용 팩토리(test_catalog와 공유) |
-| `backend/tests/test_progress.py` | 26케이스(E4 쿼리 방향 회귀 포함) |
+| `backend/tests/test_progress.py` | 29케이스(E4 쿼리 방향, 긴 블록 오프셋 경계·구버전 보존 포함) |
 
 | 엔드포인트 | 인증 | 역할 |
 |-----------|------|------|
@@ -42,7 +43,15 @@ M2 문서 C1 원문은 "회차 존재 검증은 그룹 B(회차 콘텐츠 API)�
 PUT은 저장 자체를 막는 게이트라 `public_episode_exists()`를 매번 통과해야 한다. 반대로 GET은 진행도 행 존재만 확인한다 - 작품이 일시 비공개로 전환됐다 재공개되는 경우, 기존 진행도가 계속 살아있는 편이 UX상 맞다고 판단했다(비공개 전환은 실수·일시적일 수 있고, 진행도 유실은 독자 경험을 해친다). 유출 위험도 없다 - GET이 노출하는 값은 요청한 본인의 정수 진행도 하나뿐이라, 회차 존재 여부 자체가 민감 정보가 아니다.
 
 ### upsert = `postgresql.insert().on_conflict_do_update()` + `set_`에 `updated_at` 명시
-`ViewerProgress.updated_at`은 `onupdate=func.now()`로 선언돼 있지만, 이는 ORM/Core의 일반 UPDATE 문에만 적용되고 **INSERT의 `ON CONFLICT ... DO UPDATE SET` 절에는 자동으로 붙지 않는다.** `set_={"page_no": ..., "updated_at": func.now()}`로 명시하지 않으면 재저장 시 `updated_at`이 최초 삽입 시각에 멈춘다. `test_put_twice_bumps_updated_at`으로 독립 검증했다.
+`ViewerProgress.updated_at`은 `onupdate=func.now()`로 선언돼 있지만, 이는 ORM/Core의 일반 UPDATE 문에만 적용되고 **INSERT의 `ON CONFLICT ... DO UPDATE SET` 절에는 자동으로 붙지 않는다.** `set_`에 `page_no`, `block_offset_bp`, `updated_at`을 모두 명시하지 않으면 재저장 시 위치 일부나 시각이 최초 값에 멈춘다. `test_put_twice_updates_same_row`와 `test_put_twice_bumps_updated_at`으로 독립 검증했다.
+
+### 긴 블록 복원 = `page_no + block_offset_bp` (2026-08-14)
+
+한 장의 원고 이미지가 `398x5400`처럼 여러 패널을 포함하면 최상위 블록 인덱스 하나만으로는 이미지 안에서 어디까지 읽었는지 구분할 수 없다. `block_offset_bp`는 해당 블록 높이 중 뷰포트 상단이 지나온 비율을 0..10000 정수로 저장한다. 부동소수 대신 basis point를 써 JSON과 INTEGER 왕복이 안정적이고, Pydantic 범위 검증과 DB CHECK를 함께 둔다.
+
+기존 클라이언트가 `{page_no}`만 보내는 경우도 필드 누락 여부를 보존한다. 신규 행은 오프셋 0으로 만들고, 기존 행의 같은 블록이면 새 클라이언트가 저장한 오프셋을 유지하며, 다른 블록으로 이동할 때만 0으로 초기화한다. 구버전 탭이 배포 뒤에도 열린 채 PUT을 계속 보내 정밀 위치를 지우는 문제를 막는다.
+
+이 값은 회차 전체 진행률이 아니다. 다른 이미지의 로드 여부나 무료 절단 범위로 전체 분모가 달라져도 현재 블록 내부의 상대 지점만 표현한다. M3의 전체 진행률, 완독 판정, 구매 CTA 계약은 별도로 유지한다.
 
 ### `session.exec()` vs `session.execute()`
 `on_conflict_do_update().returning(...)` 문을 처음엔 `session.execute()`로 실행했는데 sqlmodel이 deprecation 경고를 띄웠다. sqlmodel `AsyncSession.exec()` 소스(`sqlmodel/ext/asyncio/session.py`)를 확인한 결과 `UpdateBase`(Insert/Update/Delete 전체) 오버로드가 공식 지원돼, `session.exec(stmt)`로 교체했다(레포 전체가 `exec()`를 관례로 쓰는 것과도 일치, 동작은 동일 - `.scalars().one()`은 그대로 필요).
