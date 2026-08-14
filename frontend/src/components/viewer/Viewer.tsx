@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { generateHTML, type Extensions } from '@tiptap/core';
 import { buildViewerExtensions } from './extensions';
 import {
+  calculateBlockOffsetBp,
+  calculateBlockRestoreY,
   clampBlockIndex,
   getEpisodeContent,
   getProgress,
@@ -20,6 +22,11 @@ interface Block {
   node: ContentDocNode;
   // 이 블록이 image면 전체 이미지 순번(fetchPriority 배정용), 아니면 null.
   imageOrdinal: number | null;
+}
+
+interface ProgressAnchor {
+  index: number;
+  offsetBp: number;
 }
 
 // 진행도 저장 debounce. 스크롤할 때마다 쏘지 않고 멈춘 뒤에만 저장(C1은 저장 실패를
@@ -62,10 +69,13 @@ export default function Viewer({ episodeId }: Props) {
   const extensions = useMemo(() => buildViewerExtensions(), []);
   // undefined=로딩 중, null=404(회차 없음), 그 외=정상 응답.
   const [content, setContent] = useState<EpisodeContentResponse | null | undefined>(undefined);
-  const [restoredIndex, setRestoredIndex] = useState<number | null>(null);
+  const [restoredAnchor, setRestoredAnchor] = useState<ProgressAnchor | null>(null);
+  // 기존 진행도를 읽고 복원할지 결정하기 전에는 상단의 초기 observer 값으로 PUT하지 않는다.
+  const [canSaveProgress, setCanSaveProgress] = useState(false);
   const retriedRef = useRef(false);
   const blockRefs = useRef(new Map<number, HTMLDivElement>());
   const topVisibleRef = useRef(0);
+  const blockOffsetBpRef = useRef(0);
   const hasObservedRef = useRef(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // 복원 스크롤과 무관하게 마운트 즉시부터 켜둔다 - 복원 effect 안에서만 감지를 시작하면
@@ -104,18 +114,34 @@ export default function Viewer({ episodeId }: Props) {
   useEffect(() => {
     if (blocks.length === 0 || !isLoggedIn(document.cookie)) return;
     let cancelled = false;
-    getProgress(episodeId).then((progress) => {
-      if (cancelled || !progress) return;
-      setRestoredIndex(clampBlockIndex(progress.page_no, blocks.length));
-    });
+    setCanSaveProgress(false);
+    setRestoredAnchor(null);
+    getProgress(episodeId)
+      .then((progress) => {
+        if (cancelled) return;
+        // GET을 기다리는 동안 사용자가 이미 읽기 시작했다면 늦은 자동 복원으로 위치를
+        // 되돌리지 않는다. observer가 계산해둔 현재 위치를 다음 effect에서 저장한다.
+        if (!progress || userScrolledRef.current) {
+          setCanSaveProgress(true);
+          return;
+        }
+        setRestoredAnchor({
+          index: clampBlockIndex(progress.page_no, blocks.length),
+          // BE보다 FE가 먼저 배포되는 짧은 구간에는 구 응답에 필드가 없을 수 있다.
+          offsetBp: progress.block_offset_bp ?? 0,
+        });
+      })
+      .catch(() => {
+        // 조회 실패 상태에서 상단 값을 덮어쓰는 것보다 이번 방문의 저장을 포기하는 편이 안전하다.
+      });
     return () => {
       cancelled = true;
     };
   }, [episodeId, blocks.length]);
 
   useEffect(() => {
-    if (restoredIndex === null) return;
-    const target = blockRefs.current.get(restoredIndex);
+    if (restoredAnchor === null) return;
+    const target = blockRefs.current.get(restoredAnchor.index);
     if (!target) return;
 
     let cancelled = false;
@@ -123,7 +149,15 @@ export default function Viewer({ episodeId }: Props) {
     const scrollToTarget = () => {
       if (userScrolledRef.current) return;
       programmaticScrollRef.current = true;
-      target.scrollIntoView({ block: 'start' });
+      const rect = target.getBoundingClientRect();
+      window.scrollTo({
+        top: calculateBlockRestoreY(
+          window.scrollY + rect.top,
+          rect.height,
+          restoredAnchor.offsetBp,
+        ),
+        behavior: 'auto',
+      });
       requestAnimationFrame(() => {
         programmaticScrollRef.current = false;
       });
@@ -132,7 +166,7 @@ export default function Viewer({ episodeId }: Props) {
     // 복원 위치까지(포함) 등장하는 이미지 전부 - 이 중 하나라도 로드 전에 스크롤하면
     // 그만큼 레이아웃이 덜 자란 상태라 위치가 밀린다.
     const imagesAbove: HTMLImageElement[] = [];
-    for (let i = 0; i <= restoredIndex; i += 1) {
+    for (let i = 0; i <= restoredAnchor.index; i += 1) {
       const el = blockRefs.current.get(i);
       if (el) imagesAbove.push(...Array.from(el.querySelectorAll('img')));
     }
@@ -159,22 +193,59 @@ export default function Viewer({ episodeId }: Props) {
           ]);
 
     Promise.all(imagesAbove.map(waitForImage)).then(() => {
-      if (!cancelled) scrollToTarget();
+      if (cancelled) return;
+      scrollToTarget();
+      setCanSaveProgress(true);
     });
 
     return () => {
       cancelled = true;
       detachFns.forEach((detach) => detach());
     };
-  }, [restoredIndex]);
+  }, [restoredAnchor]);
 
-  // 뷰포트에 여러 블록이 걸쳐 있으면 "보이는 인덱스 중 최솟값"을 진행 위치로 삼는다 - 최댓값이나
-  // 최다-노출 블록을 쓰면 아직 안 읽은 블록이 뷰포트에 살짝 걸치자마자 진행도가 그리로 넘어가,
-  // 다음 방문 때 안 읽은 내용을 건너뛰게 된다. debounce로 저장한다.
+  // IntersectionObserver는 긴 이미지 하나의 내부를 계속 스크롤해도 교차 상태가 바뀌지 않아
+  // callback을 다시 호출하지 않는다. observer로 후보 블록을 좁히고, scroll 이벤트에서는
+  // requestAnimationFrame당 한 번 현재 블록 내부 오프셋을 다시 계산한다.
   useEffect(() => {
     if (blocks.length === 0 || !isLoggedIn(document.cookie)) return;
 
     const visible = new Set<number>();
+    let animationFrame: number | null = null;
+
+    const updateAnchor = () => {
+      animationFrame = null;
+      if (visible.size === 0) return;
+
+      const visibleIndices = [...visible];
+      const containingViewportTop = visibleIndices.filter((index) => {
+        const rect = blockRefs.current.get(index)?.getBoundingClientRect();
+        return rect !== undefined && rect.top <= 0 && rect.bottom > 0;
+      });
+      // 뷰포트 상단을 실제로 포함하는 블록이 있으면 그 블록을 택한다. 위쪽 블록과 다음
+      // 블록이 함께 보이되 상단이 여백에 걸린 경우에는 기존 원칙대로 최소 인덱스를 쓴다.
+      const index =
+        containingViewportTop.length > 0
+          ? Math.max(...containingViewportTop)
+          : Math.min(...visibleIndices);
+      const target = blockRefs.current.get(index);
+      if (!target) return;
+
+      const rect = target.getBoundingClientRect();
+      hasObservedRef.current = true;
+      topVisibleRef.current = index;
+      blockOffsetBpRef.current = calculateBlockOffsetBp(rect.top, rect.height);
+      if (!canSaveProgress) return;
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = setTimeout(() => {
+        void putProgress(episodeId, topVisibleRef.current, blockOffsetBpRef.current);
+      }, PROGRESS_SAVE_DEBOUNCE_MS);
+    };
+
+    const scheduleAnchorUpdate = () => {
+      if (animationFrame === null) animationFrame = requestAnimationFrame(updateAnchor);
+    };
+
     const observer = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
@@ -182,35 +253,37 @@ export default function Viewer({ episodeId }: Props) {
           if (entry.isIntersecting) visible.add(index);
           else visible.delete(index);
         }
-        if (visible.size === 0) return;
-        hasObservedRef.current = true;
-        topVisibleRef.current = Math.min(...visible);
-        if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-        saveTimerRef.current = setTimeout(() => {
-          void putProgress(episodeId, topVisibleRef.current);
-        }, PROGRESS_SAVE_DEBOUNCE_MS);
+        scheduleAnchorUpdate();
       },
       { threshold: 0 },
     );
     for (const el of blockRefs.current.values()) observer.observe(el);
+    window.addEventListener('scroll', scheduleAnchorUpdate, { passive: true });
 
     // 페이지 이탈 직전(탭 전환·닫기) 대기 중인 저장을 즉시 시도한다. keepalive는 보장되지
     // 않아 유실 가능 - C1 결정(저장 실패는 조용히 무시)상 허용 범위, 최선 노력일 뿐이다.
     function flushOnHide() {
       // 관측이 한 번도 없었으면(예: 진입 직후 바로 이탈) 저장할 위치가 없다 - page_no=0을
       // 실제 위치로 오인해 쏘지 않는다.
-      if (document.visibilityState !== 'hidden' || !hasObservedRef.current) return;
+      if (
+        document.visibilityState !== 'hidden' ||
+        !hasObservedRef.current ||
+        !canSaveProgress
+      )
+        return;
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-      void putProgress(episodeId, topVisibleRef.current);
+      void putProgress(episodeId, topVisibleRef.current, blockOffsetBpRef.current);
     }
     document.addEventListener('visibilitychange', flushOnHide);
 
     return () => {
       observer.disconnect();
+      window.removeEventListener('scroll', scheduleAnchorUpdate);
       document.removeEventListener('visibilitychange', flushOnHide);
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      if (animationFrame !== null) cancelAnimationFrame(animationFrame);
     };
-  }, [blocks.length, episodeId]);
+  }, [blocks.length, canSaveProgress, episodeId]);
 
   function handleImageError() {
     // presigned 만료 등 예외적 실패의 폴백(정상 경로 - 결정 6 즉시 전량 요청 - 에선 타지

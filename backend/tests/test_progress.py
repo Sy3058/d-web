@@ -20,6 +20,7 @@ from src.models.viewer import ViewerProgress
 from tests.factories import make_episode, make_work
 
 INT32_MAX = 2_147_483_647
+BLOCK_OFFSET_MAX = 10_000
 
 
 def _progress_url(episode_id: uuid.UUID | str) -> str:
@@ -79,11 +80,44 @@ async def test_put_creates_new_progress(
     ep = await make_episode(db_session, work)
     await _authed(async_client, user)
 
-    resp = await async_client.put(_progress_url(ep.id), json={"page_no": 3})
+    resp = await async_client.put(
+        _progress_url(ep.id), json={"page_no": 3, "block_offset_bp": 6_250}
+    )
     assert resp.status_code == 200
     body = resp.json()
     assert body["episode_id"] == str(ep.id)
     assert body["page_no"] == 3
+    assert body["block_offset_bp"] == 6_250
+
+
+async def test_put_without_block_offset_defaults_to_block_start(
+    async_client: AsyncClient, db_session: AsyncSession, user: User
+):
+    work = await make_work(db_session, user)
+    ep = await make_episode(db_session, work)
+    await _authed(async_client, user)
+
+    resp = await async_client.put(_progress_url(ep.id), json={"page_no": 3})
+
+    assert resp.status_code == 200
+    assert resp.json()["block_offset_bp"] == 0
+
+
+async def test_old_client_preserves_offset_in_same_block_and_resets_on_block_change(
+    async_client: AsyncClient, db_session: AsyncSession, user: User
+):
+    work = await make_work(db_session, user)
+    ep = await make_episode(db_session, work)
+    await _authed(async_client, user)
+    await async_client.put(_progress_url(ep.id), json={"page_no": 3, "block_offset_bp": 6_250})
+
+    same_block = await async_client.put(_progress_url(ep.id), json={"page_no": 3})
+    next_block = await async_client.put(_progress_url(ep.id), json={"page_no": 4})
+
+    assert same_block.status_code == 200
+    assert same_block.json()["block_offset_bp"] == 6_250
+    assert next_block.status_code == 200
+    assert next_block.json()["block_offset_bp"] == 0
 
 
 async def test_put_twice_updates_same_row(
@@ -93,10 +127,13 @@ async def test_put_twice_updates_same_row(
     ep = await make_episode(db_session, work)
     await _authed(async_client, user)
 
-    await async_client.put(_progress_url(ep.id), json={"page_no": 1})
-    resp = await async_client.put(_progress_url(ep.id), json={"page_no": 9})
+    await async_client.put(_progress_url(ep.id), json={"page_no": 1, "block_offset_bp": 2_000})
+    resp = await async_client.put(
+        _progress_url(ep.id), json={"page_no": 9, "block_offset_bp": 7_500}
+    )
     assert resp.status_code == 200
     assert resp.json()["page_no"] == 9
+    assert resp.json()["block_offset_bp"] == 7_500
 
     rows = (
         await db_session.exec(
@@ -107,6 +144,7 @@ async def test_put_twice_updates_same_row(
     ).all()
     assert len(rows) == 1
     assert rows[0].page_no == 9
+    assert rows[0].block_offset_bp == 7_500
 
 
 async def test_put_twice_bumps_updated_at(
@@ -218,6 +256,27 @@ async def test_put_rejects_page_no_over_int32(
     assert ok.status_code == 200
 
 
+async def test_put_validates_block_offset_bounds(
+    async_client: AsyncClient, db_session: AsyncSession, user: User
+):
+    work = await make_work(db_session, user)
+    ep = await make_episode(db_session, work)
+    await _authed(async_client, user)
+
+    for invalid in (-1, BLOCK_OFFSET_MAX + 1):
+        resp = await async_client.put(
+            _progress_url(ep.id), json={"page_no": 1, "block_offset_bp": invalid}
+        )
+        assert resp.status_code == 422
+
+    for valid in (0, BLOCK_OFFSET_MAX):
+        resp = await async_client.put(
+            _progress_url(ep.id), json={"page_no": 1, "block_offset_bp": valid}
+        )
+        assert resp.status_code == 200
+        assert resp.json()["block_offset_bp"] == valid
+
+
 # ---------------------------------------------------------------------------
 # GET - 조회
 # ---------------------------------------------------------------------------
@@ -230,10 +289,11 @@ async def test_get_restores_saved_progress(
     ep = await make_episode(db_session, work)
     await _authed(async_client, user)
 
-    await async_client.put(_progress_url(ep.id), json={"page_no": 7})
+    await async_client.put(_progress_url(ep.id), json={"page_no": 7, "block_offset_bp": 8_125})
     resp = await async_client.get(_progress_url(ep.id))
     assert resp.status_code == 200
     assert resp.json()["page_no"] == 7
+    assert resp.json()["block_offset_bp"] == 8_125
 
 
 async def test_get_without_saved_progress_404(
@@ -245,6 +305,7 @@ async def test_get_without_saved_progress_404(
 
     resp = await async_client.get(_progress_url(ep.id))
     assert resp.status_code == 404
+    assert resp.headers["cache-control"] == "no-store"
 
 
 async def test_get_requires_login(async_client: AsyncClient, db_session: AsyncSession, user: User):

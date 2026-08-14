@@ -18,6 +18,7 @@ from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.config import settings
+from src.lib import totp
 from src.lib.auth import (
     ADMIN_PENDING_COOKIE_NAME,
     TOTP_PENDING,
@@ -28,7 +29,6 @@ from src.lib.auth import (
     require_owner,
     require_role,
 )
-from src.lib import totp
 from src.lib.totp import encrypt_secret
 from src.models.user import RefreshToken, RoleEnum, TrustedDevice, User
 from src.services import admin_auth_service, auth_service

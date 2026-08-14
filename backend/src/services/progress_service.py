@@ -3,7 +3,7 @@
 import uuid
 from dataclasses import dataclass
 
-from sqlalchemy import func
+from sqlalchemy import case, func
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -27,9 +27,13 @@ class WorkProgressSnapshot:
 
 
 async def upsert_progress(
-    user_id: uuid.UUID, episode_id: uuid.UUID, page_no: int, session: AsyncSession
+    user_id: uuid.UUID,
+    episode_id: uuid.UUID,
+    page_no: int,
+    block_offset_bp: int | None,
+    session: AsyncSession,
 ) -> ViewerProgress | None:
-    """진행도 upsert. 유저-회차 쌍이 없으면 insert, 있으면 page_no·updated_at 갱신.
+    """진행도 upsert. 없으면 insert, 있으면 블록·내부 위치·updated_at 갱신.
 
     회차가 독자에게 노출 가능한 상태가 아니면 저장하지 않고 None을 반환한다(라우터가
     404로 매핑 - catalog_service.get_work_detail과 같은 패턴). 이 검사를 호출자(라우터)에
@@ -45,10 +49,30 @@ async def upsert_progress(
     if not await catalog_service.public_episode_exists(episode_id, session):
         return None
 
-    stmt = pg_insert(ViewerProgress).values(user_id=user_id, episode_id=episode_id, page_no=page_no)
+    insert_offset = 0 if block_offset_bp is None else block_offset_bp
+    stmt = pg_insert(ViewerProgress).values(
+        user_id=user_id,
+        episode_id=episode_id,
+        page_no=page_no,
+        block_offset_bp=insert_offset,
+    )
+    # 구버전 클라이언트는 offset 필드를 보내지 않는다. 같은 블록을 저장하는 동안에는 새
+    # 클라이언트가 기록한 정밀 위치를 보존하고, 블록이 바뀌면 새 블록 시작점으로 초기화한다.
+    offset_update = (
+        stmt.excluded.block_offset_bp
+        if block_offset_bp is not None
+        else case(
+            (stmt.excluded.page_no != ViewerProgress.page_no, 0),
+            else_=ViewerProgress.block_offset_bp,
+        )
+    )
     stmt = stmt.on_conflict_do_update(
         constraint="uq_viewer_progress_user_episode",
-        set_={"page_no": stmt.excluded.page_no, "updated_at": func.now()},
+        set_={
+            "page_no": stmt.excluded.page_no,
+            "block_offset_bp": offset_update,
+            "updated_at": func.now(),
+        },
     ).returning(ViewerProgress)
 
     result = await session.exec(stmt)

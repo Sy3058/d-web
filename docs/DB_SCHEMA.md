@@ -197,9 +197,11 @@ viewer_progress
 ├── id          UUID PRIMARY KEY DEFAULT gen_random_uuid()
 ├── user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE
 ├── episode_id  UUID NOT NULL REFERENCES episodes(id) ON DELETE CASCADE
-├── page_no     INTEGER NOT NULL DEFAULT 0  -- 마지막으로 본 페이지 번호
+├── page_no     INTEGER NOT NULL DEFAULT 0  -- 마지막으로 본 최상위 블록 인덱스
+├── block_offset_bp INTEGER NOT NULL DEFAULT 0  -- 블록 내부 상대 위치(0..10000)
 ├── updated_at  TIMESTAMPTZ DEFAULT now()
-└── UNIQUE (user_id, episode_id)
+├── UNIQUE (user_id, episode_id)
+└── CHECK (block_offset_bp BETWEEN 0 AND 10000)
 ```
 
 ### commission_items (M2 그룹 G)
