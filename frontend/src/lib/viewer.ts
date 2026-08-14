@@ -26,6 +26,7 @@ export interface EpisodeContentResponse {
 export interface ProgressRead {
   episode_id: string;
   page_no: number;
+  block_offset_bp: number;
   updated_at: string;
 }
 
@@ -53,9 +54,16 @@ export async function getProgress(episodeId: string): Promise<ProgressRead | nul
 }
 
 // 저장 실패는 조용히 무시한다(C1 결정 - 진행도는 열람을 막지 않는 부가 기능).
-export async function putProgress(episodeId: string, pageNo: number): Promise<void> {
+export async function putProgress(
+  episodeId: string,
+  pageNo: number,
+  blockOffsetBp: number,
+): Promise<void> {
   try {
-    await api.put(`/episodes/${episodeId}/progress`, { page_no: pageNo });
+    await api.put(`/episodes/${episodeId}/progress`, {
+      page_no: pageNo,
+      block_offset_bp: blockOffsetBp,
+    });
   } catch {
     /* no-op */
   }
@@ -87,4 +95,26 @@ export function isLoggedIn(cookieString: string): boolean {
 export function clampBlockIndex(pageNo: number, blockCount: number): number {
   if (blockCount <= 0) return 0;
   return Math.min(Math.max(pageNo, 0), blockCount - 1);
+}
+
+export const BLOCK_OFFSET_MAX = 10_000;
+
+/** 뷰포트 상단이 블록을 얼마나 지나왔는지 0..10000 정수로 바꾼다. 블록보다 짧은
+ * 일반 문단은 대부분 0 또는 끝값이 되고, 한 장에 여러 패널이 들어간 긴 이미지에서는
+ * 내부 위치가 연속적으로 바뀐다. */
+export function calculateBlockOffsetBp(blockTop: number, blockHeight: number): number {
+  if (!Number.isFinite(blockHeight) || blockHeight <= 0) return 0;
+  const consumed = Math.min(Math.max(-blockTop, 0), blockHeight);
+  return Math.round((consumed / blockHeight) * BLOCK_OFFSET_MAX);
+}
+
+/** 저장된 블록 내부 상대 위치를 현재 레이아웃의 문서 Y 좌표로 복원한다. 이미지가 다른
+ * 뷰포트 폭에서 다른 높이로 렌더돼도 같은 상대 지점을 가리킨다. */
+export function calculateBlockRestoreY(
+  blockDocumentTop: number,
+  blockHeight: number,
+  blockOffsetBp: number,
+): number {
+  const offset = Math.min(Math.max(blockOffsetBp, 0), BLOCK_OFFSET_MAX);
+  return blockDocumentTop + blockHeight * (offset / BLOCK_OFFSET_MAX);
 }

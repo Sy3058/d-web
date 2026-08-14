@@ -1,5 +1,37 @@
-import { describe, expect, it } from 'vitest';
-import { clampBlockIndex, imageFetchPriority, isLoggedIn } from './viewer';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const { apiPut } = vi.hoisted(() => ({ apiPut: vi.fn() }));
+
+vi.mock('./api', async (importOriginal) => {
+  const original = await importOriginal<typeof import('./api')>();
+  return { ...original, api: { ...original.api, put: apiPut } };
+});
+
+import {
+  calculateBlockOffsetBp,
+  calculateBlockRestoreY,
+  clampBlockIndex,
+  imageFetchPriority,
+  isLoggedIn,
+  putProgress,
+} from './viewer';
+
+beforeEach(() => {
+  apiPut.mockReset();
+});
+
+describe('putProgress', () => {
+  it('블록 인덱스와 내부 오프셋을 함께 전송한다', async () => {
+    apiPut.mockResolvedValue(undefined);
+
+    await putProgress('episode-a', 3, 6_250);
+
+    expect(apiPut).toHaveBeenCalledWith('/episodes/episode-a/progress', {
+      page_no: 3,
+      block_offset_bp: 6_250,
+    });
+  });
+});
 
 describe('imageFetchPriority', () => {
   it('앞 3장(0,1,2번째 이미지)은 high', () => {
@@ -29,6 +61,24 @@ describe('clampBlockIndex', () => {
 
   it('블록이 0개면 0을 반환한다(빈 문서 방어)', () => {
     expect(clampBlockIndex(5, 0)).toBe(0);
+  });
+});
+
+describe('block-local progress', () => {
+  it('5400px 긴 이미지 내부 위치를 basis point로 계산한다', () => {
+    expect(calculateBlockOffsetBp(-3240, 5400)).toBe(6000);
+  });
+
+  it('블록 앞과 뒤의 위치를 유효 범위로 자른다', () => {
+    expect(calculateBlockOffsetBp(100, 5400)).toBe(0);
+    expect(calculateBlockOffsetBp(-6000, 5400)).toBe(10_000);
+    expect(calculateBlockOffsetBp(-100, 0)).toBe(0);
+  });
+
+  it('현재 렌더 높이에 같은 상대 위치를 복원한다', () => {
+    expect(calculateBlockRestoreY(1000, 5400, 6000)).toBe(4240);
+    expect(calculateBlockRestoreY(1000, 5400, -1)).toBe(1000);
+    expect(calculateBlockRestoreY(1000, 5400, 20_000)).toBe(6400);
   });
 });
 

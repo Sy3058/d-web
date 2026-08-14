@@ -3,7 +3,7 @@
 PUT은 회차 공개성 검사를 통과해야 저장된다(검사 자체는 progress_service 소관 -
 서비스가 도메인 불변식을 소유한다). GET은 공개성을 재검사하지 않고 진행도 행 존재만
 본다 - 작품이 일시 비공개로 전환됐다 재공개돼도 기존 진행도가 유지되는 편이 UX상
-맞다는 결정(2026-07-20). GET이 노출하는 값은 요청자 본인의 정수 하나뿐이라 숨길
+맞다는 결정(2026-07-20). GET이 노출하는 값은 요청자 본인의 위치 값뿐이라 숨길
 대상이 아니다.
 """
 
@@ -32,7 +32,9 @@ _EPISODE_NOT_FOUND = HTTPException(
     status_code=status.HTTP_404_NOT_FOUND, detail="회차를 찾을 수 없습니다"
 )
 _PROGRESS_NOT_FOUND = HTTPException(
-    status_code=status.HTTP_404_NOT_FOUND, detail="저장된 진행도가 없습니다"
+    status_code=status.HTTP_404_NOT_FOUND,
+    detail="저장된 진행도가 없습니다",
+    headers={"Cache-Control": "no-store"},
 )
 
 
@@ -40,6 +42,7 @@ def _to_read(progress: ViewerProgress) -> ProgressRead:
     return ProgressRead(
         episode_id=progress.episode_id,
         page_no=progress.page_no,
+        block_offset_bp=progress.block_offset_bp,
         updated_at=progress.updated_at,
     )
 
@@ -58,7 +61,11 @@ async def update_progress(
     response: Response,
 ) -> ProgressRead:
     progress = await progress_service.upsert_progress(
-        current_user.id, episode_id, body.page_no, session
+        current_user.id,
+        episode_id,
+        body.page_no,
+        body.block_offset_bp if "block_offset_bp" in body.model_fields_set else None,
+        session,
     )
     if progress is None:
         raise _EPISODE_NOT_FOUND

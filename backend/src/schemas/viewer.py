@@ -14,11 +14,15 @@ class ProgressUpdate(BaseModel):
     # 단 INT4 상한은 필수: 컬럼이 4바이트 Integer라 초과 값은 드라이버(asyncpg)에서
     # DataError로 터져 422가 아니라 500이 된다(리뷰 실측 2026-07-20).
     page_no: int = Field(ge=0, le=2_147_483_647)
+    # 최상위 블록 내부의 상대 위치. 기본값은 신규 행의 블록 시작점이다. 기존 클라이언트가
+    # 필드를 생략했는지는 model_fields_set으로 구분해 기존 정밀 위치를 덮어쓰지 않는다.
+    block_offset_bp: int = Field(default=0, ge=0, le=10_000)
 
 
 class ProgressRead(BaseModel):
     episode_id: uuid.UUID
     page_no: int
+    block_offset_bp: int
     updated_at: datetime
 
 
