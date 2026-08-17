@@ -19,6 +19,8 @@
 
 > **v0.17 갱신(2026-08-15)**: 코드 리뷰 Major 2건을 반영했다. 느린 진행도 GET 중 초기 PUT을 차단하고, 필드를 모르는 구버전 탭이 같은 블록의 오프셋을 지우지 않도록 보존한다. 자동 회귀 테스트와 긴 이미지 사용자 재진입 확인을 완료했다.
 
+> **v0.17 후속 갱신(2026-08-17~18)**: #116 뷰어 콘텐츠 요청 실패 복구를 반영했다. 초기 요청과 이미지 URL 재발급의 rejection을 명시적 오류 상태로 종료하고 수동 재시도를 제공한다. 재발급 성공 뒤에도 실패한 최상위 이미지는 해당 블록만 버튼 없는 placeholder로 남기며, 같은 초의 presign이 동일 URL을 돌려줘도 성공 응답 세대로 이미지를 재마운트한다. 회차 전환·언마운트 뒤 늦은 응답 차단과 404/5xx 계약을 자동 회귀 테스트로 고정했다.
+
 > **목적**: 작품 목록 → 작품 상세 → 에피소드 목록 → 뷰어의 독자 열람 경로를 완성한다. 결제는 없다(M3). 회차 본문은 **콘텐츠 문서(TipTap JSON, `episodes.content`) + 회차 내 유료 경계(paywall 노드)** 모델(#76, DECISIONS "에피소드 콘텐츠 모델")이며, M2는 **경계 이전(무료 구간)만 서버가 잘라 서빙**하고 경계 지점에 잠금 placeholder를 노출한다. 범위는 PRD **WORK-01~09**(목록/상세/회차목록/뷰어/진행도) + 랜딩(`/`) 재설계 + 커미션 홍보(`/commission`, 아래 그룹 G). 경계 뒤(유료 구간) 반환·결제 검증은 **M3**, 커뮤니티(댓글·하트)는 **M4**, 작품 검색은 **P2**, 커미션 내부 신청 폼·접수 관리는 **M5**.
 
 ---
@@ -248,6 +250,8 @@ M2 착수 전 확정. presigned·표지·콘텐츠 모델은 기존 결정(DECIS
 - ⚠️ 함정(MISTAKES/study 참조): React StrictMode 이펙트 중복(이벤트 리스너 정리), `useEffect`에서 직접 mutate 금지. `generateHTML` 결과 주입은 화이트리스트 스키마 덕에 XSS 면적이 없으나(**서버가 검증한 노드만 존재**), 렌더러 확장 시 서버·에디터·뷰어 **3곳 동시 갱신** 규칙(#76) 준수.
 
 - **구현에서 확정(2026-07-25)**: ① 최상위 노드별 분할 렌더 - image는 React `<img>` 직접 제어(fetchPriority·draggable·onError), 나머지는 `generateHTML` 조각 `dangerouslySetInnerHTML`(`data-block-index` wrapper가 진행도 추적 단위와 동시에 일치). ② 진행도는 보이는 블록 중 **최솟값**(최댓값이면 아직 안 읽은 내용을 건너뜀). ③ `client:only="react"`(client:load 아님) - `generateHTML`이 브라우저 전용이라는 공식 문서 서술이 실측(node 환경 `window is not defined`)으로도 확인됨, 결정 1의 "본문 SSR 부재" 요구도 구조적으로 보장. ④ 렌더 방어: 서버가 paragraph 자식 image를 막지 않아 중첩 image 경로도 존재 - 이 경로도 lazy 금지 원칙을 동일 적용(최초 구현이 놓쳤던 부분을 Opus 리뷰 Major로 발견·수정), 컨테이너 레벨 드래그 차단으로 두 경로 보호 수준 통일. ⑤ 렌더 스키마 회귀 테스트(`getSchema` 대조)로 서버·뷰어 스키마 일치(#76)를 코드로 강제. Opus 코드 리뷰 Critical 0 / Major 1(반영) / FYI 3(전부 반영). **수동 e2e(브라우저 실기능)·회차당 전송 바이트 실측(결정 6 재검토 조건)은 사용자 확인 대기** - Playwright 등 브라우저 자동화 미도입 결정에 따름, 결과 반영 전까지 그룹 H 체크 보류. 상세: `docs/MODULES/FE/Viewer/IMPLEMENTATION_VIEWER_ISLAND.md`.
+
+- **요청 실패 복구(2026-08-17~18, #116)**: 콘텐츠 요청을 `loading / success / notFound / error`로 분리했다. 초기 요청과 이미지 URL 재발급 rejection은 오류 안내와 수동 재시도로 종료하고, 재발급 성공 뒤에도 실패한 최상위 이미지는 block index별 버튼 없는 placeholder로 표시한다. 동일 URL 재발급도 성공 응답 세대별 `<img>` 재마운트로 다시 검증하며, 회차 변경 시 콘텐츠·오류·image retry·placeholder·진행도 관련 상태를 초기화한다. 404 `null`, 그 외 throw와 진행도 fail-closed 계약은 유지했다. frontend 92 tests, Astro check, build 통과. 브라우저 정상·404·네트워크 실패·재시도·개별 이미지 placeholder 흐름은 사용자 확인 대기.
 
 ---
 

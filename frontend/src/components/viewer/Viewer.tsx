@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { generateHTML, type Extensions } from '@tiptap/core';
 import { buildViewerExtensions } from './extensions';
 import {
@@ -27,6 +27,22 @@ interface Block {
 interface ProgressAnchor {
   index: number;
   offsetBp: number;
+}
+
+type ContentRequestState =
+  | { status: 'loading'; episodeId: string }
+  | {
+      status: 'success';
+      episodeId: string;
+      content: EpisodeContentResponse;
+      imageRenderGeneration: number;
+    }
+  | { status: 'notFound'; episodeId: string }
+  | { status: 'error'; episodeId: string };
+
+interface ContentRequestTrigger {
+  attempt: number;
+  preserveContent: boolean;
 }
 
 // 진행도 저장 debounce. 스크롤할 때마다 쏘지 않고 멈춘 뒤에만 저장(C1은 저장 실패를
@@ -67,8 +83,15 @@ function renderNodeHtml(node: ContentDocNode, extensions: Extensions): string {
 
 export default function Viewer({ episodeId }: Props) {
   const extensions = useMemo(() => buildViewerExtensions(), []);
-  // undefined=로딩 중, null=404(회차 없음), 그 외=정상 응답.
-  const [content, setContent] = useState<EpisodeContentResponse | null | undefined>(undefined);
+  const [contentState, setContentState] = useState<ContentRequestState>({
+    status: 'loading',
+    episodeId,
+  });
+  const [contentRequest, setContentRequest] = useState<ContentRequestTrigger>({
+    attempt: 0,
+    preserveContent: false,
+  });
+  const [failedImageBlocks, setFailedImageBlocks] = useState<Set<number>>(() => new Set());
   const [restoredAnchor, setRestoredAnchor] = useState<ProgressAnchor | null>(null);
   // 기존 진행도를 읽고 복원할지 결정하기 전에는 상단의 초기 observer 값으로 PUT하지 않는다.
   const [canSaveProgress, setCanSaveProgress] = useState(false);
@@ -83,16 +106,61 @@ export default function Viewer({ episodeId }: Props) {
   // 나중에 복원 스크롤이 그 위치를 되돌려버린다.
   const userScrolledRef = useRef(false);
   const programmaticScrollRef = useRef(false);
+  const requestedEpisodeRef = useRef(episodeId);
+  const imageRefreshPendingRef = useRef(false);
 
   useEffect(() => {
+    const episodeChanged = requestedEpisodeRef.current !== episodeId;
+    requestedEpisodeRef.current = episodeId;
+
+    if (episodeChanged) {
+      retriedRef.current = false;
+      imageRefreshPendingRef.current = false;
+      setFailedImageBlocks(new Set());
+      blockRefs.current.clear();
+      topVisibleRef.current = 0;
+      blockOffsetBpRef.current = 0;
+      hasObservedRef.current = false;
+      userScrolledRef.current = false;
+      programmaticScrollRef.current = false;
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+      setRestoredAnchor(null);
+      setCanSaveProgress(false);
+    }
+
+    if (episodeChanged || !contentRequest.preserveContent) {
+      setContentState({ status: 'loading', episodeId });
+    }
+
     let cancelled = false;
-    getEpisodeContent(episodeId).then((res) => {
-      if (!cancelled) setContent(res);
-    });
+    getEpisodeContent(episodeId)
+      .then((content) => {
+        if (cancelled) return;
+        if (content === null) {
+          imageRefreshPendingRef.current = false;
+          setContentState({ status: 'notFound', episodeId });
+          return;
+        }
+        setContentState((previous) => ({
+          status: 'success',
+          episodeId,
+          content,
+          imageRenderGeneration:
+            previous.episodeId === episodeId && previous.status === 'success'
+              ? previous.imageRenderGeneration + 1
+              : 0,
+        }));
+      })
+      .catch(() => {
+        if (cancelled) return;
+        imageRefreshPendingRef.current = false;
+        setContentState({ status: 'error', episodeId });
+      });
     return () => {
       cancelled = true;
     };
-  }, [episodeId]);
+  }, [contentRequest, episodeId]);
 
   useEffect(() => {
     const onUserScroll = () => {
@@ -108,7 +176,19 @@ export default function Viewer({ episodeId }: Props) {
     };
   }, []);
 
+  const content =
+    contentState.episodeId === episodeId && contentState.status === 'success'
+      ? contentState.content
+      : null;
   const blocks = useMemo(() => (content ? buildBlocks(content.content.content) : []), [content]);
+
+  // 새 presigned URL이 DOM에 반영된 뒤에만 재발급 진행 상태를 푼다. 요청 resolve 직후
+  // 바로 풀면 아직 남아 있던 옛 URL의 error 이벤트를 "새 URL도 실패"로 오인할 수 있다.
+  useLayoutEffect(() => {
+    if (contentState.episodeId === episodeId && contentState.status === 'success') {
+      imageRefreshPendingRef.current = false;
+    }
+  }, [contentState, episodeId]);
 
   // 진행도 복원 - 로그인 상태에서만 GET을 쏜다(비로그인 401 자체를 만들지 않는다).
   useEffect(() => {
@@ -285,19 +365,53 @@ export default function Viewer({ episodeId }: Props) {
     };
   }, [blocks.length, canSaveProgress, episodeId]);
 
-  function handleImageError() {
+  function handleImageError(blockIndex: number) {
     // presigned 만료 등 예외적 실패의 폴백(정상 경로 - 결정 6 즉시 전량 요청 - 에선 타지
     // 않아야 정상). 1회만 재요청해 새로 발급된 presigned 세트로 교체한다.
-    if (retriedRef.current) return;
+    if (imageRefreshPendingRef.current) return;
+    if (retriedRef.current) {
+      setFailedImageBlocks((failed) => {
+        if (failed.has(blockIndex)) return failed;
+        const next = new Set(failed);
+        next.add(blockIndex);
+        return next;
+      });
+      return;
+    }
     retriedRef.current = true;
-    getEpisodeContent(episodeId).then(setContent);
+    imageRefreshPendingRef.current = true;
+    setContentRequest((request) => ({
+      attempt: request.attempt + 1,
+      preserveContent: true,
+    }));
   }
 
-  if (content === undefined) {
+  function handleManualRetry() {
+    setContentRequest((request) => ({
+      attempt: request.attempt + 1,
+      preserveContent: false,
+    }));
+  }
+
+  if (contentState.episodeId !== episodeId || contentState.status === 'loading') {
     return <p className="text-sm text-muted py-12 text-center">불러오는 중...</p>;
   }
-  if (content === null) {
+  if (contentState.status === 'notFound') {
     return <p className="text-sm text-muted py-12 text-center">회차를 찾을 수 없어요.</p>;
+  }
+  if (contentState.status === 'error') {
+    return (
+      <div className="py-12 text-center">
+        <p className="text-sm text-muted">일시적인 오류로 회차 내용을 불러오지 못했어요.</p>
+        <button
+          type="button"
+          onClick={handleManualRetry}
+          className="mt-4 bg-ink text-paper text-sm font-medium tracking-wide py-2.5 px-4 rounded-control hover:bg-ink-strong"
+        >
+          다시 시도
+        </button>
+      </div>
+    );
   }
 
   return (
@@ -319,14 +433,27 @@ export default function Viewer({ episodeId }: Props) {
           }}
         >
           {block.node.type === 'image' ? (
-            typeof block.node.attrs?.src !== 'string' ? null : (
+            failedImageBlocks.has(i) ? (
+              <div
+                data-image-error="true"
+                role="img"
+                aria-label="이미지를 불러오지 못했습니다."
+                className="min-h-48 border border-line bg-hover flex flex-col items-center justify-center gap-2 px-4 py-10 text-center text-muted"
+              >
+                <span aria-hidden="true" className="text-3xl leading-none">
+                  ×
+                </span>
+                <p className="text-sm">이미지를 불러오지 못했어요. 새로고침 해주세요.</p>
+              </div>
+            ) : typeof block.node.attrs?.src !== 'string' ? null : (
               <img
+                key={`${i}:${contentState.imageRenderGeneration}`}
                 src={block.node.attrs.src}
                 alt=""
                 draggable={false}
                 fetchPriority={imageFetchPriority(block.imageOrdinal ?? 0)}
                 onDragStart={(e) => e.preventDefault()}
-                onError={handleImageError}
+                onError={() => handleImageError(i)}
                 className="w-full h-auto"
               />
             )
@@ -338,7 +465,7 @@ export default function Viewer({ episodeId }: Props) {
         </div>
       ))}
 
-      {content.has_paid_part && (
+      {contentState.content.has_paid_part && (
         <div className="mt-8 py-12 text-center border-t border-line">
           <p className="text-sm text-muted">여기부터는 유료 구간이에요.</p>
         </div>

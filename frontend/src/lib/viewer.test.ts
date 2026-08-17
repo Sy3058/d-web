@@ -1,23 +1,46 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { apiPut } = vi.hoisted(() => ({ apiPut: vi.fn() }));
+const { apiGet, apiPut } = vi.hoisted(() => ({ apiGet: vi.fn(), apiPut: vi.fn() }));
 
 vi.mock('./api', async (importOriginal) => {
   const original = await importOriginal<typeof import('./api')>();
-  return { ...original, api: { ...original.api, put: apiPut } };
+  return { ...original, api: { ...original.api, get: apiGet, put: apiPut } };
 });
 
+import { ApiError } from './api';
 import {
   calculateBlockOffsetBp,
   calculateBlockRestoreY,
   clampBlockIndex,
+  getEpisodeContent,
   imageFetchPriority,
   isLoggedIn,
   putProgress,
 } from './viewer';
 
 beforeEach(() => {
+  apiGet.mockReset();
   apiPut.mockReset();
+});
+
+describe('getEpisodeContent', () => {
+  it('404는 회차 없음 정상 흐름인 null로 변환한다', async () => {
+    apiGet.mockRejectedValue(new ApiError(404, 'not found'));
+
+    await expect(getEpisodeContent('episode-a')).resolves.toBeNull();
+  });
+
+  it('5xx와 네트워크 오류는 성공 상태로 숨기지 않고 전파한다', async () => {
+    const serverError = new ApiError(500, 'server error');
+    apiGet.mockRejectedValueOnce(serverError);
+
+    await expect(getEpisodeContent('episode-a')).rejects.toBe(serverError);
+
+    const networkError = new Error('network error');
+    apiGet.mockRejectedValueOnce(networkError);
+
+    await expect(getEpisodeContent('episode-a')).rejects.toBe(networkError);
+  });
 });
 
 describe('putProgress', () => {
