@@ -4,8 +4,8 @@
 |------|------|
 | 모듈 | Frontend / Viewer (독자 열람 경로 - 콘텐츠 문서 렌더러) |
 | 관련 마일스톤 | [M2](../../../milestones/M2_foundation.md) 그룹 F (F1, WORK-05~08) |
-| 작성 시점 | M2 F1 (2026-07-25), 후속 보완 (2026-07-26 - §7), 긴 블록 복원 보강 (2026-08-14 - §8) |
-| 상태 | 구현 + 리뷰 반영. 긴 단일 이미지 내부 추적·복원 자동 테스트와 사용자 브라우저 재진입 확인 통과(2026-08-15). M2 전체 수동 e2e는 그룹 H의 나머지 항목 확인 대기 |
+| 작성 시점 | M2 F1 (2026-07-25), 후속 보완 (2026-07-26 - §7), 긴 블록 복원 보강 (2026-08-14 - §8), 요청 실패 복구 보강 (2026-08-17~18 - §9) |
+| 상태 | 구현 + 리뷰 반영. 콘텐츠 요청 실패 상태, 수동 재시도, 개별 이미지 최종 실패 placeholder 자동 테스트 통과(2026-08-18). M2 전체 수동 e2e는 그룹 H의 나머지 항목 확인 대기 |
 | 관련 문서 | M2_foundation.md 그룹 F·결정 1/3/6, IMPLEMENTATION_FREE_CONTENT_API.md(B2 계약 원본), IMPLEMENTATION_VIEWER_PROGRESS.md(C1 계약), IMPLEMENTATION_CATALOG_PAGES.md(E, SSR 셸/캐시 정책 원본), IMPLEMENTATION_EPISODE_CONTENT_MODEL.md(#76, 서버 스키마 원본) |
 
 비로그인 독자가 `/works/{id}/{publicId}`에서 회차 본문(글+이미지 혼합 TipTap 문서)을 읽는 페이지. B2가 절단·presigned 치환한 무료 구간을 아일랜드가 fetch해 렌더하고, 유료 경계가 있으면 말미에 잠금 placeholder를 보여준다. 로그인 상태면 읽은 위치(블록 인덱스 + 블록 내부 상대 위치)를 저장·복원한다(C1). 유료 구간 반환·결제 검증은 M3.
@@ -170,3 +170,30 @@ PLAUSIBLE 4건(§6 표 참조 - stale 클로저·진행도 중간값 저장·rAF
 `viewer.test.ts`는 5400px 블록을 3240px 지나면 6000bp가 되고, 현재 렌더 높이에서 같은 상대 Y로 복원되는지와 0..10000 클램프를 검사한다. DOM 스크롤·이미지 로드 타이밍은 프로젝트 원칙대로 사용자 브라우저에서 확인했다.
 
 2026-08-15 리뷰에서 느린 진행도 GET보다 초기 observer PUT이 먼저 실행될 수 있는 경쟁을 발견했다. 복원 판정 전에는 위치 계산만 하고 저장을 잠그며, GET 결과 없음·사용자 선행 스크롤·복원 완료 중 하나로 판정된 뒤에만 PUT한다. jsdom 컴포넌트 테스트가 GET을 2초 지연해 그동안 PUT이 0회인지 검사한다. `putProgress` 요청 body에 두 위치 값이 함께 실리는지도 API mock으로 고정했다. 사용자 브라우저에서는 긴 이미지 중간에서 작품 상세로 나갔다 재진입해 같은 패널 부근으로 돌아오는 것을 확인했다.
+
+---
+
+## 9. 콘텐츠 요청 실패 복구 (#116, 2026-08-17)
+
+### 문제와 원인
+
+`getEpisodeContent`는 404만 `null`로 바꾸고 네트워크 오류와 5xx는 throw한다. 기존 `Viewer`는 초기 요청과 이미지 `onError`의 콘텐츠 재요청에 `then`만 연결해 rejection을 처리하지 않았다. 초기 실패는 `content=undefined`를 영구히 유지해 무한 로딩이 됐고, 이미지 재발급 실패는 unhandled rejection으로 남았다.
+
+### 구현
+
+- 콘텐츠 요청 상태를 `loading / success / notFound / error` 판별 유니온으로 분리했다. 404 `null`은 기존 notFound 안내를 유지하고, rejection은 오류 안내와 `다시 시도` 버튼으로 종료한다.
+- 초기 요청, 수동 재시도, 이미지 URL 재발급을 하나의 요청 effect로 통합했다. effect cleanup의 `cancelled`가 늦은 성공과 실패를 모두 무시한다.
+- 이미지 `onError` 재발급 중에는 기존 콘텐츠를 유지해 문서 높이와 스크롤 위치가 무너지지 않게 한다. 콘텐츠 재발급 요청 자체가 실패하면 전체 오류 상태로 전환하며 회차당 자동 재요청은 1회로 제한한다.
+- 실기능 확인에서 재발급 성공 뒤 새 이미지 URL도 실패하면 `alt=""` 이미지가 조용히 접혀 페이지 누락을 독자가 모르는 공백을 발견했다. 자동 재발급 중 함께 도착한 옛 URL의 추가 error는 무시하고, 새 URL도 실패한 최상위 이미지 블록만 `×` 아이콘과 오류 문구가 있는 최소 높이 placeholder로 교체한다. 이미지별 버튼은 두지 않으며 사용자는 필요하면 페이지를 새로고침한다.
+- boto3 SigV4는 같은 초에 같은 키를 다시 서명하면 기존과 동일한 URL을 반환할 수 있다. React가 같은 key와 `src`의 `<img>`를 재사용하면 새 요청과 두 번째 error가 모두 사라지므로, 성공한 콘텐츠 응답마다 이미지 렌더 세대를 올리고 이를 `<img>` key에 포함한다. 재발급 요청을 시작한 시점이 아니라 응답이 DOM에 반영되는 시점에만 재마운트해 pending 중 옛 이미지 error 무시도 유지한다.
+- 상태에 `episodeId`를 함께 저장하고 회차가 바뀌면 콘텐츠, 오류, 이미지 재시도, 복원·저장 관련 ref와 타이머를 초기화한다. 이전 회차의 늦은 응답은 새 회차를 덮어쓰지 못한다.
+- 진행도 GET 실패 시 PUT을 열지 않는 fail-closed 동작과 `getEpisodeContent`의 404/null, 그 외 throw 계약은 변경하지 않았다.
+
+### 자동 검증
+
+- `Viewer.test.tsx`: 초기 reject 오류 UI, 수동 재시도 성공, 404 notFound, 이미지 재발급 reject, 재발급 중 복수 옛 이미지 실패의 단일 요청, 새 URL과 동일 URL 재발급 뒤의 개별 이미지 placeholder, 회차별 retry·placeholder 초기화, 이전 회차 늦은 resolve 무시, 언마운트 뒤 reject 처리를 검증한다.
+- `viewer.test.ts`: 404를 `null`로 변환하고 5xx·네트워크 오류를 그대로 전파하는 API 계약을 검증한다.
+- `pnpm --filter frontend test`: 9 files, 92 tests 통과.
+- `pnpm --filter frontend astro check`: 0 errors, 0 warnings, 기존 hint 1건.
+- `pnpm --filter frontend build`: 성공. Sentry auth token 미설정과 기존 sourcemap 경고만 남았다.
+- 정상, 404, 네트워크 실패, 다시 시도, 이미지 재발급 실패, 새 URL도 실패한 이미지 placeholder 흐름의 브라우저 확인은 프로젝트 원칙대로 사용자가 수행한다.

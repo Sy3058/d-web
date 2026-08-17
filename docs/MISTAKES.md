@@ -80,6 +80,13 @@
 
 ## Astro / React
 
+- **Promise 성공 경로만 렌더 상태를 바꾸면 rejection이 영구 로딩으로 굳는다** (#116, 2026-08-17)
+  → 실제 사고: 회차 콘텐츠 초기 요청과 이미지 URL 재발급 요청이 `then`만 사용했다. `getEpisodeContent`가 의도대로 네트워크 오류와 5xx를 throw하자 rejection은 처리되지 않았고, `content=undefined`가 계속 loading을 뜻해 오류 안내 없이 무한 로딩됐다
+  → 요청 상태를 `loading / success / notFound / error`로 명시하고, 404 `null`과 그 외 rejection이 각각 종료 상태에 도달하게 한다. 수동 재시도와 `onError` 재요청도 같은 요청 effect를 통과시켜 별도 fire-and-forget Promise를 남기지 않는다
+  → effect cleanup의 취소 가드는 성공과 실패 양쪽에서 검사한다. 테스트는 실제 rejected Promise를 사용해 오류 UI, 재시도 성공, 늦은 resolve/reject 무시를 함께 고정한다
+  → 후속 실기능 확인(2026-08-18): 콘텐츠 재발급이 성공해도 새 URL의 이미지 GET이 다시 실패하면 `alt=""` + 높이 미지정 이미지가 조용히 접혀 독자가 페이지 누락을 모를 수 있다. 자동 재발급 중 옛 URL의 추가 error는 무시하고, 새 URL도 실패한 최상위 이미지 블록만 버튼 없는 명시적 placeholder로 바꾼다
+  → **"매 요청 presign"이 "매번 다른 URL"을 뜻하지는 않는다**. boto3 SigV4는 같은 초에 같은 키와 만료값을 서명하면 같은 URL을 만들 수 있고, React는 같은 key의 `<img>`에 같은 `src`를 다시 쓰지 않아 두 번째 error도 사라진다. 요청 시작이 아니라 성공 응답의 렌더 세대를 `<img>` key에 포함해 동일 URL도 재마운트하고, 재실패를 placeholder로 연결하는 테스트를 둔다
+
 - **긴 단일 요소 내부 진행도는 `IntersectionObserver`의 교차 이벤트만으로 추적할 수 없다** (2026-08-14 M2 뷰어)
   → 세로로 긴 이미지가 계속 뷰포트와 교차하는 동안 threshold 상태가 바뀌지 않으면 callback도 다시 오지 않는다. 이미지 내부를 수천 픽셀 내려가도 블록 인덱스와 저장 위치가 그대로여서 재진입 시 이미지 시작으로 돌아간다
   → observer는 보이는 블록 후보를 좁히는 데만 쓰고, passive `scroll`을 `requestAnimationFrame`으로 제한해 활성 블록의 `rect.top / rect.height`를 다시 계산한다. 복원값은 회차 전체 퍼센트가 아니라 `(block index, block-local basis points)`로 분리한다
