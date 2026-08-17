@@ -194,6 +194,8 @@ export default function Viewer({ episodeId }: Props) {
   useEffect(() => {
     if (blocks.length === 0 || !isLoggedIn(document.cookie)) return;
     let cancelled = false;
+    // GET 완료 전 저장을 막는 fail-closed 게이트라 요청 시작과 같은 effect에서 동기 초기화한다.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setCanSaveProgress(false);
     setRestoredAnchor(null);
     getProgress(episodeId)

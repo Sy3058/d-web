@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { loginSchema } from '../../lib/validation';
@@ -7,9 +7,11 @@ import { TextField, SubmitButton, FormError, FormNotice } from '../ui/forms';
 
 // 재발송 폼은 이메일만 필요 - 공용 loginSchema에서 email 규칙만 재사용.
 const resendSchema = loginSchema.pick({ email: true });
+const subscribeToLocation = () => () => undefined;
+const getEmailToken = () => new URLSearchParams(window.location.search).get('token');
 
 export default function VerifyEmail() {
-  const [token, setToken] = useState<string | null>(null);
+  const token = useSyncExternalStore(subscribeToLocation, getEmailToken, () => null);
   const [verifyState, setVerifyState] = useState<'idle' | 'verifying' | 'success' | 'error'>('idle');
   const [resendDone, setResendDone] = useState(false);
   const [resendError, setResendError] = useState('');
@@ -19,11 +21,6 @@ export default function VerifyEmail() {
     handleSubmit,
     formState: { errors, isSubmitting },
   } = useForm<{ email: string }>({ resolver: zodResolver(resendSchema) });
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    setToken(params.get('token'));
-  }, []);
 
   async function handleVerify() {
     if (!token || verifyState === 'verifying') return;

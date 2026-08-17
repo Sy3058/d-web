@@ -15,19 +15,19 @@
     // React 섬(하이드레이션 1틱)·getMe 왕복을 안 쓰므로 첫 프레임부터 닉네임이 보인다(레이아웃 시프트 0).
     // 표시 전용 - 진짜 인증은 HttpOnly JWT가 담당. 라벨 출처는 리프레시 수명과 함께 가는 힌트 쿠키.
     (function () {
-      var prefix = 'login_hint=';
-      var entry = document.cookie.split('; ').find(function (c) {
+      const prefix = 'login_hint=';
+      const entry = document.cookie.split('; ').find(function (c) {
         return c.indexOf(prefix) === 0;
       });
       if (!entry) return;
-      var name = '';
+      let name;
       try {
         name = decodeURIComponent(entry.slice(prefix.length));
-      } catch (e) {
+      } catch {
         return;
       }
       if (!name) return;
-      var el = document.getElementById('nav-user');
+      const el = document.getElementById('nav-user');
       if (el) {
         el.textContent = name;
         el.setAttribute('href', '/my');

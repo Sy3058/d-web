@@ -67,6 +67,7 @@
 - Node 20은 2026-04-30 EOL (이미 만료)
 - Node 22 (LTS, 2027-04까지) / Node 24 (Active LTS, 더 긴 지원 + npm 11 + 최신 V8) 중 새 프로젝트는 24 권장
 - 26은 2026-10에 LTS 승격 예정이므로 현 시점 선택 X
+- frontend lint 도구의 하한에 맞춰 `frontend.engines.node`는 `>=24.16.0`으로 둔다. CI의 Node 24 채널과 `node:24-alpine`은 이 하한 이상의 최신 24.x를 사용한다.
 
 ### 관리자 라우터: TanStack Router
 
@@ -100,10 +101,10 @@
 **결정: frontend·admin 모두 ESLint를 쓴다. biome는 채택하지 않는다.**
 
 - admin은 Vite `react-ts` 스캐폴드가 ESLint(flat config)를 기본 포함 - 이미 동작 중(`admin/eslint.config.js`).
-- frontend(Astro)는 스캐폴드에 린트 미포함 → ESLint를 별도 도입 예정(`eslint-plugin-astro`). Astro는 ESLint+Prettier 조합 지원이 성숙.
+- frontend(Astro)는 스캐폴드에 린트가 없어 `eslint-plugin-astro` 기반 ESLint 10 flat config를 별도 도입했다(2026-08-18). `.astro`는 CLI glob에 확장자를 명시하고 플러그인 권고대로 minor preset drift를 막기 위해 `eslint-plugin-astro`를 tilde 고정한다.
 - **biome 탈락 이유**: (a) `.astro` 파일 린트/포맷 지원이 제한적, (b) admin이 이미 ESLint라 통일 시 추가 마이그레이션 불필요. Rust 속도 이점보다 일관성·생태계를 우선.
 - 명령은 pnpm 워크스페이스로 통일: `pnpm --filter <pkg> lint`.
-- frontend ESLint 실제 셋업은 M0 CI(F1) 작업 범위. (린트는 React와 무관 - admin/frontend 차이는 스캐폴드 기본값 때문이지 React 사용 여부가 아님)
+- frontend lint는 JS/TS/Astro recommended와 React Hooks recommended를 적용한다. type-aware lint, Prettier, JSX a11y, import/style 규칙은 별도 범위다. `astro check`는 프로젝트 단위 타입 검사를 위해 그대로 유지한다.
 
 ---
 
@@ -588,7 +589,7 @@ main (항상 배포 가능 상태)
 - **`paths` 필터 미적용**: required check로 걸면 path-skip이 "pending"으로 남아 머지를 막는 트레이드오프 + 1인 저PR 볼륨이라 Actions 분 절약 한계효용 낮음.
 - **⚠️ CI 효력의 전제 = branch protection (정정 2026-07-02: 무료 플랜 불가)**: 게이트의 실제 효력은 YAML이 아니라 서버 규칙(branch protection/ruleset)에 있다(`/council` 5렌즈 공통 맹점). 그러나 `backend`를 required status check로 등록하려면 branch protection 또는 ruleset이 필요한데, **무료 private repo는 둘 다 불가**(`branches/main/protection`·`repos/.../rulesets` API 모두 403 "Upgrade to Pro or make public"). 따라서 CI가 빨강이어도 서버가 머지를 강제로 막지 못한다 - 원래 "후속 P0(branch protection 등록)"는 이 플랜에선 실행 불가. 대신 **로컬 훅 `.githooks/pre-push`로 main 직접 push를 차단**해 PR 흐름(브랜치 → PR → squash-merge → `git pull`)을 강제한다(B1이 PR 없이 main 직행한 사고 대응). 단 이 훅은 "직접 push 금지"만 강제하고 **CI-그린은 강제하지 못한다**(클라 훅은 CI 상태를 못 봄) → CI 준수는 수동 규율. 진짜 서버 게이트가 필요하면 Pro 업그레이드 또는 repo 공개.
 - **후속**: `alembic upgrade head`+`alembic check` 게이트(모델↔마이그레이션 표류 차단), 액션 SHA 핀(공급망), CD(F2~F3).
-- **완료된 후속**: HIBP 외부호출 테스트 격리(hermetic, 2026-06-24) - conftest autouse 전역 stub(`_stub_hibp`)으로 어떤 테스트도 `api.pwnedpasswords.com`에 실제 요청을 못 보내게 함(per-test mock 의존 제거). 실제 함수 본문 raise sabotage로 미도달 입증. FE/admin job(2026-07-23, #98) - pnpm 10 + Node 24 셋업, frontend job(astro check/build/vitest)·admin job(eslint/tsc·vite build/vitest) 전 job 그린.
+- **완료된 후속**: HIBP 외부호출 테스트 격리(hermetic, 2026-06-24) - conftest autouse 전역 stub(`_stub_hibp`)으로 어떤 테스트도 `api.pwnedpasswords.com`에 실제 요청을 못 보내게 함(per-test mock 의존 제거). 실제 함수 본문 raise sabotage로 미도달 입증. FE/admin job(2026-07-23, #98) - pnpm 10 + Node 24 셋업, frontend job(astro check/build/vitest)·admin job(eslint/tsc·vite build/vitest) 전 job 그린. frontend ESLint(2026-08-18) - ESLint 10 flat config와 Astro/TS/React Hooks recommended를 추가하고 frontend job에서 astro check 전에 실행한다.
 
 ---
 
