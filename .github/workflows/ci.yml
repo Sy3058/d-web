@@ -99,7 +99,7 @@ jobs:
         with:
           version: 10
 
-      - name: Install Node (frontend engines >=24)
+      - name: Install Node (frontend engines >=24.16.0)
         uses: actions/setup-node@v7
         with:
           node-version: '24'
@@ -110,8 +110,11 @@ jobs:
       - name: Install dependencies (frozen lockfile)
         run: pnpm install --frozen-lockfile
 
-      # 게이트 3종은 frontend PR 템플릿 검증 체크와 일치.
+      # 게이트 4종은 frontend PR 템플릿 검증 체크와 일치.
       # Sentry는 auth token 미설정 시 경고만 내고 릴리스/소스맵 업로드를 건너뜀(실측).
+      - name: ESLint
+        run: pnpm --filter frontend lint
+
       - name: Astro check
         run: pnpm --filter frontend astro check
 

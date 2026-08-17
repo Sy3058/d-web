@@ -22,7 +22,7 @@ const page = Number.isSafeInteger(pageParam) && pageParam > 0 ? pageParam : 1;
 const tag = Astro.url.searchParams.get('tag') ?? undefined;
 
 let works: WorkListResponse = { items: [], total: 0, page, size: 0 };
-let tags: PublicTag[] = [];
+let tags: PublicTag[];
 let loadError = false;
 
 // 작품 목록과 태그를 독립 처리(allSettled) - 보조 UI인 태그 필터의 실패가 핵심 카탈로그

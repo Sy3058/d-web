@@ -27,10 +27,12 @@
 
 ## 검증 체크
 
+- [ ] `pnpm --filter frontend lint` 통과 (Astro/TS/TSX ESLint)
+- [ ] `pnpm --filter frontend astro check` 통과 (Astro/TypeScript 진단)
+- [ ] `pnpm --filter frontend test` 통과 (Vitest)
 - [ ] `pnpm --filter frontend build` 통과 (Astro 빌드 · 빌드타임 에러 없음)
 - [ ] `pnpm --filter frontend dev` 후 변경 화면 직접 확인
 - [ ] 모바일 뷰 확인 (Chrome DevTools)
-- [ ] (M0 CI 셋업 후) `pnpm --filter frontend lint` 통과 (ESLint, 현재 frontend 미설정)
 
 ## 📝 문서
 

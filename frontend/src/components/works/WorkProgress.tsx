@@ -19,10 +19,7 @@ export default function WorkProgress({ workId, episodes }: Props) {
   const [progress, setProgress] = useState<WorkProgressRead | null | undefined>(undefined);
 
   useEffect(() => {
-    if (!isLoggedIn(document.cookie)) {
-      setProgress(null);
-      return;
-    }
+    if (!isLoggedIn(document.cookie)) return;
 
     let cancelled = false;
     getWorkProgress(workId).then(

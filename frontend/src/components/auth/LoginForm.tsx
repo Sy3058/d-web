@@ -5,6 +5,10 @@ import { loginSchema, type LoginInput } from '../../lib/validation';
 import { api, ApiError, extractDetail } from '../../lib/api';
 import { TextField, SubmitButton, FormError } from '../ui/forms';
 
+export function redirectToMyPage(location: Pick<Location, 'assign'> = window.location) {
+  location.assign('/my');
+}
+
 export default function LoginForm() {
   const {
     register,
@@ -17,7 +21,7 @@ export default function LoginForm() {
     setFormError('');
     try {
       await api.post('/auth/login', data);
-      window.location.href = '/my';
+      redirectToMyPage();
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.status === 429) {
