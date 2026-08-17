@@ -56,6 +56,21 @@
 
 ⚠️ **#76의 "서버·에디터·뷰어 3곳 동일 스키마" 규칙에서 image attrs 하나만 의도적 예외다.** 노드·마크 화이트리스트는 동일하다. **그룹 F 뷰어 렌더러는 `src` 기준으로 구현할 것.**
 
+### 저장 검증과 공개 투영을 이중화한다 (#115, 2026-08-17)
+
+M2 전체 보안 검증에서 무료 노드의 임의 최상위 필드에 유료 R2 키를 넣으면 공개 응답에 남는 경로가 발견됐다. 저장 검증은 attrs 내부 키만 제한하고 doc·node·mark 객체 자체의 키 집합은 제한하지 않았으며, 읽기 서비스가 `dict(node)`로 원본 노드를 복사한 것이 결합 원인이었다. 정상 API 쓰기만 가정하면 과거 데이터, 마이그레이션, 수동 DB 편집으로 생긴 오염값을 공개 경계에서 막지 못한다.
+
+방어는 두 층으로 분리했다.
+
+1. `content_doc.validate_content`는 doc·node 타입·mark 타입별 최상위 허용 필드를 검사한다. `content`, `attrs`, `marks`는 truthy 여부가 아니라 필드 존재 기준으로 검사해 `content=[]`, `attrs={}`, `marks=None` 같은 falsy 우회도 닫는다.
+2. `episode_read_service`는 저장 dict를 복사하지 않는다. 절단된 무료 문서를 허용 필드만 담은 안전한 내부 트리로 먼저 투영하고, 그 트리의 image key만 수집해 presign한 뒤, 공개 응답을 `attrs={"src": ...}` 형태로 다시 새 객체로 조립한다.
+
+처리 순서는 **절단 → 안전한 내부 투영 → key 수집 → presign → 공개 투영**이다. 따라서 leaf node의 불법 `content`나 알 수 없는 노드 아래에 숨긴 image key는 presign 호출 인자에도 들어가지 않는다. 허용 객체의 임의 필드는 버리고 정상 의미는 유지하며, 알 수 없는 노드·잘못된 mark·key 없는 image는 최소 단위로 폐기한다. 완전히 잘못된 문서 루트는 500 대신 빈 문서와 `has_paid_part=true`로 닫는다. 읽기 투영에도 저장 검증과 같은 깊이·노드·텍스트 상한을 적용하고, 유의미 콘텐츠 판정은 반복형 순회로 바꿔 깊게 오염된 JSON이 `RecursionError`를 만들지 않게 했다. 문자열이 아닌 node·mark type도 membership 검사 전에 폐기해 `TypeError` 500을 막는다.
+
+오염값은 로그에 복사하지 않는다. 구조화 경고에는 `episode_id`와 폐기·정리 개수만 기록한다. 기존 `episode_content_image_dropped` 계약은 유지하고, 그 밖의 오염 정리는 `episode_content_invalid_part_sanitized`로 관측한다.
+
+회귀 테스트는 응답 문자열뿐 아니라 `presign_get_urls` 호출 인자까지 검사한다. 최종 JSON이 정상이어도 유료 키에 이미 서명을 발급했다면 보안 실패이기 때문이다.
+
 ### 조회는 `public_work_filters()` 강제
 
 작품을 숨기거나(`is_published=false`) soft delete해도 **회차 행은 남는다.** `Episode.is_published`만 검사하면 회차 ID 직접 접근으로 내려간 작품이 계속 읽힌다. admin `episode_service.get_episode`가 `deleted_at`만 보는 건 관리자가 비공개 작품도 봐야 해서고, 그 패턴을 독자 경로로 복사하면 안 된다(C1과 동일한 함정).

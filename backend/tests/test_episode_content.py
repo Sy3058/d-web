@@ -86,6 +86,137 @@ async def _partial_paid_episode(db_session: AsyncSession, user: User):
 
 
 # ---------------------------------------------------------------------------
+# 공개 투영 순수 경로 - DB가 오염돼도 허용 필드와 presign 대상만 남는가
+# ---------------------------------------------------------------------------
+
+
+async def test_projection_strips_arbitrary_fields_before_presign(
+    presign_spy: list[list[str]],
+):
+    poisoned = _doc(
+        {
+            "type": "image",
+            "attrs": {"key": FREE_KEY},
+            "backup_key": PAID_KEY,
+        },
+        {"type": "hardBreak", "content": [_img(PAID_KEY)]},
+        {
+            "type": "paragraph",
+            "backup_key": PAID_KEY,
+            "content": [
+                {
+                    "type": "text",
+                    "text": FREE_TEXT,
+                    "backup_key": PAID_KEY,
+                    "marks": [{"type": "bold", "backup_key": PAID_KEY}],
+                }
+            ],
+        },
+    )
+
+    public_doc, stats = await episode_read_service._substitute_image_urls(poisoned)
+
+    assert presign_spy == [[FREE_KEY]]
+    assert PAID_KEY not in str(public_doc)
+    assert public_doc == _doc(
+        {"type": "image", "attrs": {"src": f"https://r2.example/{FREE_KEY}?sig=SIGNED"}},
+        {"type": "hardBreak"},
+        _para(FREE_TEXT, marks=[{"type": "bold"}]),
+    )
+    assert stats.dropped_images == 0
+    assert stats.dropped_nodes == 0
+    assert stats.dropped_marks == 0
+    assert stats.stripped_fields == 5
+
+
+async def test_projection_drops_invalid_parts_without_copying_values(
+    presign_spy: list[list[str]],
+):
+    poisoned = _doc(
+        "not-a-node",
+        {"type": []},
+        {"type": "unknown", "backup_key": PAID_KEY},
+        {"type": "image"},
+        _para(FREE_TEXT),
+    )
+
+    public_doc, stats = await episode_read_service._substitute_image_urls(poisoned)
+
+    assert public_doc == _doc(_para(FREE_TEXT))
+    assert PAID_KEY not in str(public_doc)
+    assert [key for call in presign_spy for key in call] == []
+    assert stats.dropped_images == 1
+    assert stats.dropped_nodes == 3
+    assert stats.dropped_marks == 0
+    assert stats.stripped_fields == 0
+
+
+async def test_projection_preserves_allowed_marks(presign_spy: list[list[str]]):
+    marks = [
+        {"type": "bold"},
+        {"type": "italic"},
+        {"type": "underline"},
+        {"type": "strike"},
+        {"type": "link", "attrs": {"href": "https://example.com/post"}},
+    ]
+
+    public_doc, stats = await episode_read_service._substitute_image_urls(
+        _doc(_para(FREE_TEXT, marks=marks))
+    )
+
+    assert public_doc == _doc(_para(FREE_TEXT, marks=marks))
+    assert [key for call in presign_spy for key in call] == []
+    assert stats.dropped_marks == 0
+    assert stats.stripped_fields == 0
+
+
+async def test_invalid_document_root_fails_closed_without_500_or_secret_log(
+    monkeypatch, presign_spy: list[list[str]]
+):
+    episode_id = uuid.uuid4()
+    poisoned = {"type": "doc", "content": False, "backup_key": PAID_KEY}
+    warnings: list[tuple] = []
+
+    async def _fake_fetch(_episode_id, _session):
+        return episode_id, poisoned
+
+    monkeypatch.setattr(episode_read_service, "_fetch_public_episode", _fake_fetch)
+    monkeypatch.setattr(
+        episode_read_service.logger,
+        "warning",
+        lambda event, **kw: warnings.append((event, kw)),
+    )
+
+    content = await episode_read_service.get_free_content(episode_id, None)
+
+    assert content is not None
+    assert content.content == _doc()
+    assert content.has_paid_part is True
+    assert [key for call in presign_spy for key in call] == []
+    assert warnings == [
+        (
+            "episode_content_document_dropped",
+            {"episode_id": str(episode_id), "dropped_count": 1},
+        )
+    ]
+    assert PAID_KEY not in repr(warnings)
+
+
+async def test_projection_drops_overdeep_corrupt_branch_without_recursion_error(
+    presign_spy: list[list[str]],
+):
+    node: dict = {"type": "image", "attrs": {"key": PAID_KEY}}
+    for _ in range(1_100):
+        node = {"type": "paragraph", "content": [node]}
+
+    public_doc, stats = await episode_read_service._substitute_image_urls(_doc(node))
+
+    assert PAID_KEY not in str(public_doc)
+    assert [key for call in presign_spy for key in call] == []
+    assert stats.dropped_nodes == 1
+
+
+# ---------------------------------------------------------------------------
 # 절단 - 무엇이 나가고 무엇이 안 나가는가
 # ---------------------------------------------------------------------------
 
@@ -178,6 +309,83 @@ async def test_image_attrs_replaced_not_extended(
     assert len(images) == 2
     for image in images:
         assert set(image["attrs"]) == {"src"}
+
+
+async def test_arbitrary_image_field_cannot_smuggle_paid_key(
+    async_client: AsyncClient, db_session: AsyncSession, user: User, presign_spy: list[list[str]]
+):
+    work = await _make_work(db_session, user)
+    poisoned_image = {
+        "type": "image",
+        "attrs": {"key": FREE_KEY},
+        "backup_key": PAID_KEY,
+    }
+    ep = await _make_episode(
+        db_session,
+        work,
+        is_free=False,
+        image_keys=[FREE_KEY, PAID_KEY],
+        content=_doc(poisoned_image, _PAYWALL, _img(PAID_KEY)),
+    )
+
+    resp = await async_client.get(_content_url(ep.id))
+
+    assert resp.status_code == 200
+    assert PAID_KEY not in resp.text
+    assert presign_spy == [[FREE_KEY]]
+    images = _image_nodes(resp.json()["content"])
+    assert len(images) == 1
+    assert set(images[0]["attrs"]) == {"src"}
+
+
+async def test_nested_node_and_mark_fields_are_projected_out(
+    async_client: AsyncClient, db_session: AsyncSession, user: User
+):
+    work = await _make_work(db_session, user)
+    node = {
+        "type": "paragraph",
+        "backup_key": PAID_KEY,
+        "content": [
+            {
+                "type": "text",
+                "text": FREE_TEXT,
+                "backup_key": PAID_KEY,
+                "marks": [{"type": "bold", "backup_key": PAID_KEY}],
+            }
+        ],
+    }
+    ep = await _make_episode(db_session, work, is_free=True, content=_doc(node))
+
+    resp = await async_client.get(_content_url(ep.id))
+
+    assert resp.status_code == 200
+    assert PAID_KEY not in resp.text
+    projected = resp.json()["content"]["content"][0]
+    assert projected == {
+        "type": "paragraph",
+        "content": [{"type": "text", "text": FREE_TEXT, "marks": [{"type": "bold"}]}],
+    }
+
+
+async def test_leaf_content_is_never_traversed_or_signed(
+    async_client: AsyncClient, db_session: AsyncSession, user: User, presign_spy: list[list[str]]
+):
+    work = await _make_work(db_session, user)
+    poisoned_leaf = {"type": "hardBreak", "content": [_img(PAID_KEY)]}
+    ep = await _make_episode(
+        db_session,
+        work,
+        is_free=True,
+        image_keys=[PAID_KEY],
+        content=_doc(poisoned_leaf),
+    )
+
+    resp = await async_client.get(_content_url(ep.id))
+
+    assert resp.status_code == 200
+    assert resp.json()["content"]["content"] == [{"type": "hardBreak"}]
+    assert PAID_KEY not in resp.text
+    assert [key for call in presign_spy for key in call] == []
 
 
 async def test_paywall_at_front_returns_empty_content(
@@ -351,6 +559,46 @@ async def test_no_log_when_nothing_dropped(
     await async_client.get(_content_url(ep.id))
 
     assert warnings == []
+
+
+async def test_corrupt_nodes_are_dropped_and_logged_without_secrets(
+    async_client: AsyncClient, db_session: AsyncSession, user: User, monkeypatch
+):
+    warnings: list[tuple] = []
+    monkeypatch.setattr(
+        episode_read_service.logger,
+        "warning",
+        lambda event, **kw: warnings.append((event, kw)),
+    )
+
+    work = await _make_work(db_session, user)
+    ep = await _make_episode(
+        db_session,
+        work,
+        is_free=True,
+        content=_doc(
+            _para(FREE_TEXT),
+            "not-a-node",
+            {"type": []},
+            {"type": "unknown", "backup_key": PAID_KEY},
+        ),
+    )
+
+    resp = await async_client.get(_content_url(ep.id))
+
+    assert resp.status_code == 200
+    assert resp.json()["content"]["content"] == [_para(FREE_TEXT)]
+    assert PAID_KEY not in resp.text
+    assert len(warnings) == 1
+    event, fields = warnings[0]
+    assert event == "episode_content_invalid_part_sanitized"
+    assert fields == {
+        "episode_id": str(ep.id),
+        "dropped_node_count": 3,
+        "dropped_mark_count": 0,
+        "stripped_field_count": 0,
+    }
+    assert PAID_KEY not in repr(warnings)
 
 
 async def test_unpublished_episode_404(
