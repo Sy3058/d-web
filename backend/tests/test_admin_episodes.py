@@ -647,6 +647,18 @@ async def test_content_disallowed_node_422(owner_client: AsyncClient):
     assert resp.status_code == 422
 
 
+async def test_content_unknown_top_level_field_422(owner_client: AsyncClient):
+    work_id = await _create_work_id(owner_client)
+    episode = await _create_episode(owner_client, work_id)
+    node = {
+        "type": "paragraph",
+        "content": [{"type": "text", "text": "무료 본문"}],
+        "backup_key": "works/w/episodes/e/paid-page.webp",
+    }
+    resp = await _put(owner_client, work_id, episode["id"], content=_doc(node))
+    assert resp.status_code == 422
+
+
 async def test_content_javascript_link_422(owner_client: AsyncClient):
     # 마크 화이트리스트를 통과한 link도 href 스킴은 http(s)만 - javascript: 주입 차단.
     work_id = await _create_work_id(owner_client)

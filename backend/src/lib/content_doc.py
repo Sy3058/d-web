@@ -20,9 +20,25 @@ from src.lib.exceptions import EpisodeValidationError
 ALLOWED_NODE_TYPES = frozenset(
     {"doc", "paragraph", "text", "hardBreak", "image", "paywall", "horizontalRule"}
 )
+_ALLOWED_DOC_FIELDS = frozenset({"type", "content"})
+_ALLOWED_NODE_FIELDS: dict[str, frozenset[str]] = {
+    "paragraph": frozenset({"type", "content"}),
+    "text": frozenset({"type", "text", "marks"}),
+    "hardBreak": frozenset({"type"}),
+    "image": frozenset({"type", "attrs"}),
+    "paywall": frozenset({"type"}),
+    "horizontalRule": frozenset({"type"}),
+}
 # 자식(content)을 가질 수 있는 노드. text·이미지·경계·구분선 밑에 뭔가 달려오면 위조 문서다.
 _PARENT_NODE_TYPES = frozenset({"paragraph"})
 ALLOWED_MARK_TYPES = frozenset({"bold", "italic", "underline", "strike", "link"})
+_ALLOWED_MARK_FIELDS: dict[str, frozenset[str]] = {
+    "bold": frozenset({"type"}),
+    "italic": frozenset({"type"}),
+    "underline": frozenset({"type"}),
+    "strike": frozenset({"type"}),
+    "link": frozenset({"type", "attrs"}),
+}
 _ALLOWED_LINK_PREFIXES = ("http://", "https://")
 # 노드·마크가 가질 수 있는 attrs 키(미등재 = attrs 불허). 임의 속성이 저장되면
 # "화이트리스트가 곧 방어선"이 "렌더러가 버려주면 안전"으로 퇴화한다(리뷰 M1).
@@ -60,6 +76,8 @@ def validate_content(doc: Any, allowed_image_keys: set[str]) -> None:
     """문서 구조·화이트리스트·상한·이미지 키 소유를 검증한다. 위반 = EpisodeValidationError."""
     if not isinstance(doc, dict) or doc.get("type") != "doc":
         raise EpisodeValidationError("content는 type=doc 문서여야 합니다")
+    if not set(doc) <= _ALLOWED_DOC_FIELDS:
+        raise EpisodeValidationError("content 문서에 허용되지 않는 필드가 있습니다")
     top = doc.get("content", [])
     if not isinstance(top, list):
         raise EpisodeValidationError("content.content는 노드 배열이어야 합니다")
@@ -77,24 +95,21 @@ def _validate_node(
         raise EpisodeValidationError("content 노드는 객체여야 합니다")
 
     node_type = node.get("type")
-    if node_type not in ALLOWED_NODE_TYPES or node_type == "doc":
+    if not isinstance(node_type, str) or node_type not in ALLOWED_NODE_TYPES or node_type == "doc":
         raise EpisodeValidationError(f"허용되지 않는 노드 타입입니다: {node_type!r}")
+    if not set(node) <= _ALLOWED_NODE_FIELDS[node_type]:
+        raise EpisodeValidationError(f"{node_type} 노드에 허용되지 않는 필드가 있습니다")
 
     counters.nodes += 1
     if counters.nodes > MAX_CONTENT_NODES:
         raise EpisodeValidationError(f"content 노드 수가 {MAX_CONTENT_NODES}를 넘습니다")
 
     attrs = node.get("attrs")
-    if attrs is not None:
+    if "attrs" in node:
         if not isinstance(attrs, dict):
             raise EpisodeValidationError("노드 attrs는 객체여야 합니다")
         if not set(attrs) <= _ALLOWED_NODE_ATTRS.get(node_type, frozenset()):
             raise EpisodeValidationError(f"{node_type} 노드에 허용되지 않는 속성이 있습니다")
-
-    # 마크는 text 노드 전용 - 비-text 노드에 실린 link 마크는 아래 스킴 검사를
-    # 우회한 채 저장된다(리뷰 M1 실제 우회 시나리오).
-    if node_type != "text" and node.get("marks") is not None:
-        raise EpisodeValidationError("marks는 text 노드에만 둘 수 있습니다")
 
     if node_type == "paywall":
         if depth != 1:
@@ -110,15 +125,16 @@ def _validate_node(
         counters.text_chars += len(text)
         if counters.text_chars > MAX_CONTENT_TEXT_CHARS:
             raise EpisodeValidationError(f"본문 글자 수가 {MAX_CONTENT_TEXT_CHARS}를 넘습니다")
-        _validate_marks(node.get("marks"))
+        if "marks" in node:
+            _validate_marks(node["marks"])
 
     if node_type == "image":
         key = attrs.get("key") if isinstance(attrs, dict) else None
         if not isinstance(key, str) or key not in allowed_image_keys:
             raise EpisodeValidationError("이 회차에 업로드된 이미지 키가 아닙니다")
 
-    children = node.get("content")
-    if children:
+    if "content" in node:
+        children = node["content"]
         if node_type not in _PARENT_NODE_TYPES:
             raise EpisodeValidationError(f"{node_type} 노드는 자식을 가질 수 없습니다")
         if not isinstance(children, list):
@@ -128,18 +144,18 @@ def _validate_node(
 
 
 def _validate_marks(marks: Any) -> None:
-    if marks is None:
-        return
     if not isinstance(marks, list):
         raise EpisodeValidationError("marks는 배열이어야 합니다")
     for mark in marks:
         if not isinstance(mark, dict):
             raise EpisodeValidationError("mark는 객체여야 합니다")
         mark_type = mark.get("type")
-        if mark_type not in ALLOWED_MARK_TYPES:
+        if not isinstance(mark_type, str) or mark_type not in ALLOWED_MARK_TYPES:
             raise EpisodeValidationError(f"허용되지 않는 마크입니다: {mark_type!r}")
+        if not set(mark) <= _ALLOWED_MARK_FIELDS[mark_type]:
+            raise EpisodeValidationError(f"{mark_type} 마크에 허용되지 않는 필드가 있습니다")
         attrs = mark.get("attrs")
-        if attrs is not None:
+        if "attrs" in mark:
             if not isinstance(attrs, dict):
                 raise EpisodeValidationError("마크 attrs는 객체여야 합니다")
             if not set(attrs) <= _ALLOWED_MARK_ATTRS.get(mark_type, frozenset()):
@@ -153,14 +169,21 @@ def _validate_marks(marks: Any) -> None:
 
 def _is_meaningful(node: Any) -> bool:
     """독자에게 보이는 내용이 있는 노드인가 (이미지, 공백 아닌 텍스트)."""
-    if not isinstance(node, dict):
-        return False
-    if node.get("type") == "image":
-        return True
-    if node.get("type") == "text":
-        text = node.get("text")
-        return isinstance(text, str) and bool(text.strip())
-    return any(_is_meaningful(child) for child in node.get("content") or [])
+    stack = [node]
+    while stack:
+        current = stack.pop()
+        if not isinstance(current, dict):
+            continue
+        if current.get("type") == "image":
+            return True
+        if current.get("type") == "text":
+            text = current.get("text")
+            if isinstance(text, str) and text.strip():
+                return True
+        children = current.get("content")
+        if isinstance(children, list):
+            stack.extend(children)
+    return False
 
 
 def has_meaningful_content(doc: Any) -> bool:

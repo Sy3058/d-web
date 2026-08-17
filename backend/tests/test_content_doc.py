@@ -48,9 +48,20 @@ def test_root_must_be_doc():
         validate_content("not a dict", set())
 
 
+def test_root_unknown_top_level_field_rejected():
+    doc = {"type": "doc", "content": [], "backup_key": "paid-key"}
+    with pytest.raises(EpisodeValidationError):
+        validate_content(doc, set())
+
+
 def test_unknown_node_type_rejected():
     with pytest.raises(EpisodeValidationError):
         validate_content(_doc({"type": "iframe"}), set())
+
+
+def test_unhashable_node_type_rejected_as_validation_error():
+    with pytest.raises(EpisodeValidationError):
+        validate_content(_doc({"type": []}), set())
 
 
 def test_nested_doc_rejected():
@@ -68,6 +79,11 @@ def test_leaf_node_cannot_have_children():
 def test_unknown_mark_rejected():
     with pytest.raises(EpisodeValidationError):
         validate_content(_doc(_para("x", marks=[{"type": "textStyle"}])), set())
+
+
+def test_unhashable_mark_type_rejected_as_validation_error():
+    with pytest.raises(EpisodeValidationError):
+        validate_content(_doc(_para("x", marks=[{"type": []}])), set())
 
 
 def test_marks_only_on_text_nodes():
@@ -97,6 +113,64 @@ def test_mark_attrs_whitelist():
     extra = [{"type": "link", "attrs": {"href": "https://example.com", "target": "_blank"}}]
     with pytest.raises(EpisodeValidationError):
         validate_content(_doc(_para("x", marks=extra)), set())
+
+
+@pytest.mark.parametrize(
+    "node",
+    [
+        {"type": "paragraph", "backup_key": "paid-key"},
+        {"type": "text", "text": "x", "backup_key": "paid-key"},
+        {"type": "hardBreak", "backup_key": "paid-key"},
+        {"type": "image", "attrs": {"key": KEY}, "backup_key": "paid-key"},
+        {"type": "paywall", "backup_key": "paid-key"},
+        {"type": "horizontalRule", "backup_key": "paid-key"},
+    ],
+)
+def test_node_unknown_top_level_field_rejected(node):
+    with pytest.raises(EpisodeValidationError):
+        validate_content(_doc(node), {KEY})
+
+
+def test_mark_unknown_top_level_field_rejected():
+    marks = [{"type": "bold", "backup_key": "paid-key"}]
+    with pytest.raises(EpisodeValidationError):
+        validate_content(_doc(_para("x", marks=marks)), set())
+
+
+@pytest.mark.parametrize("content", [None, False, "", 0, []])
+def test_leaf_content_field_rejected_even_when_falsy(content):
+    with pytest.raises(EpisodeValidationError):
+        validate_content(_doc({"type": "hardBreak", "content": content}), set())
+
+
+@pytest.mark.parametrize("content", [None, False, "", 0, {}])
+def test_parent_content_field_must_be_list_when_present(content):
+    with pytest.raises(EpisodeValidationError):
+        validate_content(_doc({"type": "paragraph", "content": content}), set())
+
+
+@pytest.mark.parametrize("node_type", ["paragraph", "hardBreak", "paywall", "horizontalRule"])
+def test_empty_attrs_rejected_when_node_has_no_attrs(node_type):
+    with pytest.raises(EpisodeValidationError):
+        validate_content(_doc({"type": node_type, "attrs": {}}), set())
+
+
+@pytest.mark.parametrize("marks", [None, []])
+def test_marks_field_rejected_on_non_text_even_when_falsy(marks):
+    with pytest.raises(EpisodeValidationError):
+        validate_content(_doc({"type": "paragraph", "marks": marks}), set())
+
+
+@pytest.mark.parametrize("marks", [None, False, "", 0, {}])
+def test_text_marks_field_must_be_list_when_present(marks):
+    with pytest.raises(EpisodeValidationError):
+        validate_content(_doc({"type": "text", "text": "x", "marks": marks}), set())
+
+
+def test_empty_attrs_rejected_on_mark_without_attrs():
+    marks = [{"type": "bold", "attrs": {}}]
+    with pytest.raises(EpisodeValidationError):
+        validate_content(_doc(_para("x", marks=marks)), set())
 
 
 # ---------------------------------------------------------------------------
@@ -169,6 +243,17 @@ def test_depth_limit():
         node = {"type": "paragraph", "content": [node]}
     with pytest.raises(EpisodeValidationError):
         validate_content(_doc(node), set())
+
+
+def test_meaningful_check_handles_deep_corrupt_tree_without_recursion_error():
+    node: dict = {"type": "text", "text": "유료 본문"}
+    for _ in range(1_100):
+        node = {"type": "paragraph", "content": [node]}
+
+    free, has_paid = split_at_paywall(_doc(_PAYWALL, node))
+
+    assert free == _doc()
+    assert has_paid is True
 
 
 # ---------------------------------------------------------------------------
