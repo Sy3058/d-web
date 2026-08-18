@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { generateHTML, type Extensions } from '@tiptap/core';
 import { buildViewerExtensions } from './extensions';
+import { getBrowserGuestProgress, putBrowserGuestProgress } from '../../lib/guestProgress';
 import {
   calculateBlockOffsetBp,
   calculateBlockRestoreY,
@@ -106,6 +107,7 @@ export default function Viewer({ episodeId }: Props) {
   // 나중에 복원 스크롤이 그 위치를 되돌려버린다.
   const userScrolledRef = useRef(false);
   const programmaticScrollRef = useRef(false);
+  const progressTargetRef = useRef<'server' | 'guest' | null>(null);
   const requestedEpisodeRef = useRef(episodeId);
   const imageRefreshPendingRef = useRef(false);
 
@@ -123,6 +125,7 @@ export default function Viewer({ episodeId }: Props) {
       hasObservedRef.current = false;
       userScrolledRef.current = false;
       programmaticScrollRef.current = false;
+      progressTargetRef.current = null;
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
       saveTimerRef.current = null;
       setRestoredAnchor(null);
@@ -190,14 +193,30 @@ export default function Viewer({ episodeId }: Props) {
     }
   }, [contentState, episodeId]);
 
-  // 진행도 복원 - 로그인 상태에서만 GET을 쏜다(비로그인 401 자체를 만들지 않는다).
+  // 진행도 복원 - 로그인은 서버, 비로그인은 이 브라우저의 로컬 기록만 사용한다.
   useEffect(() => {
-    if (blocks.length === 0 || !isLoggedIn(document.cookie)) return;
-    let cancelled = false;
+    if (blocks.length === 0) return;
     // GET 완료 전 저장을 막는 fail-closed 게이트라 요청 시작과 같은 effect에서 동기 초기화한다.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setCanSaveProgress(false);
     setRestoredAnchor(null);
+
+    const useServerProgress = isLoggedIn(document.cookie);
+    progressTargetRef.current = useServerProgress ? 'server' : 'guest';
+    if (!useServerProgress) {
+      const progress = getBrowserGuestProgress(episodeId);
+      if (!progress || userScrolledRef.current) {
+        setCanSaveProgress(true);
+        return;
+      }
+      setRestoredAnchor({
+        index: clampBlockIndex(progress.pageNo, blocks.length),
+        offsetBp: progress.blockOffsetBp,
+      });
+      return;
+    }
+
+    let cancelled = false;
     getProgress(episodeId)
       .then((progress) => {
         if (cancelled) return;
@@ -290,10 +309,23 @@ export default function Viewer({ episodeId }: Props) {
   // callback을 다시 호출하지 않는다. observer로 후보 블록을 좁히고, scroll 이벤트에서는
   // requestAnimationFrame당 한 번 현재 블록 내부 오프셋을 다시 계산한다.
   useEffect(() => {
-    if (blocks.length === 0 || !isLoggedIn(document.cookie)) return;
+    if (blocks.length === 0) return;
+    const useServerProgress = progressTargetRef.current === 'server';
 
     const visible = new Set<number>();
     let animationFrame: number | null = null;
+
+    const saveProgress = () => {
+      if (useServerProgress) {
+        void putProgress(episodeId, topVisibleRef.current, blockOffsetBpRef.current);
+      } else {
+        putBrowserGuestProgress(
+          episodeId,
+          topVisibleRef.current,
+          blockOffsetBpRef.current,
+        );
+      }
+    };
 
     const updateAnchor = () => {
       animationFrame = null;
@@ -320,7 +352,7 @@ export default function Viewer({ episodeId }: Props) {
       if (!canSaveProgress) return;
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
       saveTimerRef.current = setTimeout(() => {
-        void putProgress(episodeId, topVisibleRef.current, blockOffsetBpRef.current);
+        saveProgress();
       }, PROGRESS_SAVE_DEBOUNCE_MS);
     };
 
@@ -354,7 +386,7 @@ export default function Viewer({ episodeId }: Props) {
       )
         return;
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-      void putProgress(episodeId, topVisibleRef.current, blockOffsetBpRef.current);
+      saveProgress();
     }
     document.addEventListener('visibilitychange', flushOnHide);
 

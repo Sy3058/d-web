@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { getBrowserGuestWorkProgress } from '../../lib/guestProgress';
 import { isLoggedIn } from '../../lib/viewer';
 import {
   getWorkProgress,
@@ -13,18 +14,37 @@ interface Props {
   episodes: ProgressEpisode[];
 }
 
+type DisplayProgress = WorkProgressRead & { source: 'server' | 'guest' };
+
 export default function WorkProgress({ workId, episodes }: Props) {
-  // undefined는 hydration 전/로딩 중, null은 비로그인·401·오류로 공개 첫 화 CTA만
-  // 유지하는 상태다. 개인 진행도는 정상 응답 객체가 있을 때만 렌더한다.
-  const [progress, setProgress] = useState<WorkProgressRead | null | undefined>(undefined);
+  // undefined는 hydration 전/로딩 중, null은 stale login_hint의 401이나 서버 오류로 공개
+  // 첫 화 CTA만 유지하는 상태다. 비로그인은 hydration 뒤 로컬 진행도 객체로 전환한다.
+  const [progress, setProgress] = useState<DisplayProgress | null | undefined>(undefined);
 
   useEffect(() => {
-    if (!isLoggedIn(document.cookie)) return;
+    if (!isLoggedIn(document.cookie)) {
+      const local = getBrowserGuestWorkProgress(episodes.map((episode) => episode.id));
+      const lastEpisode = episodes.find((episode) => episode.id === local.lastEpisodeId) ?? null;
+      // localStorage는 hydration 뒤 effect에서만 읽는다. 공개 SSR에는 로컬 위치를 넣지 않는다.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setProgress({
+        source: 'guest',
+        read_episode_ids: local.readEpisodeIds,
+        last_episode: lastEpisode
+          ? {
+              id: lastEpisode.id,
+              public_id: lastEpisode.publicId,
+              title: lastEpisode.title,
+            }
+          : null,
+      });
+      return;
+    }
 
     let cancelled = false;
     getWorkProgress(workId).then(
       (result) => {
-        if (!cancelled) setProgress(result);
+        if (!cancelled) setProgress(result ? { ...result, source: 'server' } : null);
       },
       () => {
         // 진행도는 열람을 막지 않는 부가 기능이다. 404·5xx를 0%로 오인시키지 않고 숨긴다.
@@ -35,11 +55,17 @@ export default function WorkProgress({ workId, episodes }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [workId]);
+  }, [episodes, workId]);
 
   // 첫 화 CTA와 회차 목록은 공개 정보라 SSR에 포함해도 안전하다. 개인 진행도와 그에 따른
   // 다음 화 선택은 hydration 뒤 응답이 있을 때만 렌더한다.
-  const cta = selectReadingCta(episodes, progress?.last_episode ?? null);
+  const guestLastEpisode =
+    progress?.source === 'guest' && progress.last_episode
+      ? episodes.find((episode) => episode.id === progress.last_episode?.id) ?? null
+      : null;
+  const cta = guestLastEpisode
+    ? { label: '이어 보기' as const, episode: guestLastEpisode }
+    : selectReadingCta(episodes, progress?.last_episode ?? null);
   if (!cta) return null;
 
   const summary = progress

@@ -98,3 +98,11 @@ PUT은 저장 자체를 막는 게이트라 `public_episode_exists()`를 매번 
 | 그룹 B(회차 콘텐츠 API) 완성 후 `public_episode_exists()`와 B의 로딩 조회 통합 여부 재검토 | B1/B2 착수 시 |
 | FE debounce 저장 호출 + 재진입 복원 UI | 그룹 F (뷰어 아일랜드) |
 | 작품 단위 진행률 바 + 이어 보기 React 섬 | 그룹 E4 FE |
+
+---
+
+## 5. 비로그인 로컬 진행도와 Backend 경계 (#117, 2026-08-18)
+
+Backend `viewer_progress` 계약은 계속 로그인 사용자 전용이다. 익명 사용자 ID, 비로그인 저장 API, DB 컬럼과 migration을 추가하지 않았다. Frontend는 `login_hint`가 없을 때 진행도 API를 호출하지 않고 기기 localStorage만 사용하며, 로그인 상태에서는 localStorage를 읽거나 서버 값과 병합하지 않는다.
+
+로컬 값은 조작 가능한 UX 위치라 구매 권한, 유료 본문 반환, paywall, 완독 판정의 입력으로 사용할 수 없다. M3가 완독과 구매 CTA를 추가하더라도 서버는 계속 인증 사용자와 열람 권한을 검증한 서버 상태만 신뢰한다.

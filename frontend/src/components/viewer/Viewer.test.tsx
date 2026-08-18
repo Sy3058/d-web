@@ -3,11 +3,25 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { getEpisodeContent, getProgress, isLoggedIn, putProgress } = vi.hoisted(() => ({
+const {
+  getBrowserGuestProgress,
+  getEpisodeContent,
+  getProgress,
+  isLoggedIn,
+  putBrowserGuestProgress,
+  putProgress,
+} = vi.hoisted(() => ({
+  getBrowserGuestProgress: vi.fn(),
   getEpisodeContent: vi.fn(),
   getProgress: vi.fn(),
   isLoggedIn: vi.fn(),
+  putBrowserGuestProgress: vi.fn(),
   putProgress: vi.fn(),
+}));
+
+vi.mock('../../lib/guestProgress', () => ({
+  getBrowserGuestProgress,
+  putBrowserGuestProgress,
 }));
 
 vi.mock('../../lib/viewer', async (importOriginal) => {
@@ -70,10 +84,13 @@ beforeEach(() => {
   );
   vi.stubGlobal('cancelAnimationFrame', (id: number) => window.clearTimeout(id));
   getEpisodeContent.mockReset();
+  getBrowserGuestProgress.mockReset();
   getProgress.mockReset();
   isLoggedIn.mockReset();
+  putBrowserGuestProgress.mockReset();
   putProgress.mockReset();
   isLoggedIn.mockReturnValue(true);
+  getBrowserGuestProgress.mockReturnValue(null);
   getEpisodeContent.mockResolvedValue(episodeContent('episode-a'));
   getProgress.mockResolvedValue(null);
   container = document.createElement('div');
@@ -86,6 +103,7 @@ afterEach(async () => {
   if (rootMounted) await act(async () => root.unmount());
   container.remove();
   vi.useRealTimers();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
@@ -341,5 +359,135 @@ describe('Viewer progress restore gate', () => {
     await act(async () => vi.advanceTimersByTimeAsync(801));
 
     expect(putProgress).toHaveBeenCalledWith('episode-a', 0, 0);
+  });
+
+  it('비로그인 스크롤 후 계산한 블록과 내부 위치를 로컬에 저장한다', async () => {
+    isLoggedIn.mockReturnValue(false);
+    getEpisodeContent.mockResolvedValue({
+      episode_id: 'episode-a',
+      content: {
+        type: 'doc',
+        content: [
+          { type: 'paragraph', content: [{ type: 'text', text: '첫 블록' }] },
+          { type: 'paragraph', content: [{ type: 'text', text: '긴 두 번째 블록' }] },
+        ],
+      },
+      has_paid_part: false,
+    });
+    let scrolled = false;
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      const index = Number(this.dataset.blockIndex ?? 0);
+      const top = scrolled ? (index === 0 ? -5_400 : -3_240) : index * 5_400;
+      return {
+        top,
+        bottom: top + 5_400,
+        left: 0,
+        right: 100,
+        width: 100,
+        height: 5_400,
+        x: 0,
+        y: top,
+        toJSON: () => ({}),
+      };
+    });
+
+    await act(async () => root.render(<Viewer episodeId="episode-a" />));
+    await act(async () => vi.advanceTimersByTimeAsync(1));
+    scrolled = true;
+    await act(async () => window.dispatchEvent(new window.Event('scroll')));
+    await act(async () => vi.advanceTimersByTimeAsync(801));
+
+    expect(getProgress).not.toHaveBeenCalled();
+    expect(putProgress).not.toHaveBeenCalled();
+    expect(getBrowserGuestProgress).toHaveBeenCalledWith('episode-a');
+    expect(putBrowserGuestProgress).toHaveBeenCalledTimes(1);
+    expect(putBrowserGuestProgress).toHaveBeenCalledWith('episode-a', 1, 6_000);
+  });
+
+  it('로그인은 localStorage 경로를 읽거나 쓰지 않는다', async () => {
+    await act(async () => root.render(<Viewer episodeId="episode-a" />));
+    await act(async () => vi.advanceTimersByTimeAsync(801));
+
+    expect(getProgress).toHaveBeenCalledWith('episode-a');
+    expect(putProgress).toHaveBeenCalledWith('episode-a', 0, 0);
+    expect(getBrowserGuestProgress).not.toHaveBeenCalled();
+    expect(putBrowserGuestProgress).not.toHaveBeenCalled();
+  });
+
+  it('비로그인 저장 인덱스를 줄어든 본문의 마지막 블록으로 clamp하고 내부 위치를 복원한다', async () => {
+    isLoggedIn.mockReturnValue(false);
+    getBrowserGuestProgress.mockReturnValue({ pageNo: 99, blockOffsetBp: 6_000, updatedAt: 1 });
+    getEpisodeContent.mockResolvedValue({
+      episode_id: 'episode-a',
+      content: {
+        type: 'doc',
+        content: [
+          { type: 'paragraph', content: [{ type: 'text', text: '첫 블록' }] },
+          { type: 'paragraph', content: [{ type: 'text', text: '마지막 블록' }] },
+        ],
+      },
+      has_paid_part: false,
+    });
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      const index = Number(this.dataset.blockIndex ?? 0);
+      return {
+        top: index * 100,
+        bottom: index * 100 + 100,
+        left: 0,
+        right: 100,
+        width: 100,
+        height: 100,
+        x: 0,
+        y: index * 100,
+        toJSON: () => ({}),
+      };
+    });
+    const scrollTo = vi.fn();
+    vi.stubGlobal('scrollTo', scrollTo);
+
+    await act(async () => root.render(<Viewer episodeId="episode-a" />));
+    await act(async () => vi.advanceTimersByTimeAsync(1));
+
+    expect(scrollTo).toHaveBeenCalledWith({ top: 160, behavior: 'auto' });
+    expect(getProgress).not.toHaveBeenCalled();
+  });
+
+  it('비로그인 로컬 진행도가 있어도 유료 경계 표시는 유지한다', async () => {
+    isLoggedIn.mockReturnValue(false);
+    getBrowserGuestProgress.mockReturnValue({ pageNo: 0, blockOffsetBp: 9_999, updatedAt: 1 });
+    getEpisodeContent.mockResolvedValue({
+      episode_id: 'episode-a',
+      content: {
+        type: 'doc',
+        content: [{ type: 'paragraph', content: [{ type: 'text', text: '무료 미리보기' }] }],
+      },
+      has_paid_part: true,
+    });
+
+    await act(async () => root.render(<Viewer episodeId="episode-a" />));
+
+    expect(container.textContent).toContain('여기부터는 유료 구간이에요.');
+    expect(getProgress).not.toHaveBeenCalled();
+  });
+
+  it('비로그인 회차가 바뀌면 새 episodeId의 로컬 위치만 읽고 저장한다', async () => {
+    isLoggedIn.mockReturnValue(false);
+    getEpisodeContent
+      .mockResolvedValueOnce(episodeContent('episode-a'))
+      .mockResolvedValueOnce(episodeContent('episode-b'));
+
+    await act(async () => root.render(<Viewer episodeId="episode-a" />));
+    await act(async () => vi.advanceTimersByTimeAsync(801));
+    await act(async () => root.render(<Viewer episodeId="episode-b" />));
+    await act(async () => vi.advanceTimersByTimeAsync(801));
+
+    expect(getBrowserGuestProgress.mock.calls).toEqual([['episode-a'], ['episode-b']]);
+    expect(putBrowserGuestProgress).toHaveBeenLastCalledWith('episode-b', 0, 0);
+    expect(getProgress).not.toHaveBeenCalled();
+    expect(putProgress).not.toHaveBeenCalled();
   });
 });
