@@ -4,11 +4,11 @@
 |------|------|
 | 모듈 | Frontend / Viewer (독자 열람 경로 - 콘텐츠 문서 렌더러) |
 | 관련 마일스톤 | [M2](../../../milestones/M2_foundation.md) 그룹 F (F1, WORK-05~08) |
-| 작성 시점 | M2 F1 (2026-07-25), 후속 보완 (2026-07-26 - §7), 긴 블록 복원 보강 (2026-08-14 - §8), 요청 실패 복구 보강 (2026-08-17~18 - §9) |
-| 상태 | 구현 + 리뷰 반영. 콘텐츠 요청 실패 상태, 수동 재시도, 개별 이미지 최종 실패 placeholder 자동 테스트 통과(2026-08-18). M2 전체 수동 e2e는 그룹 H의 나머지 항목 확인 대기 |
+| 작성 시점 | M2 F1 (2026-07-25), 후속 보완 (2026-07-26 - §7), 긴 블록 복원 보강 (2026-08-14 - §8), 요청 실패 복구 보강 (2026-08-17~18 - §9), 비로그인 로컬 진행도 (2026-08-18 - §10) |
+| 상태 | 구현 + 리뷰 반영. 로그인 서버 진행도와 비로그인 기기 로컬 진행도 자동 테스트 통과(2026-08-18). M2 전체 수동 e2e는 그룹 H의 나머지 항목 확인 대기 |
 | 관련 문서 | M2_foundation.md 그룹 F·결정 1/3/6, IMPLEMENTATION_FREE_CONTENT_API.md(B2 계약 원본), IMPLEMENTATION_VIEWER_PROGRESS.md(C1 계약), IMPLEMENTATION_CATALOG_PAGES.md(E, SSR 셸/캐시 정책 원본), IMPLEMENTATION_EPISODE_CONTENT_MODEL.md(#76, 서버 스키마 원본) |
 
-비로그인 독자가 `/works/{id}/{publicId}`에서 회차 본문(글+이미지 혼합 TipTap 문서)을 읽는 페이지. B2가 절단·presigned 치환한 무료 구간을 아일랜드가 fetch해 렌더하고, 유료 경계가 있으면 말미에 잠금 placeholder를 보여준다. 로그인 상태면 읽은 위치(블록 인덱스 + 블록 내부 상대 위치)를 저장·복원한다(C1). 유료 구간 반환·결제 검증은 M3.
+독자가 `/works/{id}/{publicId}`에서 회차 본문(글+이미지 혼합 TipTap 문서)을 읽는 페이지. B2가 절단·presigned 치환한 무료 구간을 아일랜드가 fetch해 렌더하고, 유료 경계가 있으면 말미에 잠금 placeholder를 보여준다. 로그인은 C1 서버 진행도, 비로그인은 같은 브라우저의 localStorage에 읽은 위치(블록 인덱스 + 블록 내부 상대 위치)를 저장·복원한다. 유료 구간 반환·결제 검증은 M3.
 
 ---
 
@@ -23,6 +23,8 @@
 | `frontend/src/components/viewer/extensions.test.ts` | `getSchema` 스키마 대조 테스트 + `generateHTML` 렌더 동작 테스트(rel/target 강제 확인) |
 | `frontend/src/lib/viewer.ts` | B2/C1 계약 타입 + API 함수 + 이미지 우선순위, 블록 인덱스·내부 오프셋 계산 순수 로직 |
 | `frontend/src/lib/viewer.test.ts` | vitest 순수 로직 테스트 |
+| `frontend/src/lib/guestProgress.ts` | 비로그인 진행도 검증·저장·최근 100개 정리와 공개 회차 최근 기록 선택 |
+| `frontend/src/lib/guestProgress.test.ts` | 손상·범위·storage 예외·정리·공개 회차 필터 단위 테스트 |
 
 새 의존성: `@tiptap/*` 4종(런타임) + `jsdom`(devDep, 테스트 전용). DB 마이그레이션: 없음(읽기 전용 FE).
 
@@ -58,7 +60,7 @@ B2 계약(#76 "서버·에디터·뷰어 3곳 동일 스키마"의 의도된 예
 
 ### 로그인 판별 = `login_hint` 쿠키(비-HttpOnly)
 
-진행도 GET/PUT을 비로그인 상태에서 아예 안 쏘기 위한 게이트. 401을 받은 뒤 처리하는 대신 요청 자체를 막는다 - `Navbar.astro`의 네비 로그인 표시와 동일한 판별 원천(`lib/auth.py:90 LOGIN_HINT_COOKIE_NAME`)을 재사용해 두 판정이 어긋나지 않는다.
+진행도 저장소를 고르는 게이트. `login_hint`가 있으면 기존 서버 GET/PUT만 사용하고 localStorage를 읽거나 쓰지 않는다. 없으면 진행도 API를 호출하지 않고 localStorage만 사용한다. `Navbar.astro`의 네비 로그인 표시와 동일한 판별 원천(`lib/auth.py:90 LOGIN_HINT_COOKIE_NAME`)을 재사용한다. stale `login_hint`로 서버가 401을 반환해도 로컬로 폴백하지 않아 두 저장소를 자동 병합하지 않는다.
 
 ---
 
@@ -197,3 +199,25 @@ PLAUSIBLE 4건(§6 표 참조 - stale 클로저·진행도 중간값 저장·rAF
 - `pnpm --filter frontend astro check`: 0 errors, 0 warnings, 기존 hint 1건.
 - `pnpm --filter frontend build`: 성공. Sentry auth token 미설정과 기존 sourcemap 경고만 남았다.
 - 정상, 404, 네트워크 실패, 다시 시도, 이미지 재발급 실패, 새 URL도 실패한 이미지 placeholder 흐름의 브라우저 확인은 프로젝트 원칙대로 사용자가 수행한다.
+
+---
+
+## 10. 비로그인 기기 로컬 진행도 (#117, 2026-08-18)
+
+### 저장 계약
+
+비로그인은 `dweb:viewer-progress:v1:{episodeId}` key에 `{ pageNo, blockOffsetBp, updatedAt }`만 저장한다. `pageNo`는 0..INT32_MAX 정수, `blockOffsetBp`는 0..10000 정수, `updatedAt`은 0 이상의 safe integer epoch milliseconds다. JWT, 사용자 ID, 이미지 key·URL, 구매·완독 상태는 저장하지 않는다.
+
+`guestProgress.ts`는 JSON과 범위를 검증하는 순수 로직, 주입된 Storage를 다루는 함수, `window.localStorage` 획득 자체의 SecurityError까지 삼키는 브라우저 어댑터로 나뉜다. 손상된 현재 버전 레코드는 다음 정상 저장 시 제거하고, 유효 레코드는 `updatedAt` 오름차순으로 최근 100개만 유지한다. 시각이 같으면 key 정렬로 제거 결과를 결정적으로 만들고, 작품 CTA의 최근 회차는 작가 지정 공개 순서에서 뒤쪽 회차를 tie-breaker로 사용한다.
+
+### Viewer 상태 경계
+
+복원 effect가 먼저 `login_hint`를 한 번 판별해 저장 대상을 ref에 고정한다. 로그인은 서버 GET/PUT, 비로그인은 로컬 read/write 중 하나만 사용한다. 로컬 복원도 기존 `canSaveProgress` gate를 거쳐 저장값 판정 전에 초기 `(0, 0)`을 덮어쓰지 않으며, 기존 이미지 load 대기·재앵커와 본문 축소 시 block clamp를 그대로 재사용한다. debounce와 `visibilitychange` flush도 선택된 저장 대상 하나만 호출한다.
+
+로컬 값은 렌더 허용 범위에 관여하지 않는다. 본문은 계속 서버가 절단한 B2 응답만 렌더하고 `has_paid_part` 잠금 placeholder도 그대로 표시한다. 따라서 사용자가 localStorage를 수정해도 스크롤 복원 위치만 달라질 뿐 유료 구간 key나 URL을 얻을 수 없다.
+
+### 자동 검증
+
+- guest storage: 유효 저장·읽기, 손상 JSON, 음수·초과·비정수, 구버전 key, SecurityError, quota 예외, 손상 레코드 제거, 101번째 저장의 최오래 항목 제거, 공개 회차 교집합과 최신 시각 선택.
+- Viewer: 비로그인 API 호출 0회와 로컬 저장, 로그인 localStorage 접근 0회와 서버 저장, 본문 축소 clamp + 블록 내부 위치 복원, 유료 경계 유지, episodeId 전환 격리.
+- 사용자 브라우저 확인 완료(2026-08-18): 비로그인 스크롤·재진입, 긴 이미지 내부 복원, 로그인 서버 경로, paywall 유지, storage 차단 환경이 정상 동작한다.

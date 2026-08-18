@@ -214,26 +214,27 @@ M2 착수 전 확정. presigned·표지·콘텐츠 모델은 기존 결정(DECIS
 - **구현에서 확정(2026-08-10, 2026-08-11 리뷰 보완)**: #85 경로 실측 결과 재공개 시 `published_at`이 갱신되므로 독자 표시용 `first_published_at`을 분리했다. 즉시 공개와 예약 공개 모두 최초 1회만 스탬프하며 재공개에서는 유지한다. 예약 공개가 빈 본문 등으로 늦어지면 예약 목표가 아니라 DB의 실제 공개 전환 시각을 기록한다. 기본 최신순은 쿼리 없는 canonical URL, 오래된순은 `?order=asc`를 사용한다.
 - DoD: pytest(`first_published_at` 노출·값·지연 예약 실제 전환 시각), `?order=asc|desc` 각각 순서 단언(**생성 순서·날짜·`sort_order`를 다 다른 방향**으로 깔아 판별력 확보 - 2026-07-30 판별력 0 사고 재발 방지), 첫 화 링크가 정렬과 무관하게 동일, `astro check`/`build`/`test`.
 
-### E4. 이어 보기 + 작품 단위 진행률 바 ✅ (BE 2026-08-11, FE 2026-08-12 완료)
+### E4. 이어 보기 + 작품 단위 진행률 바 ✅ (BE 2026-08-11, FE 2026-08-12, 비로그인 로컬 지원 2026-08-18)
 - 선행: C1(`viewer_progress`), E3
-- 산출물: `GET /works/{work_id}/progress`(**인증 필수** - 읽은 회차 id 목록 + 마지막 본 회차 1건을 한 번에) + FE React 섬(`client:idle`, `credentials: 'include'`). 작품 단위 바는 `읽은 회차 수 / 전체 회차 수`.
+- 산출물: `GET /works/{work_id}/progress`(**인증 필수** - 읽은 회차 id 목록 + 마지막 본 회차 1건을 한 번에) + FE React 섬(`client:idle`, `credentials: 'include'`) + 비로그인 기기 로컬 진행도. 작품 단위 바는 `열어 본 공개 회차 수 / 전체 공개 회차 수`.
 - 마이그레이션 불요 - `viewer_progress.updated_at`(`onupdate=func.now()`)이 이미 있어 "마지막 본 회차"를 특정할 수 있다.
 - ⚠️ **SSR HTML에 절대 넣지 말 것** - 작품 상세는 성공 시 `Cache-Control: public, max-age=60`(`lib/http.ts`)이라 HTML이 60초간 공유된다. 개인 진행도를 넣으면 남의 진도가 그대로 샌다. 반드시 클라이언트 섬에서 fetch.
-- 비로그인은 개인 진행도 대상이 아니다(`viewer_progress`가 `user_id` 기반). 비로그인·401에서는 개인 진행도 대신 공개 첫 화 CTA를 렌더한다.
+- 로그인 사용자는 서버 `viewer_progress`만 사용한다. 비로그인은 `dweb:viewer-progress:v1:{episodeId}` localStorage 레코드만 사용해 같은 브라우저에서 복원하고, 작품 상세에서는 현재 공개 회차 중 로컬 `updatedAt`이 가장 최신인 회차 자체를 `이어 보기`로 고른다. stale `login_hint`의 401은 로컬로 폴백하지 않는다.
 - 회차 **내부** 진행률(%)은 이 그룹에 넣지 않는다(M3 이연). 서버 픽셀 누적은 글 블록 높이를 알 수 없어 불가능하고, 클라이언트 스크롤 비율은 뷰어가 이미지 공간을 예약하지 않아 지금은 값이 못 미덥다. 근거와 M3 착수 순서는 DECISIONS 같은 절 참조.
-- M2 CTA의 "마지막으로 연 회차 다음" 선택과 `읽은 회차 수` 분자는 임시 계약이다. M3에서 회차별 100% 완료 상태를 저장한 뒤, 100% 미만이면 현재 회차 이어 보기, 100%일 때만 다음 화 보기로 전환하고 작품 단위 분자도 완료 회차 수로 바꾼다.
-- DoD: pytest(삭제·비공개 회차 제외, 비인증 401), 비로그인 첫 화 CTA, 진행 후 다음 화 CTA, **SSR 응답 HTML에 개인 진행도 문자열이 없음**을 단언.
+- 로그인 M2 CTA의 "마지막으로 연 회차 다음" 선택과 로그인·비로그인의 `열어 본 회차 수` 분자는 임시 계약이다. 비로그인은 완독을 신뢰할 수 없으므로 현재 로컬 회차 자체를 이어 본다. M3에서 서버 회차별 100% 완료 상태를 저장한 뒤, 로그인은 100% 미만이면 현재 회차 이어 보기, 100%일 때만 다음 화 보기로 전환하고 작품 단위 분자도 서버 완료 회차 수로 바꾼다. 로컬 값은 완료 판정에 사용하지 않는다.
+- DoD: pytest(삭제·비공개 회차 제외, 비인증 401), 로그인 진행 후 다음 화 CTA, 비로그인 로컬 저장·최근 공개 회차 이어 보기, **SSR 응답 HTML에 서버·로컬 개인 진행도 문자열이 없음**을 단언.
 
 #### E4 실행 계획 (2026-08-11 확정)
 
 - **브랜치와 PR을 BE/FE로 순차 분리**한다. `be/feat/m2-e4-work-progress`를 먼저 main에 머지한 뒤, 갱신한 main에서 `fe/feat/m2-e4-work-progress`를 분기한다. FE 병렬 mock·스택 PR은 계약 드리프트와 이력 정리 비용 때문에 사용하지 않는다.
 - **BE 계약**: `GET /works/{work_id}/progress`는 인증 필수·`Cache-Control: no-store`. 공개·미삭제 작품이 아니면 404, 진행도 행이 없으면 200으로 `read_episode_ids=[]`, `last_episode=null`을 반환한다. `last_episode`는 FE가 SSR 배열과 재조인하지 않고 링크와 문구를 만들 수 있도록 `id`·`public_id`·`title`을 포함한다.
 - **BE 조회 범위**: 요청 사용자 + 요청 작품에 속한 공개·미삭제 회차만 포함한다. 읽은 회차 목록과 `updated_at DESC` 기준 마지막 회차를 한 번에 반환하며, 동률은 진행도 PK로 결정적으로 해소한다. 다른 사용자·다른 작품·비공개·soft delete 회차는 제외한다. DB 마이그레이션과 신규 dependency는 없다.
-- **FE 계약 소비**: 작품 상세 SSR은 공개 데이터만 유지하고 `WorkProgress`에 `workId`와 공개 회차의 ID·공개 ID·제목을 작가 지정 순서로 넘긴다. 초기 SSR과 비로그인은 `첫 화 보기` 아래 첫 회차 제목을 표시한다. hydration 뒤 개인 API 응답이 있으면 마지막으로 읽은 회차 다음을 찾아 `다음 화 보기` 아래 제목을 표시하고, 완독이면 `마지막 화 다시 보기`로 바꾼다. stale SSR에 최근 회차가 없으면 API의 최근 회차로 이어 보기 폴백한다.
+- **FE 계약 소비**: 작품 상세 SSR은 공개 데이터만 유지하고 `WorkProgress`에 `workId`와 공개 회차의 ID·공개 ID·제목을 작가 지정 순서로 넘긴다. 초기 SSR은 `첫 화 보기` 아래 첫 회차 제목만 표시한다. hydration 뒤 로그인 API 응답이 있으면 마지막으로 읽은 회차 다음을 찾아 `다음 화 보기`로 표시하고, 완독이면 `마지막 화 다시 보기`로 바꾼다. stale SSR에 최근 회차가 없으면 API의 최근 회차로 이어 보기 폴백한다. 비로그인은 현재 공개 ID에 해당하는 로컬 기록만 읽어 가장 최근 회차 자체를 이어 본다.
 - **캐시 불변식**: 개인 응답은 no-store이고 개인 값·읽은 회차 id·이어 보기 링크를 SSR HTML에 넣지 않는다. 공개 SSR(최대 60초)과 개인 API 사이의 짧은 시차로 분자가 분모를 넘지 않도록 FE 표시값을 총 공개 회차 수로 clamp한다.
 - **PR별 완료 게이트**: BE는 `test_progress.py` 집중 테스트 후 backend 전체 gate, FE는 순수 계산·401·빈 상태·링크·SSR 비노출 테스트 후 frontend 전체 gate를 통과한다. 두 PR 모두 관련 IMPLEMENTATION 문서와 이 마일스톤 상태를 자기 범위에 맞게 갱신한다.
 - **BE 구현 결과(2026-08-11, 2026-08-12 CTA 보강)**: 공개 작품 PK 확인 후 `ViewerProgress → Episode → Work` inner join으로 공개·미삭제 회차 중 요청 사용자가 읽은 행만 `updated_at DESC, viewer_progress.id DESC`로 반환한다. 최초 LEFT JOIN 구조가 미열람 공개 회차까지 전량 materialize하는 성능 Major를 리뷰에서 발견해 2쿼리로 교체했으며, 두 번째 쿼리에서도 작품 공개 상태를 재검증한다. FE가 이어 볼 대상을 알 수 있도록 최근 회차 `title`을 기존 조인에서 함께 반환한다. 신규 마이그레이션·dependency 없음. `test_progress.py` 26개와 backend 474 tests 통과. 상세: `docs/MODULES/BE/Viewer/IMPLEMENTATION_VIEWER_PROGRESS.md`.
 - **FE 구현 결과(2026-08-12)**: 공개 SSR에는 첫 화 CTA와 이미 공개된 회차 식별자·제목만 포함하고 개인 진행도는 넣지 않는다. hydration 뒤 `login_hint`가 있을 때만 shared API로 조회하며 0건은 0%와 첫 화, 진행 기록은 다음 화, 완독은 마지막 화 다시 보기 CTA를 표시한다. 행동명 위·대상 제목 아래의 2단 CTA는 viewport 하단에 고정하고, 목록 끝에 `5rem + safe-area` 예약 공간을 둬 마지막 행이 가려지지 않게 한다. 중복 읽음 ID 제거와 SSR 회차 수 clamp를 유지한다. 신규 dependency 없음. frontend 54 tests, Astro check 0 errors, build 통과. 상세: `docs/MODULES/FE/Progress/IMPLEMENTATION_WORK_PROGRESS.md`.
+- **비로그인 로컬 확장(2026-08-18, #117)**: 비로그인은 블록 인덱스·블록 내부 basis point·`updatedAt`을 버전 키로 저장하고 최근 100개만 유지한다. Viewer는 기존 이미지 대기·재앵커를 그대로 재사용하며 WorkProgress는 SSR 공개 회차 ID와 로컬 기록의 교집합만 표시한다. 로그인에서는 localStorage 접근 0회, 비로그인에서는 진행도 API 호출 0회를 테스트로 고정했다. Backend·DB·dependency 변경 없음. 집중 39 tests와 frontend 전체 115 tests, lint, Astro check, build 통과. 비로그인 저장·재진입, 최근 회차 이어 보기, 로그인 경로 격리, paywall 유지, storage 차단 환경을 사용자 브라우저에서 확인했다.
 
 ---
 
@@ -244,7 +245,7 @@ M2 착수 전 확정. presigned·표지·콘텐츠 모델은 기존 결정(DECIS
 ### F1. 뷰어 아일랜드 ✅ 구현 (2026-07-25 - 브랜치 fe/feat/m2-viewer, 정적 게이트·Opus 리뷰 완료 / 수동 e2e·바이트 실측은 사용자 확인 대기)
 - 선행: B2, C1
 - 산출물: `pages/works/[id]/[episodeNo].astro`(SSR 셸 - 회차 메타·이전/다음 네비만) + `components/viewer/Viewer.tsx`(아일랜드 - 본문)
-- 동작: 아일랜드가 B2 `GET /episodes/{id}/content`를 fetch(no-store) → **`@tiptap/core generateHTML`로 렌더**(React 불요 - DECISIONS 채택 근거. 서버 `lib/content_doc` 화이트리스트와 **동일 스키마**로만 해석, link는 렌더러가 `rel="noopener noreferrer" target="_blank"` 강제 부여 - #76 IMPLEMENTATION 인계). 세로 스크롤 + **이미지 즉시 전량 요청**(lazy 아님 - 결정 6. 앞 2~3장 `fetchpriority="high"`, 나머지 `low`), `has_paid_part=true`면 본문 말미(경계 지점)에 **잠금 placeholder**(M3 구매 버튼 자리). 이전/다음 화 이동, 진행도 = 뷰포트 기준 최상위 블록 인덱스 debounce 저장(→ C1 PUT), 드래그/복사/우클릭/저장 차단.
+- 동작: 아일랜드가 B2 `GET /episodes/{id}/content`를 fetch(no-store) → **`@tiptap/core generateHTML`로 렌더**(React 불요 - DECISIONS 채택 근거. 서버 `lib/content_doc` 화이트리스트와 **동일 스키마**로만 해석, link는 렌더러가 `rel="noopener noreferrer" target="_blank"` 강제 부여 - #76 IMPLEMENTATION 인계). 세로 스크롤 + **이미지 즉시 전량 요청**(lazy 아님 - 결정 6. 앞 2~3장 `fetchpriority="high"`, 나머지 `low`), `has_paid_part=true`면 본문 말미(경계 지점)에 **잠금 placeholder**(M3 구매 버튼 자리). 이전/다음 화 이동, 진행도 = 뷰포트 기준 최상위 블록 인덱스 + 내부 basis point를 로그인은 C1 서버, 비로그인은 기기 localStorage에 debounce 저장, 드래그/복사/우클릭/저장 차단.
 - presigned 만료(600초)는 즉시 전량 요청으로 **회피**한다(결정 6). `onerror` → content 재요청은 **폴백**으로만 남긴다(네트워크 실패·예외적 지연 대비 - 정상 경로에선 타지 않아야 정상).
 - DoD: 전체 무료 회차 끝까지 스크롤(글+이미지 혼합 렌더 - **스크롤 중 이미지 재요청·빈 칸 없음**이 결정 6의 성립 확인), 부분 유료 회차 = 미리보기 렌더 + 경계 잠금 노출, 진행도 저장(재진입 시 해당 블록 복원), 우클릭/드래그 차단, **본문 HTML이 SSR 응답에 부재**(아일랜드 fetch 확인), **회차당 총 전송 바이트·장수 실측 기록**(결정 6 재검토 조건 - 5MB 초과 시 서명 쿠키 검토를 M3로 올린다).
 - ⚠️ 함정(MISTAKES/study 참조): React StrictMode 이펙트 중복(이벤트 리스너 정리), `useEffect`에서 직접 mutate 금지. `generateHTML` 결과 주입은 화이트리스트 스키마 덕에 XSS 면적이 없으나(**서버가 검증한 노드만 존재**), 렌더러 확장 시 서버·에디터·뷰어 **3곳 동시 갱신** 규칙(#76) 준수.
@@ -252,6 +253,8 @@ M2 착수 전 확정. presigned·표지·콘텐츠 모델은 기존 결정(DECIS
 - **구현에서 확정(2026-07-25)**: ① 최상위 노드별 분할 렌더 - image는 React `<img>` 직접 제어(fetchPriority·draggable·onError), 나머지는 `generateHTML` 조각 `dangerouslySetInnerHTML`(`data-block-index` wrapper가 진행도 추적 단위와 동시에 일치). ② 진행도는 보이는 블록 중 **최솟값**(최댓값이면 아직 안 읽은 내용을 건너뜀). ③ `client:only="react"`(client:load 아님) - `generateHTML`이 브라우저 전용이라는 공식 문서 서술이 실측(node 환경 `window is not defined`)으로도 확인됨, 결정 1의 "본문 SSR 부재" 요구도 구조적으로 보장. ④ 렌더 방어: 서버가 paragraph 자식 image를 막지 않아 중첩 image 경로도 존재 - 이 경로도 lazy 금지 원칙을 동일 적용(최초 구현이 놓쳤던 부분을 Opus 리뷰 Major로 발견·수정), 컨테이너 레벨 드래그 차단으로 두 경로 보호 수준 통일. ⑤ 렌더 스키마 회귀 테스트(`getSchema` 대조)로 서버·뷰어 스키마 일치(#76)를 코드로 강제. Opus 코드 리뷰 Critical 0 / Major 1(반영) / FYI 3(전부 반영). **수동 e2e(브라우저 실기능)·회차당 전송 바이트 실측(결정 6 재검토 조건)은 사용자 확인 대기** - Playwright 등 브라우저 자동화 미도입 결정에 따름, 결과 반영 전까지 그룹 H 체크 보류. 상세: `docs/MODULES/FE/Viewer/IMPLEMENTATION_VIEWER_ISLAND.md`.
 
 - **요청 실패 복구(2026-08-17~18, #116)**: 콘텐츠 요청을 `loading / success / notFound / error`로 분리했다. 초기 요청과 이미지 URL 재발급 rejection은 오류 안내와 수동 재시도로 종료하고, 재발급 성공 뒤에도 실패한 최상위 이미지는 block index별 버튼 없는 placeholder로 표시한다. 동일 URL 재발급도 성공 응답 세대별 `<img>` 재마운트로 다시 검증하며, 회차 변경 시 콘텐츠·오류·image retry·placeholder·진행도 관련 상태를 초기화한다. 404 `null`, 그 외 throw와 진행도 fail-closed 계약은 유지했다. frontend 92 tests, Astro check, build 통과. 브라우저 정상·404·네트워크 실패·재시도·개별 이미지 placeholder 흐름은 사용자 확인 대기.
+
+- **비로그인 이어 보기(2026-08-18, #117)**: 로그인 경로는 기존 서버 GET/PUT만 유지하고 비로그인은 localStorage만 사용한다. 손상·범위 밖·구버전 값과 SecurityError·quota 예외는 열람을 막지 않고 무시하며, 유효 레코드는 최근 100개로 제한한다. 로컬 값은 구매 권한과 `has_paid_part`에 영향을 주지 않는다.
 
 ---
 
@@ -281,6 +284,7 @@ M2 착수 전 확정. presigned·표지·콘텐츠 모델은 기존 결정(DECIS
 - [ ] 무료 구간 콘텐츠가 **절단 + presigned 치환**으로 서빙: 응답에 경계 뒤 노드·유료 이미지 키 부재, 반환 image attrs에 `key` 부재, no-store
 - [ ] 표지·썸네일이 `dweb-cover` 공개 URL로 표시, 원고는 `dweb` presigned
 - [x] 로그인 유저: 진행도(블록 인덱스 + 긴 블록 내부 상대 위치) 저장 → 재진입 시 복원 (2026-08-15 사용자 확인)
+- [x] 비로그인 유저: 같은 브라우저에서 진행도 저장·재진입 복원 + 작품 상세 최근 공개 회차 이어 보기 (2026-08-18 사용자 확인)
 - [ ] 목록 페이지네이션·태그 필터 동작, 미공개 작품/회차 미노출
 - [ ] 랜딩(`/`) 히어로 렌더 + `/commission` 홍보 페이지 렌더(외부 CTA·신청 폼 제외)
 - [ ] `uv run pytest` 통과, `alembic check` 클린, `pnpm build`/`lint` 그린, CI 그린

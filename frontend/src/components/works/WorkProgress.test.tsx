@@ -4,10 +4,13 @@ import { createRoot, type Root } from 'react-dom/client';
 import { renderToString } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { getWorkProgress, isLoggedIn } = vi.hoisted(() => ({
+const { getBrowserGuestWorkProgress, getWorkProgress, isLoggedIn } = vi.hoisted(() => ({
+  getBrowserGuestWorkProgress: vi.fn(),
   getWorkProgress: vi.fn(),
   isLoggedIn: vi.fn(),
 }));
+
+vi.mock('../../lib/guestProgress', () => ({ getBrowserGuestWorkProgress }));
 
 vi.mock('../../lib/workProgress', async (importOriginal) => {
   const original = await importOriginal<typeof import('../../lib/workProgress')>();
@@ -41,7 +44,9 @@ beforeEach(() => {
   (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean })
     .IS_REACT_ACT_ENVIRONMENT = true;
   getWorkProgress.mockReset();
+  getBrowserGuestWorkProgress.mockReset();
   isLoggedIn.mockReset();
+  getBrowserGuestWorkProgress.mockReturnValue({ readEpisodeIds: [], lastEpisodeId: null });
   container = document.createElement('div');
   document.body.append(container);
   root = createRoot(container);
@@ -60,16 +65,39 @@ describe('WorkProgress', () => {
     expect(html).toContain('data-floating-reading-cta');
     expect(html).not.toContain('읽은 진행도');
     expect(html).not.toContain('다음 화 보기');
+    expect(getBrowserGuestWorkProgress).not.toHaveBeenCalled();
   });
 
-  it('비로그인은 API 요청 없이 첫 화 CTA를 유지한다', async () => {
+  it('비로그인은 API 요청 없이 로컬 0% 진행도와 첫 화 CTA를 표시한다', async () => {
     isLoggedIn.mockReturnValue(false);
     await renderProgress();
 
     expect(getWorkProgress).not.toHaveBeenCalled();
+    expect(getBrowserGuestWorkProgress).toHaveBeenCalledWith(['a', 'b', 'c', 'd']);
     expect(container.querySelector('[data-floating-reading-cta]')?.className).toContain('fixed');
+    expect(container.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow')).toBe(
+      '0',
+    );
     expect(container.textContent).toContain('첫 화 보기');
     expect(container.textContent).toContain('첫 만남');
+  });
+
+  it('비로그인은 가장 최근에 연 공개 회차 자체로 이어 본다', async () => {
+    isLoggedIn.mockReturnValue(false);
+    getBrowserGuestWorkProgress.mockReturnValue({
+      readEpisodeIds: ['a', 'b'],
+      lastEpisodeId: 'b',
+    });
+
+    await renderProgress();
+
+    expect(container.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow')).toBe(
+      '50',
+    );
+    expect(container.textContent).toContain('2/4화');
+    expect(container.textContent).toContain('이어 보기');
+    expect(container.textContent).toContain('비 오는 날');
+    expect(container.querySelector('a')?.getAttribute('href')).toBe('/works/work-a/22222222');
   });
 
   it('stale login_hint의 401 결과는 공개 첫 화 CTA로 폴백한다', async () => {
@@ -78,6 +106,7 @@ describe('WorkProgress', () => {
     await renderProgress();
 
     expect(getWorkProgress).toHaveBeenCalledWith('work-a');
+    expect(getBrowserGuestWorkProgress).not.toHaveBeenCalled();
     expect(container.textContent).toContain('첫 화 보기');
   });
 
