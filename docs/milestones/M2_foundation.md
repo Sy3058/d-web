@@ -9,6 +9,8 @@
 | 선행 마일스톤 | [M1.5](./M1.5_foundation.md) - 관리자 부트스트랩. **완전 종료**(2026-07-17, G 검증 28/28 + `v0.1.5` 태깅 - 에디터 #78·예약 UI #79 포함 전부 main 머지) |
 | 다음 마일스톤 | [M4](./README.md#m4-커뮤니티-후원은-m3로-이동) - 커뮤니티 (결제 무관, M2 뒤 바로) |
 
+> **v0.18 갱신(2026-08-20)**: #121 뷰어 집중 모드 구현을 반영했다. 스크롤 방향 누적 임계값으로 상하단 컨트롤을 함께 숨김·표시하고, 자동 진행도 복원 스크롤은 기준 Y 동기화로 제외한다. safe area·reduced motion·접근성 비활성 상태, 실제 작품·목록·공유·인접 회차 기능을 포함한다. 데스크톱·모바일 브라우저 실기능 확인을 완료했다.
+
 > **v0.13 갱신(2026-08-11)**: E3 구현·리뷰 반영. `first_published_at`을 예약 목표 시각과 분리해 실제 최초 공개 전환 시각으로 기록하고, 회차 날짜·정렬 토글·첫 화 보기·총/무료 회차 요약을 완료했다.
 
 > **v0.14 갱신(2026-08-12)**: E4 FE 구현 반영. 공개 SSR과 비로그인은 첫 화 CTA를 표시하고 개인 진행도는 hydration 뒤 no-store API로 조회한다. 진행 후 다음 화, 완독 후 마지막 화 다시 보기, stale 응답 clamp, SSR 개인 데이터 비노출을 자동 검증했으며 frontend 54 tests와 build가 통과했다.
@@ -255,6 +257,8 @@ M2 착수 전 확정. presigned·표지·콘텐츠 모델은 기존 결정(DECIS
 - **요청 실패 복구(2026-08-17~18, #116)**: 콘텐츠 요청을 `loading / success / notFound / error`로 분리했다. 초기 요청과 이미지 URL 재발급 rejection은 오류 안내와 수동 재시도로 종료하고, 재발급 성공 뒤에도 실패한 최상위 이미지는 block index별 버튼 없는 placeholder로 표시한다. 동일 URL 재발급도 성공 응답 세대별 `<img>` 재마운트로 다시 검증하며, 회차 변경 시 콘텐츠·오류·image retry·placeholder·진행도 관련 상태를 초기화한다. 404 `null`, 그 외 throw와 진행도 fail-closed 계약은 유지했다. frontend 92 tests, Astro check, build 통과. 브라우저 정상·404·네트워크 실패·재시도·개별 이미지 placeholder 흐름은 사용자 확인 대기.
 
 - **비로그인 이어 보기(2026-08-18, #117)**: 로그인 경로는 기존 서버 GET/PUT만 유지하고 비로그인은 localStorage만 사용한다. 손상·범위 밖·구버전 값과 SecurityError·quota 예외는 열람을 막지 않고 무시하며, 유효 레코드는 최근 100개로 제한한다. 로컬 값은 구매 권한과 `has_paid_part`에 영향을 주지 않는다.
+
+- **집중 모드 상하단 컨트롤(2026-08-20, #121)**: 정상 뷰어의 전역 Navbar·Footer는 고정 상단 헤더·하단 플로팅 이전/다음 화 컨트롤로 교체하고, 본문 끝 제목형 이전/다음 nav도 유지한다. 상단 제목 옆 잠금 표시는 중복 노출하지 않는다. 플로팅 컨트롤은 최초·문서 경계에서 표시하고 하향 48px 누적에서 숨김, 상향 24px 누적에서 재표시한다. Viewer의 자동 진행도 복원은 기준 Y를 먼저 동기화해 하향 읽기로 계산하지 않는다. fixed transform·opacity, safe area, reduced motion, hidden inert·aria, 인접 회차 전체 reload, Web Share·clipboard fallback을 반영한다. Backend·DB·progress·paywall 계약은 변경하지 않는다. Frontend lint·Astro check·13 files 132 tests·build가 통과했고 데스크톱·모바일 브라우저 실기능 확인도 완료했다.
 
 ---
 

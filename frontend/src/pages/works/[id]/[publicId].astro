@@ -3,7 +3,6 @@
 // 아일랜드가 client:only로 fetch한다(no-store, SSR 응답에 안 실림).
 export const prerender = false;
 import BaseLayout from '../../../layouts/BaseLayout.astro';
-import Badge from '../../../components/ui/Badge.astro';
 import Viewer from '../../../components/viewer/Viewer';
 import { getWorkDetail } from '../../../lib/catalog';
 import { applyCatalogCache } from '../../../lib/http';
@@ -61,8 +60,13 @@ const pageTitle = loadError
     : '회차를 찾을 수 없어요';
 ---
 
-<BaseLayout title={pageTitle}>
-  <div class="max-w-[720px] mx-auto px-4 py-8">
+<BaseLayout title={pageTitle} hideGlobalChrome={Boolean(work && episode)}>
+  <div
+    class="max-w-[720px] mx-auto px-4 py-8"
+    style={work && episode
+      ? 'padding-top: calc(4.5rem + env(safe-area-inset-top)); padding-bottom: calc(5.5rem + env(safe-area-inset-bottom));'
+      : undefined}
+  >
     {
       loadError ? (
         <p class="text-sm text-muted">일시적인 오류로 회차를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.</p>
@@ -70,31 +74,29 @@ const pageTitle = loadError
         <p class="text-sm text-muted">회차를 찾을 수 없어요.</p>
       ) : (
         <>
-          <div class="mb-6">
-            <a href={`/works/${work.id}`} class="text-sm text-muted hover:text-ink">
-              {work.title}
-            </a>
-            <div class="flex items-center gap-2 mt-1">
-              <h1 class="text-headline-md text-ink">{episode.title}</h1>
-              {episode.is_locked && <Badge variant="locked">잠금</Badge>}
-            </div>
-            {episode.subtitle && <p class="text-sm text-muted mt-1">{episode.subtitle}</p>}
-          </div>
+          <h1 class="sr-only">{work.title} · {episode.title}</h1>
+          <Viewer
+            client:only="react"
+            episodeId={episode.id}
+            navigation={{
+              workId: work.id,
+              workTitle: work.title,
+              episodeTitle: episode.title,
+              episodeSubtitle: episode.subtitle,
+              previousEpisode: prevEpisode
+                ? { publicId: prevEpisode.public_id, title: prevEpisode.title }
+                : null,
+              nextEpisode: nextEpisode
+                ? { publicId: nextEpisode.public_id, title: nextEpisode.title }
+                : null,
+            }}
+          />
 
-          <Viewer client:only="react" episodeId={episode.id} />
-
-          <!-- gap-4 + 각 링크 max-w-[45%]: 라벨이 "N화"에서 회차 제목 전문으로 바뀌었으므로
-               (번호 폐기) 긴 제목이 반대편 링크를 밀거나 줄바꿈으로 넘치지 않게 잘라 준다.
-               전문은 title 속성으로 남긴다. -->
           <nav
+            aria-label="회차 끝 이동"
             class="flex items-center justify-between gap-4 mt-10 pt-6 border-t border-line text-sm"
           >
             {prevEpisode ? (
-              // data-astro-reload: ClientRouter의 클라이언트 사이드 라우팅을 건너뛰고 전체
-              // 페이지를 새로고침한다. Viewer는 client:only="react" 아일랜드라, 뷰 트랜지션
-              // morph가 이 자리의 astro-island를 DOM에서 제거·재생성하지 않고 attrs만 갈아
-              // 끼우면 React 루트가 이전 회차 상태로 남을 위험이 있다 - 회차 간 이동에서
-              // 가장 값싸게 그 위험을 차단하는 방법이 전체 새로고침이다.
               <a
                 href={`/works/${work.id}/${prevEpisode.public_id}`}
                 class="text-ink hover:underline truncate max-w-[45%]"

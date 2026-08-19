@@ -80,7 +80,7 @@ const freeCount = work ? work.episodes.filter((ep) => ep.is_free).length : 0;
           {work.episodes.length === 0 ? (
             <p class="text-sm text-muted">아직 등록된 회차가 없어요.</p>
           ) : (
-            <div>
+            <div id="episodes">
               <WorkProgress
                 workId={work.id}
                 episodes={work.episodes.map((episode) => ({

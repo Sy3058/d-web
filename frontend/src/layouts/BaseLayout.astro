@@ -13,9 +13,17 @@ interface Props {
   canonicalPath?: string;
   // 하단 fixed CTA가 있는 페이지에서 Footer 뒤에 실제 문서 최하단 예약 공간을 만든다.
   reserveFloatingCtaSpace?: boolean;
+  // 정상 뷰어는 읽기 전용 상하단 컨트롤이 전역 Navbar·Footer를 대신한다.
+  hideGlobalChrome?: boolean;
 }
 
-const { title, description = '', canonicalPath, reserveFloatingCtaSpace = false } = Astro.props;
+const {
+  title,
+  description = '',
+  canonicalPath,
+  reserveFloatingCtaSpace = false,
+  hideGlobalChrome = false,
+} = Astro.props;
 ---
 
 <html lang="ko">
@@ -31,11 +39,11 @@ const { title, description = '', canonicalPath, reserveFloatingCtaSpace = false 
     <ClientRouter />
   </head>
   <body class="min-h-screen flex flex-col">
-    <Navbar />
+    {!hideGlobalChrome && <Navbar />}
     <main class="flex-1">
       <slot />
     </main>
-    <Footer />
+    {!hideGlobalChrome && <Footer />}
     {
       reserveFloatingCtaSpace && (
         <div
