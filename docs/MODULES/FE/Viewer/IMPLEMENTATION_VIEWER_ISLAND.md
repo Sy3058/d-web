@@ -221,3 +221,35 @@ PLAUSIBLE 4건(§6 표 참조 - stale 클로저·진행도 중간값 저장·rAF
 - guest storage: 유효 저장·읽기, 손상 JSON, 음수·초과·비정수, 구버전 key, SecurityError, quota 예외, 손상 레코드 제거, 101번째 저장의 최오래 항목 제거, 공개 회차 교집합과 최신 시각 선택.
 - Viewer: 비로그인 API 호출 0회와 로컬 저장, 로그인 localStorage 접근 0회와 서버 저장, 본문 축소 clamp + 블록 내부 위치 복원, 유료 경계 유지, episodeId 전환 격리.
 - 사용자 브라우저 확인 완료(2026-08-18): 비로그인 스크롤·재진입, 긴 이미지 내부 복원, 로그인 서버 경로, paywall 유지, storage 차단 환경이 정상 동작한다.
+
+---
+
+## 11. 스크롤 방향 반응형 상하단 컨트롤 (#121, 2026-08-20)
+
+### 셸과 상태 소유권
+
+정상 뷰어는 BaseLayout의 전역 Navbar·Footer를 렌더하지 않고 Viewer 안의 고정 상단 헤더와 하단 회차 이동 컨트롤을 사용한다. SSR 셸은 공개 작품·현재 회차·인접 회차 메타만 island prop으로 넘기고 스크린리더용 h1은 HTML에 유지한다. 작품 상세 오류·404에서는 Viewer가 마운트되지 않으므로 기존 전역 chrome을 그대로 표시한다.
+
+컨트롤을 별도 아일랜드로 분리하지 않았다. Viewer의 진행도 복원이 프로그램적으로 스크롤하므로, 같은 컴포넌트에서 복원 목표 Y를 컨트롤 scroll reducer의 기준점으로 먼저 동기화해야 자동 복원을 하향 읽기로 오인하지 않는다. 컨트롤 listener와 기존 진행도 listener는 관심사와 rAF를 분리하되 각각 cleanup한다.
+
+### 노출 상태와 접근성
+
+- 최초·문서 최상단·최하단은 visible이다.
+- 같은 방향의 하향 이동 48px 누적 시 hidden, 상향 이동 24px 누적 시 visible이다.
+- 방향 전환은 누적 거리를 새 방향 기준으로 다시 센다. 작은 상하 흔들림은 임계값에 도달하지 않는다.
+- fixed + transform·opacity 전환만 사용해 본문 레이아웃을 밀지 않는다. safe-area inset을 상단 padding과 하단 bottom에 더한다.
+- `motion-reduce:transition-none`으로 이동 애니메이션을 제거한다. hidden surface는 `inert`, `aria-hidden`, pointer 차단을 함께 적용한다.
+
+### 이동과 공유
+
+상단은 작품 상세, 작품·회차 제목과 부제, 공유, 작품 상세 `#episodes` 목록으로 연결하며 제목 옆 잠금 표시는 노출하지 않는다. 플로팅 하단과 본문 끝 제목형 nav는 공개 배열의 실제 인접 회차 링크를 쓰며 `data-astro-reload`를 유지한다. 첫·마지막 회차에서 플로팅 컨트롤의 없는 방향은 아이콘 위치를 유지한 disabled button과 `aria-disabled`로 표현한다.
+
+공유는 `navigator.share`가 있으면 제목과 현재 URL을 전달하고, 미지원 또는 취소 외 실패이면 `navigator.clipboard.writeText`로 폴백한다. 성공·복사·최종 실패는 `aria-live="polite"` status로 알린다. 사용자 취소는 오류로 표시하지 않는다.
+
+### 자동 검증
+
+- `viewerControls.test.ts`: 47/48px 하향, 23/24px 상향, 방향 전환, 미세 흔들림, 상하단 경계, 프로그램적 기준 동기화.
+- `ViewerControls.test.tsx`: 작품·목록·인접 회차 경로, 전체 새로고침 속성, 긴 제목 말줄임, 경계 disabled·aria, hidden inert, Web Share와 clipboard fallback·실패 안내.
+- `Viewer.test.tsx`: 상하단 동시 전환, 진행도 자동 복원 뒤 최초 visible, unmount listener·rAF 정리와 기존 진행도·paywall 회귀.
+- Frontend 전체 gate: lint 통과, Astro check 0 errors와 기존 무관 hint 1건, 13 files·132 tests 통과, build 성공. Sentry token·sourcemap 경고는 기존 baseline이다.
+- 사용자 브라우저 확인 완료(2026-08-20): 데스크톱·모바일에서 집중 모드 컨트롤과 본문 끝 회차 이동을 포함한 실기능이 정상 동작한다.

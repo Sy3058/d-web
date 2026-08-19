@@ -74,6 +74,15 @@ const episodeContentWithImages = (episodeId: string, srcs: string[]) => ({
 const episodeContent = (episodeId: string, src = `https://example.test/${episodeId}.webp`) =>
   episodeContentWithImages(episodeId, [src]);
 
+const navigation = {
+  workId: 'work-a',
+  workTitle: '작품 A',
+  episodeTitle: '회차 A',
+  episodeSubtitle: null,
+  previousEpisode: null,
+  nextEpisode: { publicId: 10_000_002, title: '다음 회차' },
+};
+
 beforeEach(() => {
   vi.useFakeTimers();
   (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean })
@@ -82,7 +91,16 @@ beforeEach(() => {
   vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) =>
     window.setTimeout(() => callback(0), 0),
   );
-  vi.stubGlobal('cancelAnimationFrame', (id: number) => window.clearTimeout(id));
+  vi.stubGlobal(
+    'cancelAnimationFrame',
+    vi.fn((id: number) => window.clearTimeout(id)),
+  );
+  Object.defineProperty(window, 'scrollY', { configurable: true, writable: true, value: 0 });
+  Object.defineProperty(window, 'innerHeight', { configurable: true, value: 600 });
+  Object.defineProperty(document.documentElement, 'scrollHeight', {
+    configurable: true,
+    value: 1_600,
+  });
   getEpisodeContent.mockReset();
   getBrowserGuestProgress.mockReset();
   getProgress.mockReset();
@@ -105,6 +123,87 @@ afterEach(async () => {
   vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+});
+
+describe('Viewer floating controls', () => {
+  it('사용자 하향·상향 누적 스크롤에 따라 상하단 컨트롤을 함께 전환한다', async () => {
+    await act(async () => root.render(<Viewer episodeId="episode-a" navigation={navigation} />));
+
+    const topControls = () => container.querySelector('[data-viewer-top-controls]');
+    const bottomControls = () => container.querySelector('[data-viewer-bottom-controls]');
+    expect(topControls()?.getAttribute('data-visible')).toBe('true');
+    expect(bottomControls()?.getAttribute('data-visible')).toBe('true');
+
+    window.scrollY = 47;
+    await act(async () => window.dispatchEvent(new window.Event('scroll')));
+    await act(async () => vi.advanceTimersByTimeAsync(1));
+    expect(topControls()?.getAttribute('data-visible')).toBe('true');
+
+    window.scrollY = 48;
+    await act(async () => window.dispatchEvent(new window.Event('scroll')));
+    await act(async () => vi.advanceTimersByTimeAsync(1));
+    expect(topControls()?.getAttribute('data-visible')).toBe('false');
+    expect(bottomControls()?.getAttribute('data-visible')).toBe('false');
+
+    window.scrollY = 24;
+    await act(async () => window.dispatchEvent(new window.Event('scroll')));
+    await act(async () => vi.advanceTimersByTimeAsync(1));
+    expect(topControls()?.getAttribute('data-visible')).toBe('true');
+    expect(bottomControls()?.getAttribute('data-visible')).toBe('true');
+  });
+
+  it('프로그램적 진행도 복원 뒤에도 컨트롤을 최초 표시 상태로 유지한다', async () => {
+    isLoggedIn.mockReturnValue(false);
+    getBrowserGuestProgress.mockReturnValue({ pageNo: 0, blockOffsetBp: 6_000, updatedAt: 1 });
+    getEpisodeContent.mockResolvedValue({
+      episode_id: 'episode-a',
+      content: {
+        type: 'doc',
+        content: [{ type: 'paragraph', content: [{ type: 'text', text: '복원 대상' }] }],
+      },
+      has_paid_part: false,
+    });
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+      top: 0,
+      bottom: 1_000,
+      left: 0,
+      right: 100,
+      width: 100,
+      height: 1_000,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+    vi.stubGlobal('scrollTo', ({ top }: ScrollToOptions) => {
+      window.scrollY = Number(top);
+      window.dispatchEvent(new window.Event('scroll'));
+    });
+
+    await act(async () => root.render(<Viewer episodeId="episode-a" navigation={navigation} />));
+    await act(async () => vi.advanceTimersByTimeAsync(1));
+
+    expect(window.scrollY).toBe(600);
+    expect(container.querySelector('[data-viewer-top-controls]')?.getAttribute('data-visible')).toBe(
+      'true',
+    );
+    expect(
+      container.querySelector('[data-viewer-bottom-controls]')?.getAttribute('data-visible'),
+    ).toBe('true');
+  });
+
+  it('언마운트할 때 컨트롤 scroll listener와 예약된 rAF를 정리한다', async () => {
+    const removeEventListener = vi.spyOn(window, 'removeEventListener');
+    const cancelAnimationFrame = vi.mocked(globalThis.cancelAnimationFrame);
+
+    await act(async () => root.render(<Viewer episodeId="episode-a" navigation={navigation} />));
+    window.scrollY = 20;
+    await act(async () => window.dispatchEvent(new window.Event('scroll')));
+    await act(async () => root.unmount());
+    rootMounted = false;
+
+    expect(removeEventListener.mock.calls.some(([type]) => type === 'scroll')).toBe(true);
+    expect(cancelAnimationFrame).toHaveBeenCalled();
+  });
 });
 
 describe('Viewer content request state', () => {

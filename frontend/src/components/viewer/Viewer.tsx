@@ -1,7 +1,13 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { generateHTML, type Extensions } from '@tiptap/core';
 import { buildViewerExtensions } from './extensions';
+import ViewerControls, { type ViewerEpisodeLink } from './ViewerControls';
 import { getBrowserGuestProgress, putBrowserGuestProgress } from '../../lib/guestProgress';
+import {
+  createViewerControlsScrollState,
+  syncViewerControlsScrollState,
+  updateViewerControlsScrollState,
+} from '../../lib/viewerControls';
 import {
   calculateBlockOffsetBp,
   calculateBlockRestoreY,
@@ -17,6 +23,14 @@ import {
 
 interface Props {
   episodeId: string;
+  navigation?: {
+    workId: string;
+    workTitle: string;
+    episodeTitle: string;
+    episodeSubtitle: string | null;
+    previousEpisode: ViewerEpisodeLink | null;
+    nextEpisode: ViewerEpisodeLink | null;
+  };
 }
 
 interface Block {
@@ -82,7 +96,7 @@ function renderNodeHtml(node: ContentDocNode, extensions: Extensions): string {
   }
 }
 
-export default function Viewer({ episodeId }: Props) {
+export default function Viewer({ episodeId, navigation }: Props) {
   const extensions = useMemo(() => buildViewerExtensions(), []);
   const [contentState, setContentState] = useState<ContentRequestState>({
     status: 'loading',
@@ -96,6 +110,7 @@ export default function Viewer({ episodeId }: Props) {
   const [restoredAnchor, setRestoredAnchor] = useState<ProgressAnchor | null>(null);
   // 기존 진행도를 읽고 복원할지 결정하기 전에는 상단의 초기 observer 값으로 PUT하지 않는다.
   const [canSaveProgress, setCanSaveProgress] = useState(false);
+  const [controlsVisible, setControlsVisible] = useState(true);
   const retriedRef = useRef(false);
   const blockRefs = useRef(new Map<number, HTMLDivElement>());
   const topVisibleRef = useRef(0);
@@ -110,6 +125,7 @@ export default function Viewer({ episodeId }: Props) {
   const progressTargetRef = useRef<'server' | 'guest' | null>(null);
   const requestedEpisodeRef = useRef(episodeId);
   const imageRefreshPendingRef = useRef(false);
+  const controlsScrollStateRef = useRef(createViewerControlsScrollState(0));
 
   useEffect(() => {
     const episodeChanged = requestedEpisodeRef.current !== episodeId;
@@ -130,6 +146,7 @@ export default function Viewer({ episodeId }: Props) {
       saveTimerRef.current = null;
       setRestoredAnchor(null);
       setCanSaveProgress(false);
+      setControlsVisible(true);
     }
 
     if (episodeChanged || !contentRequest.preserveContent) {
@@ -178,6 +195,33 @@ export default function Viewer({ episodeId }: Props) {
       window.removeEventListener('touchmove', onUserScroll);
     };
   }, []);
+
+  useEffect(() => {
+    controlsScrollStateRef.current = createViewerControlsScrollState(window.scrollY);
+    let animationFrame: number | null = null;
+
+    const updateVisibility = () => {
+      animationFrame = null;
+      const maxScrollY = Math.max(document.documentElement.scrollHeight - window.innerHeight, 0);
+      const next = updateViewerControlsScrollState(
+        controlsScrollStateRef.current,
+        window.scrollY,
+        maxScrollY,
+      );
+      controlsScrollStateRef.current = next;
+      setControlsVisible((visible) => (visible === next.visible ? visible : next.visible));
+    };
+
+    const onScroll = () => {
+      if (animationFrame === null) animationFrame = requestAnimationFrame(updateVisibility);
+    };
+
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      if (animationFrame !== null) cancelAnimationFrame(animationFrame);
+    };
+  }, [episodeId]);
 
   const content =
     contentState.episodeId === episodeId && contentState.status === 'success'
@@ -251,12 +295,17 @@ export default function Viewer({ episodeId }: Props) {
       if (userScrolledRef.current) return;
       programmaticScrollRef.current = true;
       const rect = target.getBoundingClientRect();
+      const targetY = calculateBlockRestoreY(
+        window.scrollY + rect.top,
+        rect.height,
+        restoredAnchor.offsetBp,
+      );
+      controlsScrollStateRef.current = syncViewerControlsScrollState(
+        controlsScrollStateRef.current,
+        targetY,
+      );
       window.scrollTo({
-        top: calculateBlockRestoreY(
-          window.scrollY + rect.top,
-          rect.height,
-          restoredAnchor.offsetBp,
-        ),
+        top: targetY,
         behavior: 'auto',
       });
       requestAnimationFrame(() => {
@@ -427,14 +476,37 @@ export default function Viewer({ episodeId }: Props) {
     }));
   }
 
+  function renderWithControls(body: ReactNode) {
+    return (
+      <>
+        {navigation && (
+          <ViewerControls
+            visible={controlsVisible}
+            workId={navigation.workId}
+            workTitle={navigation.workTitle}
+            episodeTitle={navigation.episodeTitle}
+            episodeSubtitle={navigation.episodeSubtitle}
+            previousEpisode={navigation.previousEpisode}
+            nextEpisode={navigation.nextEpisode}
+          />
+        )}
+        {body}
+      </>
+    );
+  }
+
   if (contentState.episodeId !== episodeId || contentState.status === 'loading') {
-    return <p className="text-sm text-muted py-12 text-center">불러오는 중...</p>;
+    return renderWithControls(
+      <p className="text-sm text-muted py-12 text-center">불러오는 중...</p>,
+    );
   }
   if (contentState.status === 'notFound') {
-    return <p className="text-sm text-muted py-12 text-center">회차를 찾을 수 없어요.</p>;
+    return renderWithControls(
+      <p className="text-sm text-muted py-12 text-center">회차를 찾을 수 없어요.</p>,
+    );
   }
   if (contentState.status === 'error') {
-    return (
+    return renderWithControls(
       <div className="py-12 text-center">
         <p className="text-sm text-muted">일시적인 오류로 회차 내용을 불러오지 못했어요.</p>
         <button
@@ -444,11 +516,11 @@ export default function Viewer({ episodeId }: Props) {
         >
           다시 시도
         </button>
-      </div>
+      </div>,
     );
   }
 
-  return (
+  return renderWithControls(
     <div
       className="select-none [-webkit-touch-callout:none]"
       onContextMenu={(e) => e.preventDefault()}
@@ -504,6 +576,6 @@ export default function Viewer({ episodeId }: Props) {
           <p className="text-sm text-muted">여기부터는 유료 구간이에요.</p>
         </div>
       )}
-    </div>
+    </div>,
   );
 }
