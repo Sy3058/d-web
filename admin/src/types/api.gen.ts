@@ -1063,8 +1063,9 @@ export interface components {
          *       (직접 입력 폐지 - F3 재설계 2026-07-15).
          *     - image_keys: 업로드 매니페스트 정리(삭제). 기존 키의 중복 없는 부분집합만(service
          *       검증 - 임의 키 주입 금지). 표시 순서의 진실은 content로 이동했다.
-         *     - thumbnail: 회차 대표 컷. 이 회차 image_keys 중 하나여야 하며(작가가 표지 일러스트
-         *       페이지를 직접 선택 - 첫 페이지가 표지가 아닌 웹툰 관행), null = 해제.
+         *     - thumbnail: 회차 대표 컷. 이 회차 image_keys와 최종 발행본 content의 image 키
+         *       양쪽에 포함돼야 하며(작가가 본문에 배치한 표지 일러스트 페이지를 직접 선택),
+         *       null = 해제. content에서 선택 이미지가 빠지면 서버가 자동 해제한다.
          *     - is_published=true: 즉시 공개 - published_at이 없으면(NULL·미래) 서버가 now로 스탬프,
          *       본문에 유의미 내용(글/이미지) 필요. false 전환 시 published_at은 **페이로드와
          *       무관하게 항상 NULL 초기화**(E1 부활 차단 - stale 에코 방어. 재예약은 is_published
@@ -1136,6 +1137,8 @@ export interface components {
             episode_id: string;
             /** Page No */
             page_no: number;
+            /** Block Offset Bp */
+            block_offset_bp: number;
             /**
              * Updated At
              * Format: date-time
@@ -1146,6 +1149,11 @@ export interface components {
         ProgressUpdate: {
             /** Page No */
             page_no: number;
+            /**
+             * Block Offset Bp
+             * @default 0
+             */
+            block_offset_bp: number;
         };
         /**
          * PublicCommissionItem

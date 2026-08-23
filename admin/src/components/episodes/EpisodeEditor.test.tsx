@@ -163,6 +163,24 @@ describe('EpisodeEditor', () => {
     );
   });
 
+  it('업로드 직후 presigned refetch 전에도 대표 이미지 후보에 optimistic blob을 표시한다', async () => {
+    vi.mocked(api.post).mockResolvedValueOnce(makeEpisode({ id: 'e1' }));
+    vi.mocked(api.post).mockResolvedValueOnce(makeEpisode({ id: 'e1', image_keys: ['k1'] }));
+    renderEditor({ initialWorkId: 'w1' });
+
+    await screen.findByRole('button', { name: '이미지' });
+    fireEvent.change(screen.getByPlaceholderText(/제목/), { target: { value: '1화 제목' } });
+    fireEvent.change(screen.getByTestId('image-input'), {
+      target: { files: [new File(['x'], 'p.png', { type: 'image/png' })] },
+    });
+    await waitFor(() => expect(screen.getByRole('button', { name: '발행하기' })).toBeEnabled());
+    await waitFor(() => expect(screen.queryByText('업로드 중...')).toBeNull());
+
+    fireEvent.click(screen.getByRole('button', { name: '발행하기' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog.querySelector('img')?.getAttribute('src')).toBe('blob:preview');
+  });
+
   it('제목 없이 이미지를 올리려 하면 업로드하지 않고 제목 작성을 안내한다', async () => {
     // 지연 draft(ensureDraft)가 서버 기본값 '무제'로 회차를 만들던 구멍을 막은 자리.
     // 번호 폐기로 제목이 유일한 식별자가 됐으므로 이 경로도 저장·발행과 같은 규칙을 따른다.
@@ -227,6 +245,69 @@ describe('EpisodeEditor', () => {
       .filter((node) => node.type === 'image')
       .map((node) => node.attrs?.key);
     expect(imageKeys).toEqual(['k1', 'k2', 'k3']);
+  });
+
+  it('발행 모달 대표 이미지 후보는 현재 본문의 고유 이미지 8개만 content 순서로 표시한다', async () => {
+    const imageUrls = Array.from({ length: 10 }, (_, index) => ({
+      key: `k${index + 1}`,
+      url: `https://example.com/k${index + 1}.webp`,
+    }));
+    vi.mocked(api.get).mockImplementation((path: string) => {
+      if (path === '/admin/works') return Promise.resolve([makeWork()] as never);
+      if (path.endsWith('/image-urls')) return Promise.resolve(imageUrls as never);
+      return Promise.resolve([] as never);
+    });
+    const contentKeys = ['k8', 'k2', 'k4', 'k6', 'k1', 'k3', 'k5', 'k7'];
+    const episode = makeEpisode({
+      image_keys: imageUrls.map((image) => image.key),
+      content: {
+        type: 'doc',
+        content: [
+          ...contentKeys.map((key) => ({ type: 'image', attrs: { key } })),
+          { type: 'image', attrs: { key: 'k8' } },
+          { type: 'paywall' },
+        ],
+      },
+    });
+    renderEditor({ episode });
+
+    fireEvent.click(await screen.findByRole('button', { name: '발행하기' }));
+    const dialog = await screen.findByRole('dialog');
+    await waitFor(() => expect(dialog.querySelectorAll('img')).toHaveLength(8));
+    expect(Array.from(dialog.querySelectorAll('img'), (image) => image.getAttribute('src'))).toEqual(
+      contentKeys.map((key) => `https://example.com/${key}.webp`),
+    );
+  });
+
+  it('기존 대표 이미지가 현재 본문에서 빠졌으면 발행 요청에서 null로 해제한다', async () => {
+    vi.mocked(api.get).mockImplementation((path: string) => {
+      if (path === '/admin/works') return Promise.resolve([makeWork()] as never);
+      if (path.endsWith('/image-urls')) {
+        return Promise.resolve([
+          { key: 'k1', url: 'https://example.com/k1.webp' },
+          { key: 'stale', url: 'https://example.com/stale.webp' },
+        ] as never);
+      }
+      return Promise.resolve([] as never);
+    });
+    vi.mocked(api.put).mockResolvedValueOnce(makeEpisode({ is_published: true }));
+    renderEditor({
+      episode: makeEpisode({
+        thumbnail: 'stale',
+        image_keys: ['k1', 'stale'],
+        content: {
+          type: 'doc',
+          content: [{ type: 'image', attrs: { key: 'k1' } }, { type: 'paywall' }],
+        },
+      }),
+    });
+
+    fireEvent.click(await screen.findByRole('button', { name: '발행하기' }));
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.click(dialog.querySelector('button[type="submit"]') as HTMLButtonElement);
+
+    await waitFor(() => expect(vi.mocked(api.put)).toHaveBeenCalled());
+    expect(vi.mocked(api.put).mock.calls[0][1]).toMatchObject({ thumbnail: null });
   });
 
   it('발행하기: 모달에서 즉시 공개하면 is_published=true PUT 후 목록으로 이동', async () => {

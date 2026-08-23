@@ -7,7 +7,9 @@ import type { Episode } from '../../types';
 
 // 목록은 라우터에서 Link만 쓴다 - 렌더 검증에 라우터 전체가 필요 없다.
 vi.mock('@tanstack/react-router', () => ({
-  Link: ({ children }: { children: ReactNode }) => <a>{children}</a>,
+  Link: ({ children, className }: { children: ReactNode; className?: string }) => (
+    <a className={className}>{children}</a>
+  ),
 }));
 
 vi.mock('../../lib/api', async () => ({
@@ -99,6 +101,20 @@ describe('EpisodeList', () => {
       makeEpisode({ id: 'e2' }),
     ]);
     expect(screen.getAllByText('임시저장본')).toHaveLength(1);
+  });
+
+  it('긴 제목은 말줄임하고 이미지·가격·상태 열의 고정 폭을 보존한다', () => {
+    const longTitle = '공백없이아주긴에피소드제목'.repeat(20);
+    const { container } = renderList([
+      makeEpisode({ id: 'e1', title: longTitle, subtitle: longTitle, is_published: true }),
+    ]);
+
+    expect(container.querySelector('table')).toHaveClass('table-fixed', 'min-w-[44rem]');
+    expect(container.querySelector('[data-column="image"]')).toHaveClass('w-20');
+    expect(container.querySelector('[data-column="price"]')).toHaveClass('w-24');
+    expect(container.querySelector('[data-column="status"]')).toHaveClass('w-28');
+    expect(screen.getByText(longTitle, { selector: 'a' })).toHaveClass('truncate');
+    expect(screen.getByText(longTitle, { selector: 'p' })).toHaveClass('truncate');
   });
 });
 

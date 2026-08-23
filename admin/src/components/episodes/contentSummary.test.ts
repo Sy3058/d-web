@@ -1,7 +1,7 @@
 import { getSchema } from '@tiptap/core';
 import { describe, expect, it } from 'vitest';
 import { buildEditorExtensions } from './extensions';
-import { summarizeContent } from './contentSummary';
+import { contentImageKeys, summarizeContent } from './contentSummary';
 
 const schema = getSchema(buildEditorExtensions(null));
 
@@ -33,5 +33,18 @@ describe('summarizeContent', () => {
       free: { chars: 3, images: 1 },
       paid: { chars: 0, images: 0 },
     });
+  });
+});
+
+describe('contentImageKeys', () => {
+  it('본문 순서를 유지하며 중복 이미지 키를 제거한다', () => {
+    const doc = docFrom([
+      { type: 'image', attrs: { key: 'k3' } },
+      { type: 'image', attrs: { key: 'k1' } },
+      { type: 'image', attrs: { key: 'k3' } },
+      { type: 'paywall' },
+      { type: 'image', attrs: { key: 'k2' } },
+    ]);
+    expect(contentImageKeys(doc)).toEqual(['k3', 'k1', 'k2']);
   });
 });

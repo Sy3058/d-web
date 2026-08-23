@@ -63,8 +63,8 @@ class EpisodeConflictError(Exception):
 class EpisodeValidationError(ValueError):
     """에피소드 요청 값이 현재 상태와 안 맞음 (router → 422) - M1.5 D3.
 
-    image_keys 재배열에 이 회차의 키가 아닌 값/중복 키, thumbnail이 회차에
-    없는 키 등. Pydantic 단독으론 못 잡는 DB 상태 의존 검증.
+    image_keys 재배열에 이 회차의 키가 아닌 값/중복 키, thumbnail이 회차 매니페스트나
+    발행본 content에 없는 키 등. Pydantic 단독으론 못 잡는 DB 상태 의존 검증.
     """
 
 

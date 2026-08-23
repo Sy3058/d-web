@@ -52,7 +52,7 @@ D1(R2)·D2(변환) 서비스를 묶는 관리자 에피소드 엔드포인트. C
 true 전환 시 `published_at`이 요청에 없고 NULL·미래면 now 스탬프(공개 회차는 항상 유효한 공개 시각 - M2 정렬·partial index 계약). false 전환 시 미지정이면 NULL 초기화 - 안 지우면 E1 폴링(`is_published=false AND published_at<=now` → 공개)이 다음 틱에 되살린다. 공개 결과 상태는 최소 1페이지(빈 draft 공개·공개 회차 전체 삭제 422). 예약 draft는 허용 → **E1 인계: 공개 전환 UPDATE에 `jsonb_array_length > 0` 추가**.
 
 ### 썸네일 = 업로드된 페이지 중 직접 선택 (2026-07-10 사용자 확정)
-웹툰 관행상 표지 일러스트는 중간의 특정 페이지라 "첫 페이지 자동"은 틀린 기본값. PUT `thumbnail`로 저장(컬럼 기존 - 마이그레이션 0), 검증은 **최종** image_keys 기준(재배열과 같은 요청 정합), 재배열로 선택 페이지가 제거되면 자동 NULL(조회측 첫 페이지 fallback). EpisodeCreate엔 thumbnail 없음 - draft엔 검증할 키가 없어 임의 키 주입 통로가 됨.
+웹툰 관행상 표지 일러스트는 중간의 특정 페이지라 "첫 페이지 자동"은 틀린 기본값. PUT `thumbnail`로 저장(컬럼 기존 - 마이그레이션 0), 검증은 최종 `image_keys`와 발행본 `content` 이미지 키 양쪽 기준이며 어느 쪽에서든 선택 페이지가 제거되면 자동 NULL이다. EpisodeCreate엔 thumbnail이 없다 - 생성 시점엔 검증할 매니페스트와 본문이 없어 임의 키 주입 통로가 되기 때문이다.
 
 ### 그 외 (리뷰 반영)
 - `AdminEpisodeRead` 명명: image_keys(R2 키) 노출은 관리자 전용 - M2 독자 라우터가 `EpisodeRead`를 무심코 재사용해 키가 새는 경로를 이름 계층에서 차단.

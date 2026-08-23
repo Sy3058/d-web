@@ -193,6 +193,29 @@ def has_meaningful_content(doc: Any) -> bool:
     return any(_is_meaningful(node) for node in doc.get("content") or [])
 
 
+def content_image_keys(doc: Any) -> set[str]:
+    """본문이 실제로 참조하는 image key 집합을 중첩 깊이와 무관하게 반환한다.
+
+    쓰기 경로에서는 validate_content 뒤에 호출하지만, 과거 데이터 감사와 thumbnail-only
+    요청은 저장된 JSON을 직접 읽으므로 비정상 노드는 무시하는 fail-closed 추출기다.
+    """
+    keys: set[str] = set()
+    stack = [doc]
+    while stack:
+        current = stack.pop()
+        if not isinstance(current, dict):
+            continue
+        if current.get("type") == "image":
+            attrs = current.get("attrs")
+            key = attrs.get("key") if isinstance(attrs, dict) else None
+            if isinstance(key, str):
+                keys.add(key)
+        children = current.get("content")
+        if isinstance(children, list):
+            stack.extend(children)
+    return keys
+
+
 def derive_is_free(doc: dict[str, Any]) -> bool:
     """경계(paywall) 뒤에 유의미 콘텐츠가 없으면 전체 무료.
 

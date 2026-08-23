@@ -24,6 +24,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.config import settings
 from src.lib.content_doc import (
+    content_image_keys,
     derive_is_free,
     empty_doc,
     has_meaningful_content,
@@ -254,9 +255,9 @@ async def update_episode(episode: Episode, data: EpisodeUpdate, session: AsyncSe
     """메타 부분수정 + 본문(content) 저장 + 매니페스트 정리 + 썸네일 선택 + 공개 전환.
 
     **검증 전부 → 실행** 순서(validate-then-mutate): 검증 실패 raise 경로에서
-    세션에 dirty 변이가 남지 않는다(리뷰 ⑧). thumbnail은 최종 image_keys 기준
-    검증(재배열과 같은 요청에 와도 정합), 정리로 선택 페이지가 제거되면 자동
-    NULL(조회측이 첫 페이지 fallback).
+    세션에 dirty 변이가 남지 않는다(리뷰 ⑧). thumbnail은 최종 image_keys와 발행본
+    content 이미지 키 양쪽을 기준으로 검증하고, 어느 쪽에서든 선택 페이지가 제거되면
+    자동 NULL 처리한다.
 
     content(F3 재설계): 최종 image_keys 기준으로 lib/content_doc 검증(화이트리스트·
     상한·이미지 키 소유·paywall 규칙). 유의미 내용이 없으면 EMPTY_DOC으로 정규화
@@ -269,8 +270,9 @@ async def update_episode(episode: Episode, data: EpisodeUpdate, session: AsyncSe
     stale 매니페스트 스냅샷으로 검증된 content가 커밋돼 "content 이미지 키 ⊆
     image_keys" 불변식이 깨지는 것(F3 리뷰 m1)을 막는다. 메타만 바꾸는 요청은
     ORM 경로(메타 lost update는 단일 owner 수용, 버전 컬럼 후속). 길이 가드로도
-    못 막는 역순 경합(content 저장 후 매니페스트 축소가 stale content를 재검증)은
-    같은 버전 컬럼 후속에서 닫는다 - see #75.
+    못 막던 역순 경합(content·thumbnail을 서로 stale한 스냅샷으로 검증)은 해당 두
+    컬럼의 로드값도 WHERE 조건에 넣어 409로 닫는다. 전 필드 lost update의 일반 해법인
+    버전 컬럼은 별도 범위다 - see #75.
 
     공개 시맨틱(리뷰 ③): true 전환 시 published_at이 요청에 없고 NULL·미래면
     now 스탬프(공개 회차는 항상 유효한 공개 시각 보유 - M2 정렬·partial 인덱스
@@ -320,10 +322,18 @@ async def update_episode(episode: Episode, data: EpisodeUpdate, session: AsyncSe
             except EpisodeValidationError as exc:
                 raise EpisodeValidationError(_DRAFT_KEYS_REMOVED) from exc
 
+    final_content_keys = content_image_keys(final_content)
     if "thumbnail" in changes:
-        if changes["thumbnail"] is not None and changes["thumbnail"] not in final_keys:
-            raise EpisodeValidationError("thumbnail은 이 회차에 업로드된 페이지 키여야 합니다")
-    elif episode.thumbnail is not None and episode.thumbnail not in final_keys:
+        requested_thumbnail = changes["thumbnail"]
+        if requested_thumbnail is not None and (
+            requested_thumbnail not in final_keys or requested_thumbnail not in final_content_keys
+        ):
+            raise EpisodeValidationError("thumbnail은 최종 본문에 포함된 이미지 키여야 합니다")
+    elif (
+        ("content" in changes or new_keys is not None)
+        and episode.thumbnail is not None
+        and (episode.thumbnail not in final_keys or episode.thumbnail not in final_content_keys)
+    ):
         changes["thumbnail"] = None
 
     final_published = changes.get("is_published", episode.is_published)
@@ -351,30 +361,37 @@ async def update_episode(episode: Episode, data: EpisodeUpdate, session: AsyncSe
             # 몫이다. "내리면서 재예약"은 별도 요청으로.
             changes["published_at"] = None
 
-    # 썸네일 공개 축소본(M2 D2) - 검증(raise 가능 구간)이 전부 끝난 뒤, DB 커밋 전에
-    # 실행한다. old_thumbnail은 아래 두 커밋 분기 각각의 성공 직후 삭제 판단에 재사용.
+    # 썸네일 공개 축소본(M2 D2). 원본 다운로드·변환은 DB write 전에 끝내되, 고정 공개
+    # 키 upload는 stale 조건부 UPDATE가 행을 잡은 뒤에만 실행한다. 409 요청이 공개 객체를
+    # 먼저 덮는 경로를 막고, upload 실패 시 아직 commit 전이라 DB를 rollback할 수 있다.
     old_thumbnail = episode.thumbnail
     new_thumbnail = changes.get("thumbnail", old_thumbnail)
     thumbnail_changed = new_thumbnail != old_thumbnail
     should_delete_public_thumb = (
         thumbnail_changed and new_thumbnail is None and old_thumbnail is not None
     )
+    thumb_webp: bytes | None = None
     if thumbnail_changed and new_thumbnail is not None:
         page_bytes = await r2_service.download_bytes(new_thumbnail)
         thumb_webp = await convert_to_webp(page_bytes, target_width=THUMB_WIDTH)
-        await r2_service.upload_bytes(
-            r2_service.episode_thumb_key(episode.work_id, episode.id),
-            thumb_webp,
-            bucket=settings.r2_public_bucket,
-        )
 
-    if new_keys is not None or "content" in changes or changes.get("draft") is not None:
+    invariant_write = new_keys is not None or "content" in changes or "thumbnail" in changes
+    if invariant_write or changes.get("draft") is not None:
         if new_keys is not None:
             changes["image_keys"] = new_keys
         conditions = [
             Episode.id == episode.id,
             func.jsonb_array_length(Episode.image_keys) == expected_len,
         ]
+        if invariant_write:
+            # content·thumbnail은 서로의 유효성 근거다. 둘 중 하나가 로드 뒤 바뀌었다면
+            # stale 스냅샷으로 검증한 요청을 409로 거부해 불변식의 역순 경합을 닫는다.
+            conditions.append(Episode.content == episode.content)
+            conditions.append(
+                Episode.thumbnail.is_(None)
+                if old_thumbnail is None
+                else Episode.thumbnail == old_thumbnail
+            )
         if "content" in changes and "is_published" not in changes:
             # 위 409 가드의 원자 버전: 로드 시점엔 비공개였어도 커밋 순간 공개 상태면
             # (스케줄러 전환 race) 이 행이 매칭되지 않아 임시저장이 라이브를 못 덮는다.
@@ -388,6 +405,16 @@ async def update_episode(episode: Episode, data: EpisodeUpdate, session: AsyncSe
         if result.rowcount != 1:
             await session.rollback()
             raise EpisodeConflictError(_STALE_EPISODE)
+        if thumb_webp is not None:
+            try:
+                await r2_service.upload_bytes(
+                    r2_service.episode_thumb_key(episode.work_id, episode.id),
+                    thumb_webp,
+                    bucket=settings.r2_public_bucket,
+                )
+            except Exception:
+                await session.rollback()
+                raise
         await session.commit()
         # bulk UPDATE(synchronize_session=False)는 인메모리 객체를 안 맞춰주므로 재로드.
         await session.refresh(episode)

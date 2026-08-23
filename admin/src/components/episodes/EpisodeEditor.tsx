@@ -13,7 +13,7 @@ import {
 import { useWorks } from '../../hooks/useWorks';
 import { buildEditorExtensions } from './extensions';
 import { createImageUrlStore } from './imageUrlStore';
-import { summarizeContent } from './contentSummary';
+import { contentImageKeys, summarizeContent } from './contentSummary';
 import { MAX_IMAGES_PER_EPISODE, validateImageFile } from './imageUpload';
 import { EditorToolbar } from './EditorToolbar';
 import { PublishModal } from './PublishModal';
@@ -107,6 +107,14 @@ export function EpisodeEditor({ initialWorkId, episode }: EpisodeEditorProps) {
   const hasPaidContent = summary.paid.chars > 0 || summary.paid.images > 0;
   const hasAnyContent =
     hasPaidContent || summary.free.chars > 0 || summary.free.images > 0;
+  const thumbnailKeys = editor ? contentImageKeys(editor.state.doc) : [];
+  const serverImageUrls = new Map((imageUrls.data ?? []).map((image) => [image.key, image.url]));
+  const thumbnailImages = thumbnailKeys.flatMap((key) => {
+    const url = imageStore.get(key) ?? serverImageUrls.get(key);
+    return url ? [{ key, url }] : [];
+  });
+  const defaultThumbnail =
+    episode?.thumbnail && thumbnailKeys.includes(episode.thumbnail) ? episode.thumbnail : null;
 
   const countImages = (): number => {
     let count = 0;
@@ -467,8 +475,8 @@ export function EpisodeEditor({ initialWorkId, episode }: EpisodeEditorProps) {
       {publishOpen && (
         <PublishModal
           workName={workName}
-          images={imageUrls.data ?? []}
-          defaultThumbnail={episode?.thumbnail ?? null}
+          images={thumbnailImages}
+          defaultThumbnail={defaultThumbnail}
           defaultPrice={episode?.price ?? null}
           hasPaidContent={hasPaidContent}
           canPublish={hasAnyContent}

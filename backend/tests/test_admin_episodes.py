@@ -505,16 +505,57 @@ async def test_reorder_stale_snapshot_conflict(
 
 async def test_thumbnail_select_from_pages(owner_client: AsyncClient, uploaded_keys: list[str]):
     # 작가가 표지 일러스트 페이지(중간 컷)를 직접 대표로 지정하는 핵심 시나리오.
-    work_id, episode_id, keys = await _episode_with_pages(owner_client)
+    work_id, episode_id, keys = await _episode_with_content(owner_client, count=3)
     resp = await _put(owner_client, work_id, episode_id, thumbnail=keys[1])
     assert resp.status_code == 200
     assert resp.json()["thumbnail"] == keys[1]
+
+
+async def test_thumbnail_and_content_can_change_together(
+    owner_client: AsyncClient, uploaded_keys: list[str]
+):
+    work_id, episode_id, keys = await _episode_with_pages(owner_client, count=2)
+    doc = _doc(_img(keys[1]), _PAYWALL)
+
+    resp = await _put(owner_client, work_id, episode_id, content=doc, thumbnail=keys[1])
+
+    assert resp.status_code == 200
+    assert resp.json()["content"] == doc
+    assert resp.json()["thumbnail"] == keys[1]
+
+
+async def test_thumbnail_accepts_nested_content_image(
+    owner_client: AsyncClient, uploaded_keys: list[str]
+):
+    work_id, episode_id, keys = await _episode_with_pages(owner_client, count=1)
+    doc = _doc({"type": "paragraph", "content": [_img(keys[0])]})
+
+    resp = await _put(owner_client, work_id, episode_id, content=doc, thumbnail=keys[0])
+
+    assert resp.status_code == 200
+    assert resp.json()["thumbnail"] == keys[0]
 
 
 async def test_thumbnail_not_uploaded_key_422(owner_client: AsyncClient, uploaded_keys: list[str]):
     work_id, episode_id, keys = await _episode_with_pages(owner_client)
     resp = await _put(owner_client, work_id, episode_id, thumbnail="works/x/cover.webp")
     assert resp.status_code == 422
+
+
+async def test_thumbnail_manifest_only_key_422_without_db_or_r2_change(
+    owner_client: AsyncClient, r2_calls: dict[str, list[dict]]
+):
+    """업로드됐어도 최종 본문에 없는 이미지는 공개 대표 이미지가 될 수 없다."""
+    work_id, episode_id, keys = await _episode_with_pages(owner_client)
+    for calls in r2_calls.values():
+        calls.clear()
+
+    resp = await _put(owner_client, work_id, episode_id, thumbnail=keys[0])
+
+    assert resp.status_code == 422
+    listed = await owner_client.get(_episodes_url(work_id))
+    assert listed.json()[0]["thumbnail"] is None
+    assert r2_calls == {"upload": [], "download": [], "delete": []}
 
 
 async def test_thumbnail_invalid_does_not_apply_reorder(
@@ -533,15 +574,15 @@ async def test_thumbnail_invalid_does_not_apply_reorder(
 async def test_thumbnail_auto_reset_when_page_deleted(
     owner_client: AsyncClient, uploaded_keys: list[str]
 ):
-    work_id, episode_id, keys = await _episode_with_pages(owner_client)
+    work_id, episode_id, keys = await _episode_with_content(owner_client, count=3)
     await _put(owner_client, work_id, episode_id, thumbnail=keys[2])
-    resp = await _put(owner_client, work_id, episode_id, image_keys=keys[:2])
+    resp = await _put(owner_client, work_id, episode_id, content=_doc(_img(keys[0]), _img(keys[1])))
     assert resp.status_code == 200
-    assert resp.json()["thumbnail"] is None  # 선택 페이지 삭제 -> stale 키 자동 해제
+    assert resp.json()["thumbnail"] is None  # 본문에서 선택 페이지 삭제 -> stale 키 자동 해제
 
 
 async def test_thumbnail_explicit_null_clears(owner_client: AsyncClient, uploaded_keys: list[str]):
-    work_id, episode_id, keys = await _episode_with_pages(owner_client)
+    work_id, episode_id, keys = await _episode_with_content(owner_client)
     await _put(owner_client, work_id, episode_id, thumbnail=keys[0])
     resp = await _put(owner_client, work_id, episode_id, thumbnail=None)
     assert resp.status_code == 200
@@ -553,7 +594,7 @@ async def test_thumbnail_select_uploads_to_public_bucket(
 ):
     # 리뷰 보강: 썸네일 축소본이 실제로 공개 버킷(dweb-cover)으로 가는지 - 기존
     # uploaded_keys 픽스처는 bucket 인자를 무시해 이 회귀를 못 잡았다.
-    work_id, episode_id, keys = await _episode_with_pages(owner_client)
+    work_id, episode_id, keys = await _episode_with_content(owner_client, count=3)
     resp = await _put(owner_client, work_id, episode_id, thumbnail=keys[1])
     assert resp.status_code == 200
     thumb_uploads = [c for c in r2_calls["upload"] if c["key"].endswith("thumb.webp")]
@@ -566,7 +607,7 @@ async def test_thumbnail_resend_same_value_no_r2_calls(
 ):
     # 리뷰 보강: 동일 키 재전송은 R2 왕복 0(썸네일 "변경" 아님) - 코드는 맞았으나
     # 이 경로를 직접 단언하는 테스트가 없었다.
-    work_id, episode_id, keys = await _episode_with_pages(owner_client)
+    work_id, episode_id, keys = await _episode_with_content(owner_client)
     await _put(owner_client, work_id, episode_id, thumbnail=keys[0])
     r2_calls["upload"].clear()
     r2_calls["download"].clear()
@@ -584,7 +625,7 @@ async def test_thumbnail_clear_deletes_from_public_bucket(
     owner_client: AsyncClient, r2_calls: dict[str, list[dict]]
 ):
     # 리뷰 보강: 해제 시 delete_object가 공개 버킷 인자로 호출되는지.
-    work_id, episode_id, keys = await _episode_with_pages(owner_client)
+    work_id, episode_id, keys = await _episode_with_content(owner_client)
     await _put(owner_client, work_id, episode_id, thumbnail=keys[0])
 
     resp = await _put(owner_client, work_id, episode_id, thumbnail=None)
@@ -593,6 +634,63 @@ async def test_thumbnail_clear_deletes_from_public_bucket(
     assert len(r2_calls["delete"]) == 1
     assert r2_calls["delete"][0]["key"].endswith("thumb.webp")
     assert r2_calls["delete"][0]["bucket"] == r2_service.settings.r2_public_bucket == "dweb-cover"
+
+
+async def test_thumbnail_stale_content_conflict_does_not_upload_public_object(
+    owner: User, r2_calls: dict[str, list[dict]], db_session: AsyncSession
+):
+    work = await work_service.create_work(
+        WorkCreate(title="대표 이미지 경합"), owner.id, db_session
+    )
+    episode = await episode_service.create_episode(work.id, EpisodeCreate(title="1화"), db_session)
+    key = f"works/{work.id}/episodes/{episode.id}/{uuid.uuid4().hex}.webp"
+    await db_session.exec(
+        update(Episode)
+        .where(Episode.id == episode.id)
+        .values(image_keys=[key], content=_doc(_img(key)))
+        .execution_options(synchronize_session=False)
+    )
+    await db_session.commit()
+    await db_session.refresh(episode)
+    await db_session.exec(
+        update(Episode)
+        .where(Episode.id == episode.id)
+        .values(content=_doc(_para("다른 요청이 먼저 저장한 본문")))
+        .execution_options(synchronize_session=False)
+    )
+    await db_session.commit()
+    for calls in r2_calls.values():
+        calls.clear()
+
+    with pytest.raises(EpisodeConflictError):
+        await episode_service.update_episode(episode, EpisodeUpdate(thumbnail=key), db_session)
+
+    assert [c for c in r2_calls["upload"] if c["key"].endswith("thumb.webp")] == []
+    await db_session.refresh(episode)
+    assert episode.thumbnail is None
+
+
+async def test_thumbnail_public_upload_failure_rolls_back_db(
+    owner_client: AsyncClient,
+    uploaded_keys: list[str],
+    db_session: AsyncSession,
+    monkeypatch,
+):
+    work_id, episode_id, keys = await _episode_with_content(owner_client)
+    episode = (
+        await db_session.exec(select(Episode).where(Episode.id == uuid.UUID(episode_id)))
+    ).one()
+
+    async def fail_upload(*args, **kwargs):
+        raise RuntimeError("public upload failed")
+
+    monkeypatch.setattr(r2_service, "upload_bytes", fail_upload)
+
+    with pytest.raises(RuntimeError, match="public upload failed"):
+        await episode_service.update_episode(episode, EpisodeUpdate(thumbnail=keys[0]), db_session)
+
+    await db_session.refresh(episode)
+    assert episode.thumbnail is None
 
 
 # ---------------------------------------------------------------------------
@@ -857,6 +955,33 @@ async def test_draft_save_leaves_live_untouched(
     assert body["is_published"] is True
     assert body["published_at"] == published["published_at"]
     assert body["is_free"] == published["is_free"]
+
+
+async def test_draft_image_removal_preserves_live_thumbnail_until_promotion(
+    owner_client: AsyncClient, r2_calls: dict[str, list[dict]]
+):
+    work_id, episode_id, keys = await _episode_with_content(owner_client, count=2)
+    await _put(owner_client, work_id, episode_id, thumbnail=keys[1])
+    await _put(owner_client, work_id, episode_id, is_published=True)
+    for calls in r2_calls.values():
+        calls.clear()
+
+    draft_resp = await _put(owner_client, work_id, episode_id, draft=_draft(_img(keys[0])))
+
+    assert draft_resp.status_code == 200
+    assert draft_resp.json()["thumbnail"] == keys[1]
+    assert r2_calls == {"upload": [], "download": [], "delete": []}
+
+    publish_resp = await _put(
+        owner_client,
+        work_id,
+        episode_id,
+        content=_doc(_img(keys[0])),
+        is_published=True,
+    )
+    assert publish_resp.status_code == 200
+    assert publish_resp.json()["thumbnail"] is None
+    assert len(r2_calls["delete"]) == 1
 
 
 async def test_draft_with_content_422(owner_client: AsyncClient, uploaded_keys: list[str]):

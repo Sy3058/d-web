@@ -144,7 +144,8 @@ episodes
 │               -- episode_no가 동시 생성에서 409를 뱉던 원인이라 반복하지 않는다.
 ├── title        VARCHAR(200) NOT NULL     -- 필수. 서버 기본값 '무제' 폐지(2026-07-30)
 ├── subtitle     VARCHAR(200)              -- 부제목 (포스타입식 에디터, F3 재설계)
-├── thumbnail    TEXT                      -- R2 key
+├── thumbnail    TEXT                      -- 대표 이미지로 선택한 원고 R2 key
+│               -- NULL 또는 image_keys와 발행본 content의 image key 양쪽에 포함
 ├── price        INTEGER                   -- NULL이면 works.episode_base_price 사용
 ├── is_free      BOOLEAN DEFAULT FALSE     -- ⚠️ 파생 컬럼: content의 paywall 경계에서
 │               -- 서버가 계산(직접 입력 폐지) - 목록·무료구간 SQL용 비정규화
