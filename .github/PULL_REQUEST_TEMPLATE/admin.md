@@ -14,23 +14,23 @@
 
 - [ ] JWT localStorage 저장 없음 (HttpOnly 쿠키만)
 - [ ] 권한 확인 클라이언트에서만 하지 않음 (백엔드 API 검증 병행)
-- [ ] TOTP 코드/시크릿 메모리 외 저장 없음
+- [ ] TOTP 등록 URI는 메모리에서만 보관하고 confirm/logout 시 폐기
 - [ ] 환불/삭제 버튼 즉시 확정 동작 없음 (백엔드 응답 대기)
 
 ## ✅ 구현 체크
 
-- [ ] 라우트 가드 (`beforeLoad` 토큰 검증)
+- [ ] 라우트 가드 (`beforeLoad`에서 서버 세션 + owner role 검증)
 - [ ] 모든 fetch `credentials: 'include'`
-- [ ] TanStack Query: 변경 후 `invalidateQueries()` 호출
+- [ ] TanStack Query: 응답으로 cache 갱신 또는 관련 query invalidate
 - [ ] API 에러 사용자에게 알림 (try-catch + ErrorAlert)
 - [ ] Destructive 액션 확인 모달 포함
 
 ## 검증 체크
 
-- [ ] `npm run lint` 통과 (ESLint)
-- [ ] `npm run build` 통과 (tsc + vite build)
-- [ ] `npm run dev` 실행 후 변경된 화면 직접 확인
-- [ ] 로그인 → 해당 기능 플로우 직접 확인
+- [ ] `pnpm --filter admin lint` 통과
+- [ ] `pnpm --filter admin test` 통과
+- [ ] `pnpm --filter admin build` 통과
+- [ ] 사용자 브라우저 확인 결과 기록 (변경 화면, 로그인·기능 flow)
 
 ## 📝 문서
 
@@ -38,7 +38,6 @@
 
 - [ ] IMPLEMENTATION 작성 - 
 - [ ] TROUBLESHOOTING 작성 - 
-- [ ] CHANGELOG 작성 - 
 - [ ] 마일스톤 업데이트 - 
 - [ ] 그 외 문서/설정 수정 - 
 

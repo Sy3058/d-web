@@ -14,15 +14,15 @@
 
 - [ ] JWT localStorage 저장 없음 (HttpOnly 쿠키만)
 - [ ] 결제 금액 클라이언트에서 조작 불가
-- [ ] 미결제 유저에게 이미지 URL 미노출 (Signed URL만)
-- [ ] `.astro`에서 `SECRET_*` 환경변수 미접근
+- [ ] 미구매 유저에게 유료 구간 이미지 key/URL 미노출 (무료 구간은 서버 경계 절단 후 서명)
+- [ ] `PUBLIC_`이 아닌 환경변수가 클라이언트 bundle/HTML에 노출되지 않음
 
 ## ✅ 구현 체크
 
 - [ ] fetch에 `credentials: 'include'` 포함
 - [ ] React 섬 `client:*` 지시어 적절 (load / idle / visible)
 - [ ] SSR 페이지 `export const prerender = false` 명시
-- [ ] 폼 검증 Zod 스키마 적용
+- [ ] 클라이언트 검증과 서버 오류 표시 확인
 - [ ] 콘텐츠 보호 (select-none + contextMenu + dragStart 차단)
 
 ## 검증 체크
@@ -31,8 +31,7 @@
 - [ ] `pnpm --filter frontend astro check` 통과 (Astro/TypeScript 진단)
 - [ ] `pnpm --filter frontend test` 통과 (Vitest)
 - [ ] `pnpm --filter frontend build` 통과 (Astro 빌드 · 빌드타임 에러 없음)
-- [ ] `pnpm --filter frontend dev` 후 변경 화면 직접 확인
-- [ ] 모바일 뷰 확인 (Chrome DevTools)
+- [ ] 사용자 브라우저 확인 결과 기록 (변경 화면, 모바일 view)
 
 ## 📝 문서
 
@@ -40,7 +39,6 @@
 
 - [ ] IMPLEMENTATION 작성 - 
 - [ ] TROUBLESHOOTING 작성 - 
-- [ ] CHANGELOG 작성 - 
 - [ ] 마일스톤 업데이트 - 
 - [ ] 그 외 문서/설정 수정 - 
 

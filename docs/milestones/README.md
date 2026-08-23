@@ -2,7 +2,7 @@
 
 | 항목 | 내용 |
 |------|------|
-| 문서 버전 | v1.1 (2026-07-03, 결제 최후순위 재배치 + PG 포트원 확정 + 문서 모순 정정) · v1.0 (2026-05-27) |
+| 문서 버전 | v1.2 (2026-08-23, M0 CI·M2 완료 상태와 현재 콘텐츠 계약 동기화) · v1.1 (2026-07-03) |
 | 대상 | MVP(P0) 4개월 + P1 8주 + P2 시장 검증 후 |
 | 우선순위 정의 | P0 = 런칭 차단 / P1 = 런칭 후 8주 / P2 = 안정화 후 |
 | 관련 문서 | [PRD.md](../PRD.md), [DECISIONS.md](../DECISIONS.md), [DB_SCHEMA.md](../DB_SCHEMA.md) |
@@ -79,7 +79,7 @@ M4 (커뮤니티 - 후원 제외)
 - [ ] UptimeRobot 모니터 등록 (5분 간격)
 
 ### CI/CD
-- [ ] GitHub Actions: lint(ruff + eslint) + test + build - backend, frontend, admin job 구현과 로컬 gate 완료. frontend ESLint를 포함한 PR Actions 실통과 확인 후 완료 처리
+- [x] GitHub Actions: backend, frontend, admin lint/test/build job 구현 + PR #123 세 job 실통과 확인
 - [ ] main 머지 시 스테이징 자동 배포 (docker pull → compose up)
 - [ ] PR 템플릿/이슈 템플릿 동작 확인
 
@@ -148,7 +148,7 @@ M4 (커뮤니티 - 후원 제외)
 - [x] 에피소드 에디터 (TipTap 본문·상시 유료 경계·발행하기 모달·이미지 드래그앤드롭·임시저장) *(F3 완료 2026-07-16, #78 - 업로드 폼에서 포스타입식 에디터로 재정의, DECISIONS "에피소드 콘텐츠 모델")*
 - [x] 에피소드 공개 예약 UI *(F4 완료 2026-07-17: 발행 모달 지금/예약 토글 + `datetime-local`, #79)*
 
-> ⚠️ TOTP 시크릿은 DB 저장 + 클라이언트 절대 노출 금지.
+> ⚠️ TOTP 시크릿은 DB에 암호문으로 저장하고 로그·영속 클라이언트 저장소에 노출하지 않는다. 초기 등록의 일회성 `otpauth_uri`만 메모리에 전달하고 confirm·logout 시 폐기한다.
 > ⚠️ 비권한(일반 유저·role 미달) 관리자 API 호출 시 403, 라우터 단 `require_role` 일관 적용 점검.
 > ⚠️ **개발자 매출 차단은 product 역할이 아님**: 개발자는 product 역할로 만들지 않는다(관측은 외부 도구 Sentry 등). "개발자가 매출을 못 본다"는 라우트 가드가 아니라 인프라/자격증명 소유권 - 진짜 장벽은 M7 인프라 분리 시(DECISIONS "관리자 권한 분리").
 
@@ -156,15 +156,15 @@ M4 (커뮤니티 - 후원 제외)
 
 ## M2. 콘텐츠 (무료 구간)
 
-> **목적**: 작품 목록 → 에피소드 목록 → 뷰어 3단계 + 무료 회차 정책.
+> **목적**: 작품 목록 → 에피소드 목록 → 뷰어 3단계 + 회차 내 무료 구간 정책.
 > **선행**: M1.5 (시드 데이터 입력 가능 상태)
-> **DoD**: 비로그인 유저가 작품 목록 → 무료 1~N화 끝까지 스크롤. 4화(유료) 진입 시 잠금 UI(M3 작업 전이라 placeholder)까지 노출.
-> **세부**: [M2_foundation.md](./M2_foundation.md) - 그룹 A~H 분해 + 설계 결정 5개(무료 presigned·dweb-cover·SSR 등, 2026-07-15)
+> **DoD**: 비로그인 유저가 작품 목록에서 무료 회차와 부분 유료 회차의 paywall 이전 구간을 열람하고, 경계에서 잠금 placeholder를 확인.
+> **세부**: [M2_foundation.md](./M2_foundation.md) - 그룹 A~H 분해 + 설계 결정 6개(무료 presigned·dweb-cover·SSR·이미지 로딩 등)
 
 ### 백엔드
 - [x] 작품 목록 API (페이지네이션, 태그 필터) *(그룹 A 완료 2026-07-18: `works.is_published` 게이트 신설 + 공개 회차 카운트. IMPLEMENTATION_PUBLIC_CATALOG_API.md)*
 - [x] 작품 상세 API (works + tags + 공개 episodes 요약, `selectinload` 사용) *(그룹 A 완료 2026-07-18: 썸네일 URL은 D2까지 null - 원고 키 노출 차단)*
-- [x] 에피소드 목록 API (회차 번호·제목·부제목·썸네일·무료/잠금/구매상태) *(그룹 B1 완료 2026-07-21: `GET /works/{id}/episodes` - A2와 같은 서비스 함수 재사용)*
+- [x] 에피소드 목록 API (제목·부제·썸네일·공개일·무료/잠금 상태, `public_id` URL과 `sort_order` 표시 순서 분리) *(그룹 B1 완료 2026-07-21, 후속 회차 번호 폐기 반영)*
 - [x] **무료 구간 콘텐츠 API** (#76 콘텐츠 모델: content를 paywall 경계에서 **서버 절단** + image 키 presigned URL 치환, no-store. 절단은 M3→M2 앞당김 2026-07-16 - 경계 뒤 반환·결제 검증만 M3) *(그룹 B2 완료 2026-07-21: 절단은 `is_free`와 무관하게 항상 수행, 절단→presign 순서 고정. IMPLEMENTATION_FREE_CONTENT_API.md)*
 - [x] `viewer_progress` 모델 + 진행도 저장 API (블록 인덱스 기준 - #76 재해석, WORK-09) *(그룹 C1 완료 2026-07-20: PUT/GET /episodes/{id}/progress, upsert. IMPLEMENTATION_VIEWER_PROGRESS.md)*
 - [x] 랜딩(`/`)·`/commission` 데이터 API + admin 편집 기반 (`commission_items`·`site_texts`, #107·#110. 독자 SSR 화면은 그룹 G FE)
@@ -175,7 +175,7 @@ M4 (커뮤니티 - 후원 제외)
 - [x] **뷰어 - 콘텐츠 문서 렌더러** (React 아일랜드, `@tiptap/core generateHTML`, 2026-08-21 그룹 H 사용자·자동 검증 완료)
   - 글+이미지 혼합 렌더, **이미지 즉시 전량 요청 + `fetchpriority`**(lazy 아님 - M2_foundation 결정 6), 이전/다음 화 이동, 경계 지점 잠금 placeholder
   - 드래그/복사/우클릭/저장 차단 (UX 우선, 완벽 차단 아님)
-  - 진행도 저장 (블록 인덱스, debounce)
+  - 진행도 저장 (블록 index + `block_offset_bp`, debounce)
   - 본문은 no-store API로 아일랜드가 fetch (SSR HTML에 presigned 금지)
 - [x] 메인 랜딩(`/`) 재설계 - 등록 최신순 작품 중앙 캐러셀 + 소형 작가 프로필 스트립 + 커미션 최대 4개 썸네일 그리드 (공개 API 기반 SSR, 2026-08-13 구현, 2026-08-21 사용자 브라우저 확인)
 - [x] `/commission` 홍보 페이지 (가격·일정·예시·모집 상태, 외부 CTA·신청 폼 제외, 2026-08-13 구현, 2026-08-21 사용자 브라우저 확인)
@@ -288,13 +288,14 @@ M4 (커뮤니티 - 후원 제외)
   - 실패 시 `payment_logs(fail)` + Sentry
 - [ ] **유료 에피소드 Signed URL 발급 API**
   - 권한 확인: `purchases` 활성 레코드 (`refunded_at IS NULL`) 존재
-  - **회차 단위 1개 URL**, **TTL 10분**, 매 요청마다 생성
+  - 현재 M2 무료 콘텐츠 API를 확장해 paywall 뒤 노드를 포함하되, 응답에 포함될 각 이미지 key만 객체별로 서명하고 no-store 처리
+  - TTL과 만료 복구 전략은 현재 600초 presign + 즉시 전량 요청 계약을 기준으로 M3 착수 시 재검증
 - [ ] **첫 열람 시 `first_viewed_at` 기록** (환불 가능 판정 기준)
 - [ ] 영수증 URL 반환 (포트원 응답 그대로 노출)
 - [ ] **환불 API (관리자 전용)**
   - 조건: `first_viewed_at IS NULL` AND `refunded_at IS NULL`
   - 포트원 cancel API 호출 → `purchases.refunded_at` + `refund_amount` 기록
-  - 트랜잭션으로 묶고, **결제 cancel 실패 시 DB 롤백**
+  - 외부 cancel 성공 확인 뒤 DB transaction을 반영하고, DB 반영 실패 시 재시도·대사 가능한 상태를 남김
 - [ ] 후원 결제 (결제 검증 흐름 재사용, `donations` insert) - M4에서 이동
 - [ ] 결제 시도 rate limit (10회/분)
 
@@ -326,8 +327,8 @@ M4 (커뮤니티 - 후원 제외)
 > ⚠️ 포트원 API 호출 결과 확인 **후** DB 저장 (외부 호출과 DB 트랜잭션 묶지 말 것).
 > ⚠️ Q1 (환불 약관) / Q7 (만 14세) 법무 검토 결과를 결제 화면 약관 텍스트에 반영해야 출시 가능 → 바로 다음이 M7이라 자연 연계.
 
-### M3에서 의도적으로 제외 (P1 후속)
-- 전편 구매 (PAY-07) → P1: `purchases.bundle_id` 활용한 일괄 생성/환불
+### M3에서 의도적으로 제외
+- 전편 구매·묶음 할인은 현재 범위 제외. 별도 결정 전 `bundle_id`나 할인 필드를 구현하지 않는다.
 
 ---
 
@@ -338,7 +339,7 @@ M4 (커뮤니티 - 후원 제외)
 > **DoD**: 보안/부하/법무 모두 통과, 베타 사용자 10~30명 1주일 운영 후 치명 버그 0.
 
 ### 보안
-- [ ] **보안 리뷰**: 결제·인증·Signed URL 권한·CORS·rate limit 종합 점검 (Opus 4.8로 `/security-review`)
+- [ ] **보안 리뷰**: 결제·인증·Signed URL 권한·CORS·rate limit 종합 점검 (`$fable-review`, 착수 전 권장 모델과 reasoning 수준 사용자 확인)
 - [ ] OWASP Top 10 자체 체크리스트 (XSS, CSRF, SQLi, IDOR)
 - [ ] 비밀번호 reset 토큰, 이메일 인증 토큰, JWT TTL 재검토
 - [ ] 환경변수 누출 점검 (Astro `PUBLIC_*` 외 빌드 산출물 grep)

@@ -18,7 +18,7 @@
 - 미구매 사용자에게 유료 구간 이미지 키나 URL을 반환하지 않는다. 무료 콘텐츠도 서버에서 paywall 경계로 절단한 뒤 허용된 키만 서명한다.
 - JWT를 localStorage에 저장하지 않는다. HttpOnly 쿠키를 사용한다.
 - CORS `*`, 환경변수 하드코딩, 원시 SQL 문자열 조합을 금지한다.
-- TOTP 시크릿과 개인정보를 클라이언트나 로그에 노출하지 않는다.
+- TOTP 시크릿과 개인정보를 로그나 일반 응답에 노출하지 않는다. 초기 등록의 일회성 `otpauth_uri`만 owner 비밀번호 검증 뒤 클라이언트 메모리에 전달하고 confirm·logout 시 즉시 폐기한다.
 
 ## 문서 확인 시점
 
@@ -35,7 +35,7 @@
 
 - Python 명령은 backend 환경에서 `uv run`으로 실행한다. 예: `cd backend && uv run pytest`.
 - Backend 기본 게이트: `cd backend && uv run ruff format --check . && uv run ruff check . && uv run pytest`.
-- Frontend 기본 게이트: `pnpm --filter frontend astro check && pnpm --filter frontend test && pnpm --filter frontend build`.
+- Frontend 기본 게이트: `pnpm --filter frontend lint && pnpm --filter frontend astro check && pnpm --filter frontend test && pnpm --filter frontend build`.
 - Admin 기본 게이트: `pnpm --filter admin lint && pnpm --filter admin test && pnpm --filter admin build`.
 - 변경 범위에 맞는 최소 게이트부터 실행하고, 완료 전 관련 전체 게이트를 실행한다. 실행하지 못한 검증은 이유와 함께 명시한다.
 - 의미 있는 구현은 `docs/MODULES/.../IMPLEMENTATION_*.md` 작성 대상인지 확인하고, 완료된 작업은 관련 마일스톤과 결정 문서에 반영한다. 사소한 수정은 생략할 수 있다.

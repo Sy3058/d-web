@@ -9,6 +9,8 @@
 | 선행 마일스톤 | [M0](./M0_foundation.md) - 기반 세팅 |
 | 다음 마일스톤 | [M1.5](./README.md#m15-관리자-부트스트랩) - 관리자 부트스트랩 |
 
+> **현재 상태**: M1은 2026-06-27 완료되고 `v0.1.0`으로 종료됐다. 아래 브랜치명·테스트 수·Opus 리뷰 문구는 당시 검증 이력이며, 현재 운영 계약은 `AGENTS.md`, `docs/DECISIONS.md`, 실제 구현과 테스트를 우선한다.
+
 ---
 
 ## 선행: 백엔드 스켈레톤 복원
@@ -85,11 +87,11 @@ git stash pop stash@{0}
 - **라이브러리: `bcrypt` 직접 (5.x).** passlib 탈락 - 마지막 릴리스 2020, 사실상 미유지보수 + bcrypt 5.0.0에서 passlib bcrypt 백엔드가 깨짐. 단일 알고리즘 확정이라 다중 해시 추상화 불필요. (`pwdlib`는 다중 알고리즘 필요 시에만 후보)
 - **해싱 = OWASP pre-hash 구조**: `bcrypt( base64( hmac_sha384(pw, key=password_pepper) ), gensalt(12) )`. 한 방에 (a) **72바이트 한도 제거**(긴 비번 허용 → C1의 128자 상한과 정합), (b) **pepper 적용**, (c) **password shucking + null 바이트 truncation 방어**.
   - ⚠️ HMAC은 **raw `.digest()`(48B) → `base64`(64자)**. `hexdigest`(96자)는 다시 72바이트 초과로 truncate되니 **금지**.
-- **블로킹 회피 (Critical)**: bcrypt cost=12는 ~250~350ms CPU 블로킹 → async 라우터에서 직접 호출 시 이벤트 루프 정지(`backend/CLAUDE.md` 금지). 따라서 **`async def hash_password/verify_password` + `anyio.to_thread.run_sync`로 bcrypt 오프로드**. `anyio`는 fastapi가 이미 포함(새 의존성 아님).
+- **블로킹 회피 (Critical)**: bcrypt cost=12는 CPU 블로킹 → async 라우터에서 직접 호출 시 이벤트 루프 정지(`backend/AGENTS.md`). 따라서 **`async def hash_password/verify_password` + `anyio.to_thread.run_sync`로 bcrypt 오프로드**. `anyio`는 fastapi가 이미 포함(새 의존성 아님).
 - **키 이름: `password_pepper` (env `PASSWORD_PEPPER`).** 문서상 "SECRET_KEY와 별개"는 곧 기존 `jwt_secret`과 별개. 토큰용 `token_pepper`(B2)와도 **분리**(키 분리 원칙: pre-hash vs post-hash, 알고리즘·로테이션 성질 다름).
   - `SecretStr` 권장(로그 마스킹). 시크릿이라 **default 금지** → `.env.example` + **CI env**에 `PASSWORD_PEPPER` 주입 필수(없으면 `Settings()` import 크래시. `jwt_secret`과 동일 패턴).
 - **제약: pre-hash pepper는 로테이션 불가**(교체하려면 원문 비번 필요 → 전 유저 비번 재설정 강제). 유니코드 NFC 정규화는 v1 생략(문서화만).
-- 메모: cost=12가 **실제 프로덕션 하드웨어에서 ~250~350ms**가 되도록 배포 후 1회 측정·보정. 설치 직전 `bcrypt` 5.x 최신 패치 WebSearch 재확인. 관련 study: [[secret-hashing]].
+- 메모: cost=12의 실제 지연은 프로덕션 하드웨어에서 배포 후 측정·보정. 설치 직전 `bcrypt` 최신 호환 버전을 공식 문서와 package index에서 재확인. 관련 study: [[secret-hashing]].
 
 ### B2. 토큰 발급/검증 (access JWT + refresh opaque) ✅ 완료 (2026-06-03)
 - 선행: A1
@@ -238,7 +240,7 @@ git stash pop stash@{0}
 
 ## 그룹 G. 프론트엔드 (Astro + React 아일랜드)
 
-> frontend/CLAUDE.md 패턴: 인증·OAuth는 `client:load`. 쿠키는 HttpOnly라 JS 접근 불가 → 로그인 상태는 SSR(`Astro.request.headers`)로 판정. fetch는 `credentials: 'include'`.
+> `frontend/AGENTS.md` 패턴: 인증·OAuth는 `client:load`. 쿠키는 HttpOnly라 JS 접근 불가 → 로그인 상태는 SSR(`Astro.request.headers`)로 판정. fetch는 `credentials: 'include'`.
 > M0 B6 deferred 보강을 여기서 함께 처리: `lib/validation.ts` zod v4 `z.email()` 전환, `lib/api.ts` FastAPI `{"detail": ...}` JSON 파싱, `frontend/.env.example`에 `PUBLIC_API_BASE_URL` 문서화.
 
 ### G1. 회원가입 페이지 - AUTH-01 ✅ 구현 (2026-06-20)
@@ -360,9 +362,9 @@ git stash pop stash@{0}
 
 ## 메모
 
-- **순서**: 계획(Opus) → 코딩(Sonnet) → 검증(Opus, `@docs/reviews/GUIDE_REVIEW.md` + `CODE_REVIEW_BE.md`/`CODE_REVIEW_FE.md`) → 커밋. 인증·토큰·쿠키는 보안 로직이라 **Opus 검증 생략 금지**.
+- **현재 workflow**: 계획(`$fable-plan`, 필요 시) → 코딩(`$fable-exec`) → 검증(`$fable-review`, `docs/reviews/GUIDE_REVIEW.md` + 영역별 checklist) → 사용자 커밋 승인. 인증·토큰·쿠키 착수 전 권장 모델과 reasoning 수준을 사용자에게 제안한다.
 - 백엔드 실행은 항상 `uv run` 접두사 (`uv run uvicorn`, `uv run pytest`, `uv run alembic`).
-- 패키지/라이브러리(bcrypt, JWT, rate limit 등)는 설치 직전 WebSearch로 최신 안정 버전 확인 (GUIDE_WORKFLOW "검색 규칙").
+- 패키지/라이브러리(bcrypt, JWT, rate limit 등)는 설치 직전 공식 문서에서 최신 안정 버전과 호환성 확인 (GUIDE_WORKFLOW "검색 규칙").
 - 결정 필요 항목(OAuth state/nonce 저장 방식, rate limit 라이브러리, `__Host-` 프리픽스 적용 범위, 회전 시 refresh 절대 수명 cap)은 해당 작업 직전 짧게 합의 후 진행. → 모두 해소(refresh 절대 수명 cap = ✅ M1 A, 최초 발급 30일 상한 `original_issued_at`+cap 거부, `be/feat/refresh-absolute-lifetime-cap`, 2026-06-27).
 - **확정된 보안 결정**(M1 착수 시 DECISIONS.md "보안 결정"에 한 번에 기록):
   - refresh = opaque 랜덤 + HMAC-SHA256(+`TOKEN_PEPPER`) 해시, `token_hash` 직접 조회로 대조

@@ -10,26 +10,20 @@ PostgreSQL + SQLModel 작업 시 반드시 확인할 주의사항 모음.
 - ORM: SQLModel (SQLAlchemy 기반)
 - 마이그레이션: Alembic
 - 드라이버: asyncpg (비동기)
-- Primary Key: Integer (auto increment) 기본. UUID가 필요한 테이블만 명시.
+- Primary Key: 현재 주요 엔티티는 UUID를 사용. 복합키와 자연키 예외는 실제 모델 확인.
 
 ---
 
 ## 2. Primary Key 전략
 
-Integer auto increment를 기본으로 사용한다.
-UUID는 외부에 노출되는 리소스(에피소드 URL, 결제 ID 등)에만 사용한다.
+현재 `users`, `works`, `episodes` 등 주요 엔티티는 UUID PK를 사용한다. `works_tags`는 복합 PK, `site_texts`는 문자열 key가 PK다. 에피소드 URL에는 UUID PK 대신 별도의 추측 어려운 정수 `public_id`를 노출한다.
 
-    # 기본 (내부용)
+    # 현재 주요 엔티티 패턴
     class Episode(SQLModel, table=True):
-        id: Optional[int] = Field(default=None, primary_key=True)
+        id: uuid.UUID | None = Field(default=None, primary_key=True)
+        public_id: int = Field(index=True)
 
-    # UUID 필요 시 (외부 노출용)
-    import uuid
-    class Payment(SQLModel, table=True):
-        id: Optional[uuid.UUID] = Field(default_factory=uuid.uuid4, primary_key=True)
-
-이유: Integer는 인덱스 성능이 UUID보다 빠르다.
-외부에 노출되는 ID는 UUID로 해야 순서 추측이 불가능하다.
+새 테이블의 키 전략을 Integer 또는 UUID로 일률 결정하지 않는다. 기존 참조 방식, 외부 노출 여부, 인덱스 특성을 확인하고 스키마 결정으로 남긴다.
 
 ---
 
@@ -51,7 +45,7 @@ timezone 없는 naive datetime은 나중에 혼란을 일으킨다.
 ## 4. Soft Delete
 
 실제 삭제 대신 deleted_at 컬럼으로 처리.
-적용 대상: User, Episode, Comment
+현재 적용 대상: User, Work, Episode. 새 모델은 실제 삭제·보존 요구사항을 별도로 결정한다.
 
     class User(SQLModel, table=True):
         deleted_at: Optional[datetime] = None
@@ -90,9 +84,7 @@ SQLModel 관계 조회 시 lazy loading이 기본이라 N+1이 발생한다.
 모델 변경 후 마이그레이션 생성 절차:
 
 1. 새 모델 파일을 `src/models/` 에 추가
-2. `migrations/env.py` 상단 주석 위치에 import 추가:
-
-        from models import user  # noqa: F401  ← autogenerate가 metadata 읽으려면 필수
+2. `src/models/__init__.py`에서 새 `table=True` 모델을 import하고 `__all__`에 등록한다. `migrations/env.py`는 `import models`로 전체 metadata를 읽으므로 개별 모델 import를 추가하지 않는다.
 
 3. 마이그레이션 생성 + 적용:
 

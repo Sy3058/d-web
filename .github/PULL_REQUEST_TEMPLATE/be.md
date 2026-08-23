@@ -14,7 +14,7 @@
 
 - [ ] 결제 금액 DB에서 계산 (클라이언트 값 무시)
 - [ ] 권한 검증 Depends() 누락 없음
-- [ ] 미결제 유저에게 Signed URL / r2_key 미노출
+- [ ] 미구매 유저에게 유료 구간 URL / r2_key 미노출 (무료 구간은 서버 경계 절단 후 서명)
 - [ ] 환경변수 하드코딩 없음
 - [ ] 개인정보 로깅 없음 (이메일, 카드, TOTP 시크릿)
 - [ ] CORS 와일드카드(`*`) 없음
@@ -27,7 +27,7 @@
 - [ ] 에러 코드 구분 (401 / 403 / 400)
 - [ ] DB 마이그레이션 포함 (모델 변경 시)
 - [ ] `datetime.now(timezone.utc)` 사용 (`datetime.now()` 금지)
-- [ ] soft delete 모델(User, Episode, Comment) 조회 시 `deleted_at IS NULL` 누락 없음
+- [ ] soft delete 모델(User, Work, Episode) 활성 조회 시 `deleted_at IS NULL` 누락 없음
 - [ ] Signed URL 만료 시간 적절 설정 (뷰어 로딩 중 만료 방지)
 
 ## 📝 문서
@@ -36,7 +36,6 @@
 
 - [ ] IMPLEMENTATION 작성 - 
 - [ ] TROUBLESHOOTING 작성 - 
-- [ ] CHANGELOG 작성 - 
 - [ ] 마일스톤 업데이트 - 
 - [ ] 그 외 문서/설정 수정 - 
 
@@ -46,11 +45,10 @@
 
 ## 검증 체크
 
-- [ ] `ruff check src/` 통과
-- [ ] `ruff format --check src/ tests/` 통과
-- [ ] `pytest` 통과 (테스트 있는 경우)
-- [ ] `uvicorn src.main:app` 정상 실행
-- [ ] 변경된 API 엔드포인트 직접 호출 확인
+- [ ] `cd backend && uv run ruff format --check .` 통과
+- [ ] `cd backend && uv run ruff check .` 통과
+- [ ] `cd backend && uv run pytest` 통과
+- [ ] 실행하지 못한 migration/API 실확인과 이유 기록
 
 ## 비고
 

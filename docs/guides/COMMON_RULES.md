@@ -10,13 +10,15 @@ GUIDE_COMMIT.md 참조
 
 ## 구현 문서 필수 템플릿 규칙
 
-코드 구현 시 구현한 기능에 대해 문서를 작성해야 합니다.
+의미 있는 기능 구현은 구현 문서 작성 대상인지 확인합니다. 사소한 수정은 생략할 수 있습니다.
 
 경로 형식:
 - 백엔드: `docs/MODULES/BE/{Domain}/IMPLEMENTATION_{기능명}.md`
 - 프론트엔드: `docs/MODULES/FE/{기능명}/IMPLEMENTATION_{기능명}.md`
+- 관리자: `docs/MODULES/ADMIN/{기능명}/IMPLEMENTATION_{기능명}.md`
+- 공통/인프라: 기존 `docs/MODULES/COMMON/`, `docs/MODULES/INFRA/` 구조를 따른다.
 
-예시: `docs/MODULES/BE/Episode/IMPLEMENTATION_EPISODE_VIEWER.md`
+예시: `docs/MODULES/BE/Episodes/IMPLEMENTATION_EPISODE_CONTENT_MODEL.md`
 
 📌 필수 작성 항목 (Required)
 
@@ -43,18 +45,13 @@ GUIDE_COMMIT.md 참조
 ## MODULES 구조
 
     docs/MODULES/
-    ├── BE/
-    │   ├── Auth/
-    │   ├── Episode/
-    │   ├── Payment/
-    │   ├── Community/
-    │   └── Admin/
-    └── FE/
-        ├── Viewer/
-        ├── Payment/
-        └── Community/
+    ├── BE/       # FastAPI 도메인 구현
+    ├── FE/       # Astro 독자 사이트
+    ├── ADMIN/    # Vite React 관리자 SPA
+    ├── COMMON/   # shared package·공통 계약
+    └── INFRA/    # Docker·배포 기반
 
 문서 종류:
 - `IMPLEMENTATION_*.md`: 구현 내용 및 의사결정 기록
 - `TROUBLESHOOTING_*.md`: 트러블슈팅 기록
-- `CHANGELOG_*.md`: 변경 이력
+- 출시 전 변경 이력은 신규 CHANGELOG 대신 `docs/DECISIONS.md`, 마일스톤 문서와 태그에 반영

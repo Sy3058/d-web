@@ -10,7 +10,7 @@
 ## 0. 이 프로젝트의 맥락
 
 - 저자 = 나
-- 리뷰어 = Opus 4.8 (`/model opus` 호출, `@docs/reviews/...` 첨부)
+- 리뷰어 = `$fable-review` workflow를 적용한 현재 리뷰 에이전트. DB·동시성·보안·아키텍처는 착수 전에 권장 모델과 reasoning 수준 변경을 사용자에게 제안한다.
 - 따라서 Google 원칙 중 *팀 협업 절차*(응답 SLA, 멘토링, 에스컬레이션)는 *self-discipline 강화*로 재해석한다.
 
 ---
@@ -42,7 +42,7 @@
 (`guides/GUIDE_COMMIT.md`의 "한 커밋 하나의 변경"을 PR 단위로 확장)
 
 - 한 PR = 하나의 자기완결적 변경
-- 100줄 적정, 1000줄 too large (단, 파일 수와 함께 봐야 함)
+- 줄 수는 경고 신호일 뿐 기준이 아니다. 한 번에 검증 가능한 자기완결적 변경인지 판단한다.
 - 리팩토링은 기능 변경과 분리된 PR
 - 큰 작업은 **stacking PR** - 선행 PR 머지 후 다음 시작
 
@@ -92,7 +92,7 @@
 
 ## 6. 저자(나)가 리뷰 코멘트에 응답하는 법
 
-Opus 리뷰는 자동이지만, *수용할지 반박할지*는 의식적으로 결정해야 한다.
+리뷰 결과를 *수용할지 반박할지*는 근거를 바탕으로 의식적으로 결정해야 한다.
 
 1. **감정 배제** - 리뷰 결과 본 직후엔 반박 금지. 한 호흡 두고 본다.
 2. **수용이 기본** - 리뷰어가 옳을 확률이 더 높다고 가정.
@@ -110,9 +110,9 @@ Opus 리뷰는 자동이지만, *수용할지 반박할지*는 의식적으로 �
 | `CODE_REVIEW_FE.md` | Astro/React 섬/Signed URL 도메인 violation |
 | `CODE_REVIEW_ADMIN.md` | Vite React SPA/2FA/관리자 권한 도메인 violation |
 
-Opus 호출 시 둘 다 첨부:
+리뷰 요청 시 공통 원칙과 영역별 체크리스트를 함께 적용한다:
 
-    @docs/reviews/GUIDE_REVIEW.md @docs/reviews/CODE_REVIEW_BE.md 참고해서 리뷰해줘
+    $fable-review로 docs/reviews/GUIDE_REVIEW.md와 docs/reviews/CODE_REVIEW_BE.md를 참고해 리뷰해줘
 
 ---
 

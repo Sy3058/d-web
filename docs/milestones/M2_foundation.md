@@ -2,7 +2,7 @@
 
 | 항목 | 내용 |
 |------|------|
-| 문서 버전 | v0.19 (2026-08-21, 현재 버전 - 그룹 H 완료 검증 및 잔여 blocker 기록) · v0.17 (2026-08-15 - v0.13 이후 갱신은 아래 배너 참조) · v0.12 (2026-08-03, 그룹 E 확장 - 회차 번호 폐기의 후속 UX. E3(공개 날짜 + 최신순/등록순 정렬 토글 + 첫 화 보기 + 총 N화·무료 N화 요약)·E4(이어 보기 + 작품 단위 진행률 바, 로그인 전용·클라이언트 섬) 신설. 회차 **내부** 진행률(%)은 M3 이연 - 서버 픽셀 누적은 글 블록 높이를 알 수 없어 불가능하고 클라이언트 스크롤 비율은 뷰어의 이미지 공간 미예약 때문에 값이 못 미덥다는 코드 검증 결과. 근거 전문: DECISIONS "독자 회차 목록 UX: 날짜·정렬·진행률") · v0.11 (2026-08-03, 회차 번호 폐기 구현 반영: `episode_no` 완전 제거 → **조회키와 표시 순서를 분리**. 조회키 = `public_id`(랜덤 8자리 INTEGER, 전역 UNIQUE), 표시 순서 = `sort_order`(**UNIQUE 없음** - 유일 제약이 옛 409의 원인이었으므로 그 함정을 재현하지 않는다, 동점은 `created_at`·`id`가 깬다). 독자 URL `/works/{workId}/{publicId}` 유지. 재배열 API `PUT /admin/works/{id}/episodes`(살아있는 회차 전량 전송, 집합 불일치 시 409 = 낙관적 동시성) + 어드민 ↑↓ 버튼 신설. 제목 기본값 `'무제'` 폐지(번호가 사라져 제목이 유일 식별자 - 서버 필수 + 이미지 업로드 경로 가드). 마이그레이션 2건(`f3a43b32fcfb` public_id, `a7c91d05e3b4` sort_order) upgrade/downgrade 왕복 검증 완료, BE 435 + FE 28 + admin 81 테스트 그린. 상세: `docs/MODULES/BE/Works/IMPLEMENTATION_EPISODE_PUBLIC_ID.md`) · v0.10 (2026-07-28, 그룹 G 재정의 반영: 2026-07-26 결정(DECISIONS "랜딩 페이지 구성 + 커미션 단계 분리") - 옛 "작가 소개 정적 페이지"를 폐기하고 **메인 랜딩(`/`) 히어로 + `/commission` 정적 홍보**로 재정의. 커미션 신청 폼·접수 관리(M5)는 스코프 밖 그대로, 정적 홍보 부분만 M2로 앞당김. 문서 미착수 - 구현 전) · v0.9 (2026-07-25, 그룹 F1 구현 반영: 뷰어 아일랜드(SSR 셸 + React 아일랜드 렌더러) 구현·Opus 리뷰(Critical 0/Major 1 반영) 완료. 수동 e2e(브라우저 실기능)·회차당 전송 바이트 실측(결정 6 재검토 조건)은 사용자 확인 대기 - 결과 반영 전까지 그룹 H 체크는 보류) · v0.8 (2026-07-21, 그룹 B 완료 반영: B1(회차 목록)·B2(무료 구간 콘텐츠) 구현·Opus 리뷰 완료. **B2 DoD (c) 문구 정정** - "응답에 원본 R2 키 문자열 부재"는 presigned URL이 구조상 키를 경로에 포함하므로 성립 불가, "유료 구간 키 전무 + image attrs에 key 부재"로 대체. 절단은 `is_free` 컬럼과 무관하게 항상 수행으로 확정) · v0.7 (2026-07-20, 그룹 D 완료 반영: D1(공개 버킷 전환)·D2(썸네일 공개 축소본) 구현·리뷰·실서버 스모크 완료. URL 조립 `r2_service.public_url()` 단일화, R2 side-effect 순서(생성 커밋 전/삭제 커밋 후) 확정) · v0.6 (2026-07-19, 뷰어 이미지 로딩 전략 확정: lazy → **즉시 전량 요청 + `fetchpriority`**(결정 6 신설) - presigned 만료(600초) 구간을 구조적으로 회피. 서명 쿠키가 Cloudflare엔 네이티브로 없다는 공식 문서 확인 결과 반영(M3 이연), presigned가 커스텀 도메인 불가라는 사실 결정 1에 명시) · v0.5 (2026-07-18, M1.5 완전 종료·그룹 D 계획 구체화: 에디터 #78·예약 UI #79 머지 반영, 썸네일 = 원고 키 방식 확정(D2 = BE-only 공개 축소본 파생), D1/D2에 #81 후속 조사 반영(공개 URL 조립 단일화·캐시 버스터·공개 카탈로그 배선·download_bytes), R2 토큰 스코프 리스크 추가) · v0.4 (2026-07-18, 그룹 A 완료 반영: `works.is_published` 신설 확정 + B1/B2에 `public_work_filters()` 사용 지시 추가 - admin 패턴 복사 시 is_published 누락 함정 리뷰 발견) · v0.3 (2026-07-16, M1.5 F3 재설계 #76 반영: 콘텐츠 문서(회차 내 유료 경계) 모델 기준 전면 개정 - 무료 서빙 = content 절단 앞당김, 뷰어 = 문서 렌더러, 진행도 = 블록 인덱스, presign 실물 계약 반영) · v0.2 (2026-07-15, 리뷰 반영: 공개 서빙 게이트에 작품 soft-delete join 명시 + TTL config 키 관계 정리) · v0.1 (2026-07-15, 초안) |
+| 문서 버전 | v0.20 (2026-08-21, 현재 버전 - 대표 이미지 불변식 보강 후 M2 종료) · 이전 변경 이력은 아래 갱신 배너와 Git history 참조 |
 | 상위 마일스톤 | [M2](./README.md#m2-콘텐츠-무료-구간) |
 | 예상 기간 | 약 2~3주 (표지 공개 버킷 커스텀 도메인 외부 왕복 포함) |
 | 완료 기준 | 비로그인 유저가 작품 목록 → 무료 구간(전체 무료 회차 + 부분 유료 회차의 경계 이전 미리보기) 열람, 유료 경계 도달 시 잠금 UI(M3 전이라 placeholder) 노출 (그룹 H 체크리스트) |
@@ -138,7 +138,7 @@ M2 착수 전 확정. presigned·표지·콘텐츠 모델은 기존 결정(DECIS
 
 ## 그룹 B. 회차 목록 + 무료 구간 콘텐츠 API (WORK-03, 04) ⚠️ 보안 그룹
 
-> ⚠️ **유료 구간·미공개 원고 유출 방어선**. 계획·코드 Opus xhigh 검증 생략 금지. 절단·presign은 **#76 머지분(`lib/content_doc`·`presign_get_urls`) 재사용**(결정 1), M2는 독자용 절단·치환 층과 공개 엔드포인트만 얹는다.
+> ⚠️ **유료 구간·미공개 원고 유출 방어선**. 같은 경계를 변경할 때는 `$fable-review`를 적용하고 착수 전 권장 모델·reasoning 수준을 사용자에게 제안한다. 절단·presign은 **#76 머지분(`lib/content_doc`·`presign_get_urls`) 재사용**(결정 1), M2는 독자용 절단·치환 층과 공개 엔드포인트만 얹는다.
 
 ### B1. 공개 회차 목록 API ✅ (2026-07-21 완료 - 브랜치 `be/feat/m2-episode-content`)
 - 선행: A2
@@ -331,9 +331,9 @@ M2 착수 전 확정. presigned·표지·콘텐츠 모델은 기존 결정(DECIS
 
 ## 메모
 
-- **순서**: 계획(Opus) → 코딩(Sonnet) → 검증(Opus, `@docs/reviews/GUIDE_REVIEW.md` + `CODE_REVIEW_BE.md`/`CODE_REVIEW_FE.md`) → 커밋. **B(절단·치환)는 보안 로직이라 Opus xhigh 검증 생략 금지**(유료 구간·미공개 원고 유출 방어선).
+- **현재 workflow**: 계획(`$fable-plan`) → 코딩(`$fable-exec`) → 검증(`$fable-review`, `docs/reviews/GUIDE_REVIEW.md` + 영역별 checklist) → 사용자 커밋 승인. B(절단·치환) 같은 콘텐츠 권한 경계는 착수 전 권장 모델과 reasoning 수준을 사용자에게 제안한다.
 - 백엔드 실행은 항상 `uv run` 접두사, cwd 명시(`cd .../backend && uv run ...`).
-- 새 패키지 설치 직전 WebSearch로 최신 안정 버전 확인(GUIDE_WORKFLOW 검색 규칙). FE 신규 의존성 = `@tiptap/core`(+`@tiptap/starter-kit` 등 렌더 스키마 - 에디터(#78) 머지분과 버전 통일: admin package.json 3.27.4), BE 신규 0(절단·presign·검증 전부 #76 재사용).
+- 새 패키지 설치 직전 공식 문서에서 최신 안정 버전과 호환성 확인(GUIDE_WORKFLOW 검색 규칙). FE 신규 의존성 = `@tiptap/core`(+`@tiptap/starter-kit` 등 렌더 스키마 - 에디터(#78) 머지분과 버전 통일: admin package.json 3.27.4), BE 신규 0(절단·presign·검증 전부 #76 재사용).
 - **확정된 결정**(M2 착수 시 DECISIONS.md 반영 - 대부분 기존 결정 참조):
   - 무료 구간 서빙 = 서버 절단(paywall 이전) + presigned 치환, **절단은 M3→M2 앞당김**(2026-07-16). M3는 구매 검증 + 전문 반환만 얹음
   - presigned = #76 `presign_get_urls`(600초) 재사용, SSR HTML에 미포함(no-store API로 아일랜드 fetch), 캐시 금지 규칙 준수
@@ -343,5 +343,5 @@ M2 착수 전 확정. presigned·표지·콘텐츠 모델은 기존 결정(DECIS
   - 콘텐츠 페이지 = 페이지별 SSR(`prerender=false`) + 짧은 `Cache-Control`(뷰어 본문 제외). 랜딩(`/`)·`/commission`도 admin 편집값을 공개 API로 읽는 SSR(2026-08-13 전환)
   - 랜딩(`/`) = 최근 등록 작품 히어로 + 커미션 홍보 2~3존, 외부 CTA 폐기, 내부 신청 폼·접수 관리는 M5로 분리(DECISIONS "랜딩 페이지 구성 + 커미션 단계 분리")
   - 페이지네이션 = offset/limit + total
-- 커밋은 영역 prefix `[BE]`/`[FE]`/`[INFRA]`, 한 커밋 하나의 논리 변경. 분할 예시: `[INFRA/BE] D`(버킷/config) → `[BE] A`(카탈로그) → `[BE] B`(절단·치환, Opus 리뷰 필수) → `[BE] C`(진행도) → `[FE] E/F/G`.
+- 커밋은 영역 prefix `[BE]`/`[FE]`/`[INFRA]`, 한 커밋 하나의 논리 변경. 분할 예시: `[INFRA/BE] D`(버킷/config) → `[BE] A`(카탈로그) → `[BE] B`(절단·치환, `$fable-review`) → `[BE] C`(진행도) → `[FE] E/F/G`.
 - 진행은 ledger 파일(`task_harness.local`)에 [A] 입력판 + 단계 체크리스트로 추적(GUIDE_TASK_HARNESS). 그룹 착수 시 생성.

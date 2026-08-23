@@ -48,15 +48,16 @@
 - Vite+React SPA 단독: SEO 약해서 검색 유입 불가
 - SvelteKit/React Router v7: 한국 자료/결제 가이드 부족
 
-### Vite 버전: 7 (workspace 통일) - Astro 7 출시 시 8로 업그레이드
+### Vite 버전: 현재 7 유지, Astro 7/Vite 8은 별도 migration으로 검토
 
-**현재 상태 (2026-05-31)**
-- Astro 6는 Vite 7 사용 (`vite@^7.3.2`)
+**현재 상태 (2026-08-23)**
+- Astro 6는 Vite 7 사용 (`astro@^6.3.7`, `vite@^7.3.0`)
 - admin도 Vite 7로 맞춰 workspace 전체를 vite@7으로 통일 (`@vitejs/plugin-react@^5`)
 - `@tailwindcss/vite@4.3.0`이 Vite 8 네이티브 바인딩에서 `tsconfigPaths` 누락 버그 있어 Vite 8 혼용 불가
 - frontend/package.json에 `vite@^7`을 devDep으로 명시해 pnpm peer 해석 고정
+- Astro 7은 2026-06-22 Vite 8 기반으로 출시되었다. 출시 자체를 자동 업그레이드 트리거로 삼지 않고 별도 호환성 조사와 전체 게이트를 거친다. 공식 발표: https://astro.build/blog/astro-7/
 
-**Astro 7 stable 출시 시 일괄 업그레이드 항목**
+**Astro 7 migration 착수 시 확인할 항목**
 - `frontend`: `astro@7`, devDep `vite` 고정 제거
 - `admin`: `vite@^8`, `@vitejs/plugin-react@^6`
 - `build.rollupOptions` -> `build.rolldownOptions` 이름 변경 여부 확인
@@ -114,7 +115,7 @@
 
 **이유**
 - FastAPI: Python 기반, 비동기 처리, 자동 API 문서, AI 기능 확장 용이
-- SQLModel: FastAPI 제작자가 만든 ORM. 코드 중복 없이 DB 모델을 API 응답 타입으로 재사용
+- SQLModel: SQLAlchemy 기반의 타입 친화적 ORM. DB table 모델과 API 요청·응답 schema는 노출 경계를 위해 분리
 - PostgreSQL: 안정적, FastAPI 궁합 좋음, VPS 안에서 직접 운영
 
 ### Python 버전: 3.12
@@ -160,18 +161,20 @@
 - Cloudflare CDN과 세트라 이미지 서빙 속도 자동 최적화
 - Signed URL 지원 → 유료 콘텐츠 보호 가능
 
-### 표지 서빙: 표지 전용 공개 버킷 분리 (2026-07-15 확정, 구현은 M2)
+### 표지 서빙: 표지 전용 공개 버킷 분리 (2026-07-15 확정, M2 구현 완료)
 
 **결론**: 표지(`cover.webp`)는 **별도의 공개 버킷 + 커스텀 도메인**으로 서빙한다. 원고(에피소드 이미지)가 든 `dweb` 버킷에는 **커스텀 도메인을 붙이지 않는다**.
 
 **이유**
-- ⚠️ **R2의 공개 설정은 객체 단위가 아니라 버킷 단위다.** 지금은 표지와 원고가 같은 `dweb` 버킷에 키 prefix로만 구분돼 있어(`works/{id}/cover.webp` vs `works/{id}/episodes/...`), `dweb`에 커스텀 도메인을 붙이면 **미공개·유료 원고까지 서명 없이 받아진다**. 키가 UUID라 추측은 어렵지만 그건 보안이 아니라 요행이고, 공개 URL은 만료가 없어 한 번 새면 영구히 풀린다 → 루트 CLAUDE.md "미결제 유저에게 이미지 URL 내려주기 금지" 위반.
+- ⚠️ **R2의 공개 설정은 객체 단위가 아니라 버킷 단위다.** 결정 당시 표지와 원고가 같은 `dweb` 버킷에 key prefix로만 구분돼 있어(`works/{id}/cover.webp` vs `works/{id}/episodes/...`), `dweb`에 custom domain을 붙이면 **미공개·유료 원고까지 서명 없이 받아지는** 위험이 있었다. 키가 UUID라 추측이 어려운 것은 권한 검증이 아니다. → 루트 `AGENTS.md`의 콘텐츠 보호 불변조건.
 - 표지는 로그인 없이도 보여줄 공개 자산이라 서명이 불필요하다. 공개 버킷이면 URL이 고정이라 브라우저·CDN 캐시가 완전히 동작하고(서명 URL은 매 요청 문자열이 달라져 캐시 미스 + `<img src>` 교체로 재로드), egress도 무료다.
 - 원고는 계속 비공개 버킷 + presigned URL. 두 방식은 독립적 - presigned를 쓰는 데 버킷 공개는 전혀 필요 없다. (관리자 미리보기용 발급은 F3에서 앞당김 - 아래 "원고 presigned GET" 참조. 독자용 결제 검증 잠금은 M3)
 
 **미채택**: `dweb`에 커스텀 도메인 연결(위 위험), 표지에 presigned URL(공개 자산에 만료 URL은 캐시를 깨고, 응답마다 URL이 바뀌어 이미지가 재로드된다 - 관리자 화면 한정 임시방편으로는 가능하나 결국 공개 버킷으로 옮겨야 함)
 
 **M1.5 F2 시점**: 표지 서빙 경로가 없어 관리자 목록/폼은 placeholder를 렌더링한다(업로드·저장은 정상 동작). 실제 표시는 M2에서 공개 버킷과 함께.
+
+**현재 상태 (M2 완료)**: 공개 축소본은 `dweb-cover` 버킷과 `PUBLIC_ASSET_BASE_URL` 경로로 서빙하고, 원고는 비공개 `dweb` 버킷에 유지한다. 위 M1.5 문단은 도입 전 이력이다.
 
 ### 원고 presigned GET: 관리자 미리보기용은 F3에서 앞당김 (2026-07-15)
 
@@ -219,7 +222,7 @@
 
 **미채택**: HTML 저장(새니타이저 의존 + XSS 면적), 회차 단위 유료 유지(경계 맨 앞 배치 = 전체 유료라 상위 호환인데 표현력만 잃음), Lexical(다운로드 열세 + 프레임워크 종속 심함), is_free 직접 입력 유지(경계 위치와 이중 진실 - 불일치 버그 온상).
 
-**여파**: 글 작성이 본문 모델에 내장돼 "소설 뷰어" 보류의 전제 일부가 해소되지만, 전용 소설 뷰어(뷰어 설정·이어보기 UX 등)는 여전히 보류 항목으로 유지. `viewer_progress.page_no`는 M2에서 블록 인덱스로 재해석 예정.
+**여파**: 글 작성이 본문 모델에 내장돼 "소설 뷰어" 보류의 전제 일부가 해소되지만, 전용 소설 뷰어(뷰어 설정·이어보기 UX 등)는 여전히 보류 항목으로 유지. `viewer_progress.page_no`는 M2에서 블록 index로 재해석했고, 블록 내부 위치는 `block_offset_bp`로 보강했다.
 
 **발행본/편집본 분리 (2026-07-23, #86)**: "임시저장 = `is_published=false`"라는 등식을 폐지한다. 공개 회차에서 임시저장이 `content`를 덮으면 미완성 원고가 즉시 라이브 반영되는 사고 경로였다(발행된 회차에선 '임시'가 아니었음). `episodes.draft`(JSONB, nullable)에 **편집본 봉투** `{"title", "subtitle", "content"}`를 저장하고(본문만 담으면 공개 회차의 제목 수정이 여전히 즉시 반영되는 반쪽 분리라 메타 포함), 서버 불변식으로 고정한다: ① draft·content 동시 전송 422 ② **공개 회차의 content는 `is_published` 동반 요청(발행 액션)만 덮을 수 있다**(위반 409 + 조건부 UPDATE `WHERE is_published=false`로 스케줄러 공개 전환 race까지 원자 봉쇄) ③ content 쓰기는 draft를 항상 NULL로 소진(발행 = 승격, 별도 promote 엔드포인트 없음 - 에디터가 항상 최신 문서를 들고 있어 stale draft 승격 혼동이 없다) ④ draft 검증은 발행본과 동일(`validate_content` + image_keys 부분집합, 매니페스트 축소가 draft 참조 키를 지우면 422). draft는 owner 전용 `AdminEpisodeRead`에만 노출 - 독자 DTO 금지(미발행 원고 유출). 신규 회차는 기존대로 `content` 직접 편집(비공개라 그 자체가 draft - "아직 발행 안 함"과 "임시저장"은 문구만 분리). **미채택**: 스냅샷 테이블(버전 이력 - 1인 작가·단일 편집 세션에 과함), stateless promote 엔드포인트.
 
@@ -570,7 +573,7 @@ main (항상 배포 가능 상태)
 
 - **왜 F1이 아니라 F2인가**: F1은 타입 표면이 작아(`UserRead`/`AdminLoginResponse`/`TotpSetupResponse` 4개) 수기로도 버틸 만해 의도적으로 미뤘다. F2(작품 CRUD)부터 Work/Tag/Episode 요청·응답 스키마가 한꺼번에 들어와 표면이 커지고, F3·F4도 이어 붙는 시점이라 지금이 도입 분기점.
 - **문제**: 수기 미러링은 백엔드 스키마가 바뀌어도 `tsc`가 못 잡는다(둘 다 독립된 텍스트라 컴파일러 관점에서 드리프트가 안 보임) - 런타임에 `undefined`로만 드러난다. F1에서 `types/index.ts` 주석에 이미 "RoleEnum 값이 바뀌면 role 가드가 조용히 오작동" 경고를 남겨둔 상태였다.
-- **채택**: `backend/scripts/export_openapi.py`(서버 기동 없이 `app.openapi()` 덤프) + `scripts/generate-api-types.sh`(루트, JSON 중간산출물 생성→`openapi-typescript`→삭제) + `admin package.json`의 `generate:types` 스크립트. 생성물(`api.gen.ts`)은 `routeTree.gen.ts`와 동일하게 **커밋**(FE/admin CI job이 아직 없어 빌드 시 재생성을 강제할 수 없음 - CI/CD 결정 "후속" 참조).
+- **채택**: `backend/scripts/export_openapi.py`(서버 기동 없이 `app.openapi()` 덤프) + `scripts/generate-api-types.sh`(루트, JSON 중간산출물 생성→`openapi-typescript`→삭제) + `admin package.json`의 `generate:types` 스크립트. 생성물(`api.gen.ts`)은 `routeTree.gen.ts`와 동일하게 **커밋**한다. 현재 admin CI는 lint/test/build를 실행하지만 타입 재생성 drift는 강제하지 않으므로, backend schema 변경자가 `pnpm --filter admin generate:types`를 실행하고 diff를 함께 검토한다.
 - **탈락**: `@hey-api/openapi-ts`·`orval` 등 경쟁 도구도 검토했으나 openapi-typescript가 카테고리 다운로드 1위(주간 ~400만, 2026-07-14 npm 확인)이자 가장 얇음(타입만 생성, 런타임 클라이언트 강제 없음 - 기존 `packages/shared`의 `createApi` 래퍼를 그대로 유지).
 - **규칙**: `api.gen.ts`는 손으로 고치지 않는다. 스키마 변경 후 `pnpm --filter admin generate:types` 재실행 → `index.ts` 별칭이 여전히 유효한지 확인.
 
@@ -578,9 +581,11 @@ main (항상 배포 가능 상태)
 
 ## CI/CD 결정
 
-### CI: GitHub Actions, 백엔드 우선 (2026-06-22)
+### CI: GitHub Actions 도입 이력과 현재 상태 (2026-06-22, 2026-08-23 갱신)
 
 **결정: M0 F1을 백엔드 CI부터 구현한다. PR(→main)·main 푸시 시 ruff + format + pytest를 GitHub Actions로 돌린다. CD/배포(F2~F3)와 FE/admin job은 후속.**
+
+**현재 상태**: `.github/workflows/ci.yml`에 backend, frontend, admin 세 job이 모두 구현되어 있다. frontend는 lint/astro check/build/test, admin은 lint/build/test를 실행한다. 위 문장은 단계적 도입 당시 결정 이력이다.
 
 - **범위 = 백엔드 우선**: 결제·인증·Signed URL 등 데이터 무결성 리스크가 BE에 집중 → 가장 비싼 회귀부터 막는다. FE/admin(eslint+tsc)은 frontend ESLint 셋업 선행 필요라 분리.
 - **도구**: `astral-sh/setup-uv`(캐시) + `uv sync --locked`(lockfile 재현성) + `actions/checkout`. Python은 `uv python install`이 `requires-python`(3.12)으로 자동 설치.

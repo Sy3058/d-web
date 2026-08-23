@@ -1,15 +1,15 @@
 # 반복 실수 패턴
 
 작업 중 실수가 발생하면 여기에 추가.
-사용법: `@docs/MISTAKES.md 참고해서 [작업] 해줘`
+사용법: `docs/MISTAKES.md 참고해서 [작업] 해줘`
 
 ---
 
 ## 사용 예시
 
 ```
-@docs/MISTAKES.md 참고해서 결제 API 구현해줘
-@docs/MISTAKES.md 참고해서 FastAPI 라우터 작성해줘
+docs/MISTAKES.md 참고해서 결제 API 구현해줘
+docs/MISTAKES.md 참고해서 FastAPI 라우터 작성해줘
 ```
 
 ---
@@ -19,7 +19,7 @@
 - 액션을 `@vN`(메이저만)으로 박기 전에 그 메이저 **무빙 태그가 실제 있는지** 확인할 것
   → `astral-sh/setup-uv`는 v8부터 무빙 메이저 태그(`v8`)를 안 만든다 → `@v8`은 "Set up job"에서 `Unable to resolve action ... unable to find version v8`로 즉사(3초컷, 테스트 도달 못 함)
   → `actions/checkout`은 `v6` 무빙 태그가 있어 `@v6` OK. **액션마다 태그 정책이 다름**
-  → 확인: `gh api repos/<owner>/<repo>/tags --jq '.[].name'`로 실제 태그를 본 뒤 정확한 버전(`@v8.2.0`)으로 핀. WebSearch 요약("v8 있다더라")만 믿고 박지 말 것 (실제 사고: 첫 CI가 그래서 두 번 빨강)
+  → 확인: `gh api repos/<owner>/<repo>/tags --jq '.[].name'`로 실제 태그를 본 뒤 정확한 버전(`@v8.2.0`)으로 핀. 검색 결과 요약만 믿고 박지 말 것 (실제 사고: 첫 CI가 그래서 두 번 빨강)
   → 정확한 버전 핀은 워크어라운드가 아니라 공급망 보안상 권장(무빙 태그는 같은 이름이 다른 커밋을 가리킬 수 있음). 다음 단계는 SHA 핀
 
 - 커밋 타입 `ci`/`build`는 GUIDE_COMMIT.md엔 있지만 **commit-msg 훅이 거부**한다
@@ -228,7 +228,7 @@
   → admin이 vite@8을 쓰면 workspace 전체에서 `@tailwindcss/vite`가 vite@8 바인딩으로 resolve됨
   → Astro 6 (vite@7) 환경에서 `tsconfigPaths` 누락 에러 발생
   → 해결: 각 패키지에 peer 고정 (`frontend`에 `vite@^7` devDep 명시)
-  → 근본 해결은 Astro 7 (vite@8) 출시 후 일괄 업그레이드 (DECISIONS.md 참조)
+  → Astro 7은 Vite 8 기반으로 출시됐지만 현재는 Astro 6/Vite 7을 유지한다. 별도 migration 범위와 전체 게이트를 잡은 뒤 업그레이드한다 (DECISIONS.md 참조)
 
 - pnpm workspace 추가 후 lockfile이 구버전 peer 해석을 캐싱할 수 있음
   → `pnpm install --force` 또는 `rm pnpm-lock.yaml && pnpm install`로 강제 재계산
@@ -252,15 +252,15 @@
   → 훅 거부는 커밋만 실패시키고 `git add`는 유효하게 남는다. 한 Bash 블록에서 add·commit을 순차 나열하면 앞 커밋 실패 시 뒤 커밋이 전부 쓸어간다
   → 대응: 연속 커밋은 `&&`로 연결해 앞 실패 시 중단시키거나, 훅 거부 후 `git status`로 스테이징 확인 뒤 재시도. 이 repo는 브랜치명·커밋 형식 훅이 있어 거부가 드물지 않다
 
-- 코딩 완료 후 커밋 전 반드시 Opus 검증 단계 거칠 것
-  → 순서: 계획(Opus) → 코딩(Sonnet) → 검증(Opus) → 커밋
-  → Opus 없이 바로 `git commit`으로 넘어가지 말 것
+- 코딩 완료 후 커밋 전 반드시 변경 범위에 맞는 리뷰와 검증 단계를 거칠 것
+  → 순서: 계획(`$fable-plan`, 필요 시) → 코딩(`$fable-exec`) → 검증·리뷰(`$fable-review`) → 사용자 승인 → 커밋
+  → DB·동시성·보안·아키텍처는 착수 전에 권장 모델과 reasoning 수준을 사용자에게 제안
 
 - **한 곳을 고쳤으면 같은 성질의 형제 위치를 반드시 훑을 것** (M2 B, 2026-07-21 - 한 세션에 2회 반복)
   → 1회차: `routers/episodes.py`의 404에 `no-store`를 붙이고 **같은 PR에서 새로 만든** `routers/works.py`의 404를 빠뜨림. "기존 공유 코드라 범위 밖"이라 판단했으나 그 엔드포인트도 이번에 추가한 신규 코드였다
   → 2회차: 위를 고치며 `backend/CLAUDE.md`의 규칙만 갱신하고 **루트 `CLAUDE.md`의 같은 규칙**을 또 빠뜨림(하필 매 세션 자동 로드되는 "절대 하면 안 되는 것들" 섹션)
   → 둘 다 코드 리뷰가 최상위 발견으로 잡아냈다. 즉 **리뷰가 없었으면 그대로 머지됐을 종류**다
-  → 체크: 규칙·상수·헬퍼·에러 응답을 고쳤으면 `grep`으로 **같은 문자열·같은 패턴의 다른 출현부**를 먼저 세고 시작한다. 특히 CLAUDE.md는 루트/영역별로 **중복 서술**되므로 한쪽만 고치면 두 문서가 서로 모순된다
+  → 체크: 규칙·상수·헬퍼·에러 응답을 고쳤으면 `rg`로 **같은 문자열·같은 패턴의 다른 출현부**를 먼저 센다. 현재 권위 지침은 루트/영역별 `AGENTS.md`이므로 한쪽만 고쳐 문서가 모순되지 않는지 확인한다
   → "이건 범위 밖"이라는 판단은 그 코드가 **이번 diff에서 새로 생긴 것인지** 확인한 뒤에만 유효하다
 
 - **리뷰 지적을 고칠 때 그 수정이 새로 들이는 비용을 확인할 것** (M2 B, 2026-07-21)
@@ -285,7 +285,7 @@
   → 되돌릴 수 없는 방향(노출·공개·전송)은 자동화하지 않는다. 자동 연동은 fail-closed 방향(숨김)에만 걸고, 여는 쪽은 사용자가 직접 누르게 한다
   → 리뷰에서도 놓치기 쉽다: 수정 폼 경로만 보고 "머지 가능"으로 판정했다가 등록 폼 경로에서 걸렸다. **같은 컴포넌트를 쓰는 create/edit 두 진입점을 각각 확인할 것**
 
-## Claude 작업 효율 (셸/검증 패턴)
+## Codex 작업 효율 (셸/검증 패턴)
 
 - env 값 존재 확인에 `sed 's/=.*/=<값 있음>/'` 식 마스킹을 쓰지 말 것 - **빈 값(`KEY=`)도 `=<값 있음>`으로 치환**돼 "채워짐"으로 오판
   → 실제 사고: M1.5 D 착수 시 R2 자격증명이 비어 있는데 "전부 채워져 있다"고 보고(블로커 해소 오판)
@@ -310,8 +310,8 @@
   → 출력이 늦으면 `flush`용 echo를 난사하는 대신, 결과를 파일로 redirect(`> /tmp/x.txt 2>&1`)하고 Read로 한 번에 읽기
   → 여러 검증을 한 번에: sentinel(`echo START ... echo END`)로 감싸 한 블록으로 확인
 
-- **Bash 도구의 cwd는 호출 간 유지된다 - 상대경로가 빗나가면 삭제·부재를 의심하기 전에 cwd부터 의심할 것** (M2 A 후속 2026-07-19, M2 D 사고 추가 2026-07-21)
-  → 호출마다 새 셸이 아니라 **세션 내내 유지되는 하나의 지속 셸**이다. `cd backend && ...`를 한 번 돌리면 되돌아 나오는 `cd`를 넣지 않는 한 **완전히 별개의 다음 호출도** `backend/`에서 시작한다
+- **도구 호출 사이 cwd 유지 여부를 가정하지 말고 호출마다 작업 디렉터리를 명시할 것** (M2 A 후속 2026-07-19, M2 D 사고 추가 2026-07-21)
+  → 실행 환경에 따라 cwd가 유지되거나 초기화될 수 있다. 현재 도구의 `workdir`을 사용하고, 서브디렉터리 명령은 경로가 분명한 형태로 실행한다
   → 빗나가는 방식이 두 가지고 **둘 다 조용하다**: (a) `No such file or directory` - "파일이 없다"와 구별이 안 됨, (b) 이중 경로(`backend/backend/...`)로 **에러 없이 빈 출력** - "차이 없음"으로 오판
   → 실제 사고 1(M2 A): `docs/milestones/M2_foundation.md`가 없다고 3번 연속 오판. `cd <root> && grep` 조합조차 다음 호출엔 안 남아 또 실패
   → 실제 사고 2(M2 D): `git diff <A> <B> -- backend/services/catalog_service.py`를 `backend/` 안에서 실행해 빈 결과 → **"겹치는 파일 없음"으로 오판**(브랜치 base 동기화 사고로 이어질 뻔). 별개로 `cd admin`에서 안 나온 채 `git add compose.yml`이 `pathspec did not match`로 실패
@@ -327,7 +327,7 @@
   → 새로 만들/지울 파일은 먼저 `git ls-files`나 Read로 존재 여부 확정
   → autogenerate(alembic 등)가 만든 파일명/리비전 ID를 추측해서 쓰지 말 것. 실제 생성된 파일을 Read로 확인 후 사용
 
-- AskUserQuestion 답을 받기 전에 진행하지 말 것
+- 사용자에게 필수 선택을 요청했다면 답을 받기 전에 그 선택에 의존하는 변경을 진행하지 말 것
   → 도구 호출이 guard/취소로 무산되면 답을 못 받은 것. "받은 척" 후속 작업 금지
 
 - 한 가지 변경을 두 가지 방법으로 동시에 하지 말 것 (방법 하나만 택일)
@@ -360,11 +360,11 @@
   → `gh issue view`, `gh pr view/list`로 이슈·PR 상태 직접 조회 가능. 이슈 닫기/코멘트는 외부 동작이라 사용자 확인 후
   → 단 빈/에러 출력을 "없음"으로 단정하는 일반 함정은 여전히 주의. 머지는 `gh`로도 `git log origin/main`(squash 커밋 `... (#PR)`)으로도 교차 확인
 
-- Bash 호출 간 작업 디렉터리(cwd)가 리셋될 수 있음 - 지속을 보장하지 말 것
-  → backend 명령은 항상 `cd /home/ash99/project/d-web/backend && uv run ...` 형태로 경로를 명시
+- 도구 호출 간 작업 디렉터리(cwd)의 지속을 보장하지 말 것
+  → backend 명령은 `workdir=/home/ash99/project/d-web/backend`처럼 실행 위치를 명시
   → cwd 가정 시 `Failed to spawn: ruff`(루트엔 venv 없음)·`ModuleNotFoundError: No module named 'src'`로 깨짐. 실제 사고: 같은 `uv run`이 한 번은 되고 다음 호출엔 cwd가 루트로 돌아가 실패
 
-- 같은 턴에 병렬로 던진 Bash 호출들은 **직전 호출이 남긴 cwd를 그대로 이어받는다** - "매번 새 셸"로 가정하면 상대경로 `cd`가 깨진다
+- 병렬 명령도 서로의 cwd 상태를 공유한다고 가정하지 않는다
   → 실제 사고: `cd admin && pnpm build` 실행 후 cwd가 `admin/`으로 남은 채, 같은 턴에 병렬로 `cd admin && pnpm lint` / `cd admin && pnpm test`를 또 보내 `cd: admin: No such file or directory`
   → 병렬 호출에서 상대경로 `cd`를 반복하지 말 것. 절대경로로 고정하거나(`cd /repo/admin && ...`), `pnpm --filter admin <script>`처럼 cwd 무관 실행형을 우선 사용
 
@@ -379,14 +379,14 @@
 
 - 계획 단계에서 사용자 승인 전에 파일 편집(코딩)으로 건너뛰지 말 것
   → 실제 사고: E1에서 "계획 세우자" 단계인데 `config.py`를 바로 Edit하기 시작 → 사용자가 두 번 제지("지금은 계획 세우는 단계야")
-  → 계획(Opus)은 "무엇을·어떻게"와 변경 파일 목록까지만. 파일 쓰기는 사용자가 계획에 OK한 뒤 코딩 단계에서. 순서: 계획 → (승인) → 코딩 → 검증 → 커밋
+  → `$fable-plan`은 "무엇을·어떻게"와 변경 파일 목록까지만 다룬다. 사용자가 계획만 요청했다면 승인 전 구현으로 넘어가지 않는다. 순서: 계획 → (승인) → 코딩 → 검증 → 커밋
 
 - diff 조각만 보고 "버그"라 단정하기 전에 각 심볼의 실제 정의를 모듈별로 확인할 것
   → 실제 사고: #27 포맷 diff에서 `routers/auth.py`의 `detail=_UNAUTHORIZED`를 "HTTPException 객체를 detail에 넣은 버그"라 FYI 보고 → 허위 이슈 등록 직전까지 감
   → 원인: `_UNAUTHORIZED`가 두 모듈에 동명 존재(`routers/auth.py:52`=문자열 메시지, `lib/auth.py:145`=HTTPException 객체). diff 두 조각을 모듈 맥락 없이 한 화면에서 보다 한 바인딩으로 뭉침
   → 교훈: cross-module 동명 심볼은 같은 게 아님. grep/Read로 각 모듈의 실제 정의를 확인한 뒤에야 버그 단정. squash-merge repo라 허위 이슈는 노이즈만
 
-- 본문 답변과 AskUserQuestion(퀴즈 등)을 같은 턴에 섞지 말 것
+- 본문 답변과 별도 사용자 입력 UI(퀴즈 등)를 같은 턴에 섞지 말 것
   → 도구 호출 **앞에** 쓴 텍스트는 사용자 화면에서 가려질 수 있음.
   → 답변이 턴의 최종 메시지가 되게 하고, 퀴즈/질문 도구는 다음 턴에. 또는 도구를 먼저 호출하고 결과 받은 뒤 최종 메시지에 본문을 담기
 
