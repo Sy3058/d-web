@@ -33,6 +33,7 @@
   2. **공개 회차의 `content`는 `is_published` 동반 요청만 덮는다** - 위반 409. 클라 분기만으로는 "예약 회차를 편집하다 자정 넘겨 임시저장 -> 스케줄러가 이미 공개 전환" race에서 사고가 재발하므로, 조건부 UPDATE `WHERE is_published = false` 가드로 원자 봉쇄(같은 rowcount 패턴 - refresh 회전·TOTP 전진과 동계열)
   3. `content` 쓰기는 `draft`를 항상 NULL로 소진 - 발행 = 승격. 별도 promote 엔드포인트를 두지 않는 이유: 에디터가 항상 최신 문서를 들고 있어 "stale draft 승격" 혼동이 원천 차단된다
   4. draft 검증 = 발행본과 동일(`validate_content` 화이트리스트·상한·image_keys 부분집합). 매니페스트 축소가 저장된 draft의 참조 키를 지우면 422 - 검증 안 된 문서가 DB에 사는 상태를 만들지 않는다
+  5. 대표 이미지 불변식은 발행본 `content`에만 적용한다. 공개 회차의 draft에서 이미지를 빼는 임시저장은 현재 공개 썸네일을 건드리지 않고, `content` 승격 요청에서 빠진 대표 이미지를 NULL로 정규화한 뒤 공개 파생 객체를 삭제한다
 - **`AdminEpisodeRead.draft`는 `EpisodeDraft` 정타입**: `dict`로 두면 openapi codegen이 `{[key: string]: unknown}`으로 뽑아 admin에서 `draft.title` 접근이 tsc 에러(실측). 쓰기 경로가 같은 스키마로 검증하므로 저장된 봉투는 항상 이 형태다.
 - **독자 응답 무접촉**: 공개 DTO(catalog·viewer)는 변경 0. `test_catalog`·`test_episode_content`의 부재-단언("draft 필드·편집본 텍스트가 응답에 없음")으로 회귀 고정.
 - **신규 회차는 기존 흐름 유지**: 비공개 회차의 `content` 직접 편집은 그 자체가 draft(독자 무접촉). "아직 발행 안 함"과 "임시저장"은 문구만 분리.

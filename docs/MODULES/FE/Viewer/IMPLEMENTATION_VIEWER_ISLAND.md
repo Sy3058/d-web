@@ -4,8 +4,8 @@
 |------|------|
 | 모듈 | Frontend / Viewer (독자 열람 경로 - 콘텐츠 문서 렌더러) |
 | 관련 마일스톤 | [M2](../../../milestones/M2_foundation.md) 그룹 F (F1, WORK-05~08) |
-| 작성 시점 | M2 F1 (2026-07-25), 후속 보완 (2026-07-26 - §7), 긴 블록 복원 보강 (2026-08-14 - §8), 요청 실패 복구 보강 (2026-08-17~18 - §9), 비로그인 로컬 진행도 (2026-08-18 - §10) |
-| 상태 | 구현 + 리뷰 반영. 로그인 서버 진행도와 비로그인 기기 로컬 진행도 자동 테스트 통과(2026-08-18). M2 전체 수동 e2e는 그룹 H의 나머지 항목 확인 대기 |
+| 작성 시점 | M2 F1 (2026-07-25), 후속 보완 (2026-07-26 - §7), 긴 블록 복원 보강 (2026-08-14 - §8), 요청 실패 복구 보강 (2026-08-17~18 - §9), 비로그인 로컬 진행도 (2026-08-18 - §10), 그룹 H 완료 검증 (2026-08-21) |
+| 상태 | 구현 + 리뷰 + 그룹 H 사용자·자동 검증 완료. M2 전체 종료는 관리자 대표 이미지 후보 불변식 버그 수정 대기 |
 | 관련 문서 | M2_foundation.md 그룹 F·결정 1/3/6, IMPLEMENTATION_FREE_CONTENT_API.md(B2 계약 원본), IMPLEMENTATION_VIEWER_PROGRESS.md(C1 계약), IMPLEMENTATION_CATALOG_PAGES.md(E, SSR 셸/캐시 정책 원본), IMPLEMENTATION_EPISODE_CONTENT_MODEL.md(#76, 서버 스키마 원본) |
 
 독자가 `/works/{id}/{publicId}`에서 회차 본문(글+이미지 혼합 TipTap 문서)을 읽는 페이지. B2가 절단·presigned 치환한 무료 구간을 아일랜드가 fetch해 렌더하고, 유료 경계가 있으면 말미에 잠금 placeholder를 보여준다. 로그인은 C1 서버 진행도, 비로그인은 같은 브라우저의 localStorage에 읽은 위치(블록 인덱스 + 블록 내부 상대 위치)를 저장·복원한다. 유료 구간 반환·결제 검증은 M3.
@@ -91,9 +91,13 @@ Critical 0. `dangerouslySetInnerHTML`의 XSS 면적을 서버 화이트리스트
 
 ## 5. 검증
 
+- `pnpm --filter frontend lint`: 통과
 - `pnpm --filter frontend astro check`: 0 errors / 0 warnings / 1 hint(기존, 무관)
-- `pnpm --filter frontend test`(vitest run): 79 passed
-- 수동 e2e는 사용자가 직접 확인한다. 로그인 긴 이미지 내부 저장·재진입 복원은 2026-08-15 통과했다. 스크롤 중 이미지 재요청, Network 탭 fetchPriority/no-store, SSR 응답 본문 부재, 드래그·우클릭 차단과 회차당 전송 바이트·이미지 장수 등 M2 전체 항목은 그룹 H 결과를 따른다.
+- `pnpm --filter frontend test`(vitest run): 13 files, 132 passed
+- `pnpm --filter frontend build`: 통과(Sentry token·sourcemap 경고는 기존 비차단 경고)
+- PR #123 CI: backend/frontend/admin 3 jobs 성공
+- 사용자 브라우저: 전체 무료·부분 유료 회차, 잠금 placeholder, 진행도 복원, 보호 동작, SSR 본문 부재, 이미지 즉시 요청·우선순위와 스크롤 중 재요청 부재를 확인했다.
+- 본문 이미지 8장 회차의 DevTools 실측: `8 / 83 requests`, `55.9 kB / 5,911 kB transferred`, `53.6 kB / 5,918 kB resources`, Finish 7.88s, DOMContentLoaded 595ms, Load 853ms. 5MB를 크게 초과한 것으로 보지 않아 결정 6을 유지한다.
 
 ---
 
@@ -101,7 +105,6 @@ Critical 0. `dangerouslySetInnerHTML`의 XSS 면적을 서버 화이트리스트
 
 | 항목 | 이동처 | 근거 |
 |------|--------|------|
-| 회차당 전송 바이트 실측 결과 반영 | 사용자 확인 후 | 결정 6 재검토 조건(5MB 크게 초과 시 lazy 복귀가 아니라 서명 쿠키를 M3로) |
 | `scrollIntoView` 복원 오차(이미지 로딩 중 레이아웃 성장) 개선 | **대폭 완화 (2026-07-26, §7)** | 이미지 로드 대기 + 상시 재-앵커로 완화. **완전 해결은 아님** - 아래 잔여 항목 참조 |
 | `visibilitychange` flush의 keepalive 미보장 유실 | 후속 | C1 결정(저장 실패 조용히 무시)상 허용 범위 |
 | `onerror` 복구가 이미지 1장이 아니라 문서 전체를 재요청·치환(다른 이미지도 재요청됨) | 후속 | 정상 경로에선 안 타는 폴백이라 낮은 우선순위(2026-07-26 재검토에서 발견, 이번 보완 범위 밖) |

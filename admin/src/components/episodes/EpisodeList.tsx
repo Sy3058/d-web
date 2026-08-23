@@ -81,89 +81,115 @@ export function EpisodeList({ workId, episodes, basePrice }: EpisodeListProps) {
           순서를 바꾸지 못했습니다. {describeAuthError(reorderEpisodes.error)}
         </p>
       )}
-      <table className="w-full border-collapse text-sm">
-        <thead>
-          <tr className="text-left text-gray-500">
-            <th className="px-3 py-2 font-medium">
-              <span className="sr-only">순서</span>
-            </th>
-            <th className="px-3 py-2 font-medium">제목</th>
-            <th className="px-3 py-2 font-medium">이미지</th>
-            <th className="px-3 py-2 font-medium">가격</th>
-            <th className="px-3 py-2 font-medium">상태</th>
-            <th className="px-3 py-2">
-              <span className="sr-only">관리</span>
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {episodes.map((episode, index) => {
-            const badge = statusBadge(episode);
-            return (
-              <tr key={episode.id} className="border-t border-gray-200 hover:bg-gray-50">
-                <td className="px-3 py-2">
-                  {/* 재배열 중에는 전 버튼을 잠근다 - 인플라이트 요청의 응답이 캐시를
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[44rem] table-fixed border-collapse text-sm">
+          <colgroup>
+            <col className="w-10" />
+            <col />
+            <col className="w-20" />
+            <col className="w-24" />
+            <col className="w-28" />
+            <col className="w-10" />
+          </colgroup>
+          <thead>
+            <tr className="text-left text-gray-500">
+              <th className="px-3 py-2 font-medium">
+                <span className="sr-only">순서</span>
+              </th>
+              <th className="px-3 py-2 font-medium">제목</th>
+              <th data-column="image" className="w-20 px-3 py-2 font-medium">
+                이미지
+              </th>
+              <th data-column="price" className="w-24 px-3 py-2 font-medium">
+                가격
+              </th>
+              <th data-column="status" className="w-28 px-3 py-2 font-medium">
+                상태
+              </th>
+              <th className="px-3 py-2">
+                <span className="sr-only">관리</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {episodes.map((episode, index) => {
+              const badge = statusBadge(episode);
+              return (
+                <tr key={episode.id} className="border-t border-gray-200 hover:bg-gray-50">
+                  <td className="px-3 py-2">
+                    {/* 재배열 중에는 전 버튼을 잠근다 - 인플라이트 요청의 응답이 캐시를
                       덮기 전에 또 누르면 화면에 보이는(낡은) 순서를 기준으로 계산해
                       직전 이동을 되돌리는 요청이 나간다. */}
-                  <div className="flex flex-col gap-0.5">
-                    <button
-                      type="button"
-                      onClick={() => move(index, -1)}
-                      disabled={index === 0 || reorderEpisodes.isPending}
-                      aria-label={`${episode.title} 위로 이동`}
-                      className="rounded px-1 leading-none text-gray-400 hover:bg-gray-200 hover:text-gray-700 disabled:opacity-30 disabled:hover:bg-transparent"
+                    <div className="flex flex-col gap-0.5">
+                      <button
+                        type="button"
+                        onClick={() => move(index, -1)}
+                        disabled={index === 0 || reorderEpisodes.isPending}
+                        aria-label={`${episode.title} 위로 이동`}
+                        className="rounded px-1 leading-none text-gray-400 hover:bg-gray-200 hover:text-gray-700 disabled:opacity-30 disabled:hover:bg-transparent"
+                      >
+                        <span aria-hidden="true">↑</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => move(index, 1)}
+                        disabled={index === episodes.length - 1 || reorderEpisodes.isPending}
+                        aria-label={`${episode.title} 아래로 이동`}
+                        className="rounded px-1 leading-none text-gray-400 hover:bg-gray-200 hover:text-gray-700 disabled:opacity-30 disabled:hover:bg-transparent"
+                      >
+                        <span aria-hidden="true">↓</span>
+                      </button>
+                    </div>
+                  </td>
+                  <td className="overflow-hidden px-3 py-2">
+                    <Link
+                      to="/works/$workId/episodes/$episodeId"
+                      params={{ workId, episodeId: episode.id }}
+                      className="block truncate font-medium hover:underline"
                     >
-                      <span aria-hidden="true">↑</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => move(index, 1)}
-                      disabled={index === episodes.length - 1 || reorderEpisodes.isPending}
-                      aria-label={`${episode.title} 아래로 이동`}
-                      className="rounded px-1 leading-none text-gray-400 hover:bg-gray-200 hover:text-gray-700 disabled:opacity-30 disabled:hover:bg-transparent"
-                    >
-                      <span aria-hidden="true">↓</span>
-                    </button>
-                  </div>
-                </td>
-                <td className="px-3 py-2">
-                  <Link
-                    to="/works/$workId/episodes/$episodeId"
-                    params={{ workId, episodeId: episode.id }}
-                    className="block font-medium hover:underline"
-                  >
-                    {episode.title}
-                  </Link>
-                  {episode.subtitle && <p className="text-xs text-gray-400">{episode.subtitle}</p>}
-                </td>
-                <td className="px-3 py-2 text-gray-500">{episode.image_keys.length}장</td>
-                <td className="px-3 py-2 text-gray-500">{priceLabel(episode, basePrice)}</td>
-                <td className="px-3 py-2">
-                  <span className={`rounded px-2 py-0.5 text-xs ${badge.className}`}>
-                    {badge.label}
-                  </span>
-                  {episode.draft != null && (
-                    <span className="ml-1 rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-700">
-                      임시저장본
-                    </span>
-                  )}
-                </td>
-                <td className="px-3 py-2 text-right">
-                  <EpisodeActionsMenu
-                    episode={episode}
-                    onUnpublish={() => unpublishEpisode.mutate(episode.id)}
-                    onDelete={() => handleDelete(episode)}
-                    isUnpublishing={unpublishingId === episode.id}
-                    isDeleting={deletingId === episode.id}
-                    unpublishLocked={unpublishEpisode.isPending}
-                    deleteLocked={deleteEpisode.isPending}
-                  />
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+                      {episode.title}
+                    </Link>
+                    {episode.subtitle && (
+                      <p className="truncate text-xs text-gray-400">{episode.subtitle}</p>
+                    )}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2 text-gray-500">
+                    {episode.image_keys.length}장
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2 text-gray-500">
+                    {priceLabel(episode, basePrice)}
+                  </td>
+                  <td className="px-3 py-2">
+                    <div className="flex flex-wrap gap-1">
+                      <span
+                        className={`whitespace-nowrap rounded px-2 py-0.5 text-xs ${badge.className}`}
+                      >
+                        {badge.label}
+                      </span>
+                      {episode.draft != null && (
+                        <span className="whitespace-nowrap rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-700">
+                          임시저장본
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    <EpisodeActionsMenu
+                      episode={episode}
+                      onUnpublish={() => unpublishEpisode.mutate(episode.id)}
+                      onDelete={() => handleDelete(episode)}
+                      isUnpublishing={unpublishingId === episode.id}
+                      isDeleting={deletingId === episode.id}
+                      unpublishLocked={unpublishEpisode.isPending}
+                      deleteLocked={deleteEpisode.isPending}
+                    />
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </>
   );
 }

@@ -12,6 +12,7 @@ from src.lib.content_doc import (
     MAX_CONTENT_DEPTH,
     MAX_CONTENT_NODES,
     MAX_CONTENT_TEXT_CHARS,
+    content_image_keys,
     derive_is_free,
     empty_doc,
     has_meaningful_content,
@@ -254,6 +255,27 @@ def test_meaningful_check_handles_deep_corrupt_tree_without_recursion_error():
 
     assert free == _doc()
     assert has_paid is True
+
+
+def test_content_image_keys_collects_nested_unique_keys():
+    nested = {
+        "type": "paragraph",
+        "content": [_img(KEY), {"type": "paragraph", "content": [_img("nested-key")]}],
+    }
+    assert content_image_keys(_doc(_img(KEY), nested, _img("last-key"))) == {
+        KEY,
+        "nested-key",
+        "last-key",
+    }
+
+
+def test_content_image_keys_ignores_malformed_nodes():
+    doc = _doc(
+        {"type": "image", "attrs": {}},
+        {"type": "image", "attrs": {"key": 123}},
+        {"type": "paragraph", "content": [None, "bad"]},
+    )
+    assert content_image_keys(doc) == set()
 
 
 # ---------------------------------------------------------------------------
