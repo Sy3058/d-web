@@ -2,20 +2,22 @@
 
 | 항목 | 내용 |
 |------|------|
-| 문서 버전 | v1.4 (2026-08-11, episodes `first_published_at` + 현행 인덱스 반영) · v1.3 (2026-07-01, users `is_admin`→`role` 3-역할 RBAC) · v1.2 (2026-05-26) |
+| 문서 버전 | v1.5 (2026-08-23, 현행/계획 스키마 구분과 키·인덱스 정정) · v1.4 (2026-08-11, episodes `first_published_at` + 현행 인덱스 반영) |
 | DB | PostgreSQL |
 | ORM | SQLModel |
-| 작성 기준 | PRD v1.0 + 미결 사항 확정 답변 |
+| 작성 기준 | 현재 SQLModel·Alembic migration 우선, 이후 마일스톤 계획은 별도 표시 |
 
 ---
 
 ## 설계 원칙
 
-- 모든 테이블에 `id UUID PRIMARY KEY DEFAULT gen_random_uuid()` 사용
-- soft delete는 `deleted_at TIMESTAMPTZ` 로 처리 (NULL = 유효)
+- 주요 엔티티는 UUID PK를 사용. `works_tags`는 복합 PK, `site_texts`는 문자열 자연키이며 새 테이블은 실제 모델·migration을 확인
+- 삭제 이력 보존이 필요한 모델은 `deleted_at TIMESTAMPTZ`로 soft delete 처리 (현재 User, Work, Episode). 참조가 없는 운영 설정 모델은 별도 결정 가능
 - 타임스탬프는 전부 `TIMESTAMPTZ` (UTC 저장, 표시는 KST 변환)
-- 원시 SQL 금지, SQLModel ORM 사용
+- 사용자 입력을 포함한 원시 SQL 문자열 조합 금지, SQLModel/SQLAlchemy 표현식과 바인딩 사용
 - 금액은 `INTEGER` (원 단위, 소수점 없음)
+
+> **상태 표기**: 1-2절은 현재 구현된 스키마다. 3절 이후에는 아직 migration이 없는 후속 마일스톤 초안이 포함되며, `[계획]` 표시는 구현 계약이 아니다. 실제 변경 전 해당 마일스톤과 `docs/DECISIONS.md`를 다시 확정한다.
 
 ---
 
@@ -105,7 +107,6 @@ works
 ├── synopsis             TEXT
 ├── cover_image          TEXT          -- R2 key
 ├── episode_base_price   INTEGER DEFAULT 500  -- 에피소드 기본가 (원)
-├── bundle_discount_rate NUMERIC(4,3) DEFAULT 0.1  -- 전편 할인율 (0.1 = 10%)
 ├── status               VARCHAR(20) DEFAULT 'ongoing'
 │                        -- 'preparing' | 'ongoing' | 'completed' | 'hiatus'
 │                        -- 노출 여부는 is_published 별개 축 (#84 - 상호 강제 없음)
@@ -241,7 +242,9 @@ site_texts
 
 ---
 
-## 3. 결제 도메인
+## 3. 결제 도메인 [계획 - M3]
+
+> 아래는 M3 설계 입력이다. 현재 DB에는 없으며, 특히 `purchase_type='bundle'`과 `bundle_id`는 현재 범위 제외 항목이므로 명시적 결정 없이 migration이나 API를 구현하지 않는다.
 
 ### purchases
 ```sql
@@ -302,7 +305,7 @@ donations
 
 ---
 
-## 4. 커뮤니티 도메인
+## 4. 커뮤니티 도메인 [계획 - M4]
 
 ### posts
 ```sql
@@ -397,7 +400,7 @@ reports
 
 ---
 
-## 5. 알림 도메인
+## 5. 알림 도메인 [계획 - M6]
 
 ### notification_settings
 ```sql
@@ -444,7 +447,9 @@ notification_logs
 
 ---
 
-## 6. 인덱스 정리
+## 6. 인덱스 정리 (현행 + 후속 계획)
+
+> 1-2절 테이블의 인덱스는 현재 model·migration과 대조한다. purchases, comments, notifications 등 아직 없는 테이블의 인덱스는 각 `[계획]` 절에 종속된 초안이다.
 
 ```sql
 -- 자주 쓰이는 조회 기준 인덱스
@@ -484,9 +489,6 @@ CREATE INDEX idx_email_verifications_user_id ON email_verifications(user_id);
 CREATE UNIQUE INDEX uq_trusted_devices_token_hash ON trusted_devices(token_hash);
 -- 승격/재등록 시 user 단위 일괄 revoke 조회 (M1.5 B3)
 CREATE INDEX idx_trusted_devices_user_id ON trusted_devices(user_id);
-
--- 공개된 에피소드만 조회 (idx_episodes_work_id와 별개의 partial index)
-CREATE INDEX idx_episodes_published     ON episodes(work_id) WHERE is_published = TRUE;
 
 -- 진행도의 FK 자식 조회 (M2 C1, 2026-07-20 코드리뷰 반영). UNIQUE(user_id, episode_id)는
 -- 선두 컬럼이 user_id라 episode_id 단독 조회에 쓰이지 못한다. episodes 행 삭제 시

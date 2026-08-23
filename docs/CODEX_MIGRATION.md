@@ -29,7 +29,8 @@
 
 ## 운영 메모
 
-- Codex는 저장소를 trusted project로 열어야 `.codex` 설정과 hooks를 로드한다.
-- 새 hook 또는 변경된 hook은 Codex `/hooks` 화면에서 내용을 검토하고 신뢰해야 실행된다.
-- skill은 저장소의 `.agents/skills`에서 자동 탐색된다. 새 세션에서 목록이 갱신되지 않으면 Codex를 재시작한다.
+- 이 저장소에서 Git으로 공유되는 기준은 루트와 영역별 `AGENTS.md`, `docs/`다. Codex는 루트에서 현재 작업 디렉터리까지의 `AGENTS.md`를 계층적으로 적용한다.
+- `.codex/`, `.agents/`, `.claude/`는 `.gitignore`된 로컬 도구 설정이다. 현재 worktree에서는 사용할 수 있지만 clone이나 다른 worktree에 자동 배포되는 project 자산으로 간주하지 않는다.
+- Codex는 저장소를 trusted project로 열어야 로컬 `.codex` 설정과 hooks를 로드한다. 새 hook이나 변경된 hook은 실행 전에 내용을 검토한다.
+- 로컬 skill 목록이 갱신되지 않으면 새 세션에서 다시 확인한다. 재현 가능한 필수 규칙은 skill에만 두지 않고 추적되는 `AGENTS.md`나 관련 문서에도 남긴다.
 - Claude용 설정과 Codex용 설정이 공통 규칙에서 달라지면 먼저 저장소 문서를 고친 뒤 양쪽 지침을 함께 맞춘다.

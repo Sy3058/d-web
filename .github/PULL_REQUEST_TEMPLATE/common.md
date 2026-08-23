@@ -11,11 +11,12 @@
 
 ## 체크
 
-- [ ] 영향 받는 영역 CLAUDE.md 업데이트 완료
+- [ ] 영향 받는 영역 `AGENTS.md`와 가이드 업데이트 필요 여부 확인
 - [ ] DECISIONS.md 기록 필요 여부 확인
 - [ ] 환경변수 변경 시 `.env.example` 업데이트
 - [ ] Docker/CI 변경 시 배포 순서 확인
 
 ## 검증 체크
 
-- [ ] 영향 받는 영역 빌드 확인 (`npm run build` / `uvicorn src.main:app`)
+- [ ] 영향 받는 영역의 `AGENTS.md` 기본 게이트 통과
+- [ ] 실행하지 못한 검증과 이유 기록

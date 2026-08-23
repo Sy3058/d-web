@@ -78,13 +78,13 @@
 
 ### B6. Astro 독자용 프론트엔드 ✅
 - 선행: 없음
-- 산출물: `frontend/` (frontend/CLAUDE.md 구조), Tailwind, React 통합, `BaseLayout.astro`
+- 산출물: `frontend/` (`frontend/AGENTS.md` 구조), Tailwind, React 통합, `BaseLayout.astro`
 - DoD: `astro dev` 실행 시 `/` 응답
 - 결정: **Node 24 LTS** (DECISIONS "Node 버전")
 - 후속 보강(deferred, 골격이라 미룸):
   - `lib/validation.ts`: `z.string().email(msg)` → zod v4 권장형 `z.email(msg)`로 교체 (M1 인증 폼 작업 시)
   - `lib/api.ts`: 에러 바디를 raw text가 아닌 FastAPI `{"detail": ...}` JSON 파싱 (에러 UI 붙일 때)
-  - `frontend/.env.example` 추가 - `PUBLIC_API_BASE_URL` 등 PUBLIC_* 변수 문서화
+  - `frontend/.env.example` 추가 - 브라우저 `PUBLIC_API_URL`과 SSR `API_INTERNAL_URL` 분리 문서화
 
 ### B7. Vite React SPA 관리자 ✅
 - 선행: 없음
@@ -103,7 +103,7 @@
 - 메모:
   - Astro 6는 Vite 7을 사용하므로 workspace 전체를 Vite 7로 통일 (admin도 vite@^7, @vitejs/plugin-react@^5)
   - `@tailwindcss/vite@4.3.0`이 Vite 8 바인딩에서 tsconfigPaths 필드를 요구하는 버그 있음 - Vite 7로 고정해 회피
-  - **Astro 7 stable 출시 시 Vite 8 일괄 업그레이드 필요**: frontend(astro@7), admin(vite@8 + @vitejs/plugin-react@6), frontend/package.json의 `vite` devDep 고정 제거
+  - Astro 7은 Vite 8 기반으로 출시됐지만 현재는 Astro 6/Vite 7 유지. 별도 migration 착수 시 frontend(astro@7), admin(vite@8 + @vitejs/plugin-react@6), frontend의 Vite 고정과 호환성을 함께 검증
 
 ### B9. Sentry FE 양쪽 ✅
 - 선행: B6, B7, A7
@@ -221,6 +221,7 @@
 - **부분 구현 (프론트엔드분, 2026-07-23, PR `common/chore/frontend-ci`)**: frontend job = `pnpm/action-setup@v6`(pnpm 10, setup-node보다 선행 - cache가 pnpm 요구) + `setup-node@v7`(Node 24, cache: pnpm) + `pnpm install --frozen-lockfile` + `astro check` + `build` + `vitest run`(12). Sentry는 auth token 미설정 시 경고만(소스맵 업로드 skip, 실측).
 - **부분 구현 (admin분, 2026-07-23, 동일 PR `common/chore/frontend-ci`)**: admin job = frontend job과 동일 셋업 + `eslint .` + `tsc -b && vite build` + `vitest run`(54). admin은 ESLint 기설정이라 "FE/admin 후속" 중 admin은 선행 조건이 없었음을 확인하고 편입. `.env` 제거 상태 build·test 그린 실측.
 - **frontend ESLint 구현 (2026-08-18)**: ESLint 10 flat config에 JS/TS/Astro recommended와 React Hooks recommended를 적용하고 `.astro`가 포함된 명시적 lint script를 추가했다. frontend CI는 lint를 astro check 앞에서 실행한다. 로컬 전체 gate와 frozen lockfile 설치는 통과했으며 PR의 실제 Actions 통과 확인은 아직 남았다. type-aware lint, Prettier, JSX a11y, import/style 규칙은 제외했다. 상세는 `docs/MODULES/FE/Scaffold/IMPLEMENTATION_FRONTEND_ESLINT.md`.
+- **F1 완료 (2026-08-19)**: PR #123에서 backend, frontend, admin 세 job이 모두 성공했다. frontend ESLint의 실제 Actions 통과까지 확인했으므로 위 "부분 구현"과 "확인 대기" 문구는 도입 이력으로만 남긴다.
 
 ### F2. build + push 워크플로우
 - 선행: F1, D3
@@ -244,7 +245,7 @@
 
 - [ ] 로컬 `docker compose up` → BE + FE + 관리자 + DB 모두 healthy
 - [ ] 스테이징 HTTPS 정상 (3개 도메인)
-- [ ] PR 푸시 시 CI 5분 내 통과
+- [x] PR 푸시 시 CI 5분 내 통과 (PR #123, backend/frontend/admin 성공)
 - [ ] main 머지 시 스테이징 자동 반영
 - [ ] R2 백업 버킷에 dump 파일 존재 (수동 1회)
 - [ ] Sentry BE/FE 의도적 에러 수신 확인

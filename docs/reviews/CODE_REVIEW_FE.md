@@ -1,10 +1,10 @@
 # Frontend 코드 리뷰 체크리스트
 
-Opus 4.8로 검증할 때 사용.
+`$fable-review`로 Frontend 변경을 검증할 때 사용.
 
 **리뷰 원칙·코멘트 규약·응답 방법은 [`GUIDE_REVIEW.md`](./GUIDE_REVIEW.md) 참조** (함께 첨부할 것).
 
-사용법: `fe/feat/`, `fe/fix/` 작업 완료 후 커밋 전에 이 문서를 Opus 리뷰 프롬프트에 첨부.
+사용법: Frontend 변경 완료 후 커밋 전에 현재 diff와 구현 문서에 이 체크리스트를 함께 적용한다.
 
 ---
 
@@ -18,8 +18,8 @@ pages/, components/, layouts/, lib/ 변경사항 (Astro 독자용)
 
 - [ ] JWT를 `localStorage`/`sessionStorage` 저장 - **HttpOnly 쿠키만**
 - [ ] 클라이언트에서 결제 금액 임의 조정 가능 - 포트원 전송 전 백엔드 재검증 필수
-- [ ] 미결제 상태에서 에피소드 이미지 URL 응답/렌더링 - **Signed URL만**
-- [ ] `.astro` 파일에서 `import.meta.env.SECRET_*` 접근 - 빌드 시 HTML에 인라인됨
+- [ ] 서버가 허용하지 않은 유료 구간 이미지 key나 URL을 응답·렌더링. 무료 구간도 서버가 paywall 경계로 절단해 서명한 URL만 사용
+- [ ] `PUBLIC_`이 아닌 환경변수를 클라이언트 번들이나 렌더된 HTML에 노출. `.astro` 확장자만으로 서버 전용이라고 가정 금지
 - [ ] OAuth state 검증 없이 콜백 처리
 - [ ] `xmlHttpRequest` 사용 - `fetch` API 사용
 
@@ -34,8 +34,8 @@ pages/, components/, layouts/, lib/ 변경사항 (Astro 독자용)
   - `client:idle`: 댓글, 하트 (유휴 시간)
   - `client:visible`: 하단 위젯 (뷰포트 진입)
 - [ ] **SSR 페이지**: `export const prerender = false` 명시
-- [ ] **폼 검증**: react-hook-form + Zod
-- [ ] **뷰어 진행도**: % 기반 아닌 **페이지 번호**
+- [ ] **폼 검증**: 클라이언트 검증만 신뢰하지 않고 서버 오류를 사용자에게 표시
+- [ ] **뷰어 진행도**: `page_no`는 최상위 블록 index, `block_offset_bp`는 블록 내부 0..10000 상대 위치로 저장
 - [ ] **콘텐츠 보호**: `select-none` + `onContextMenu 차단` + `onDragStart 차단` 모두 포함
 - [ ] **PUBLIC_* 확인**: 환경변수 번들에 포함 여부
 
@@ -43,7 +43,7 @@ pages/, components/, layouts/, lib/ 변경사항 (Astro 독자용)
 
 ## 💡 Minor - 권장
 
-- 데이터 페칭: SSG 우선, 로그인 필수는 SSR, 실시간은 React 섬
+- 데이터 페칭: 쿼리 파라미터·신선도·개인화 요구에 따라 SSG/SSR/React island를 선택. SSR은 `export const prerender = false`
 - 에러 UI: 사용자 친화적 메시지 (기술 용어 X)
 - 이미지 lazy loading: 뷰어 외 모든 곳
 
