@@ -2,7 +2,7 @@
 
 ## Astro 작업 규칙 (먼저 읽기)
 
-Astro 관련 작업(페이지·SSR/`prerender`·env·라우팅·설정·통합) 시작 전 **반드시 `@docs/guides/GUIDE_ASTRO.md`를 먼저 확인**한다. Claude 학습 컷오프 이후 Astro 6에서 바뀐 API가 있으니, 버전 민감한 API는 공식 문서를 WebFetch로 재확인하고 새로 발견한 델타는 그 문서에 누적한다.
+Astro 관련 작업(페이지·SSR/`prerender`·env·라우팅·설정·통합) 시작 전 **반드시 `@docs/guides/GUIDE_ASTRO.md`를 먼저 확인**한다. 현재 Astro 7의 버전 민감한 API는 공식 문서를 WebFetch로 재확인하고 새로 발견한 델타는 그 문서에 누적한다.
 
 ---
 

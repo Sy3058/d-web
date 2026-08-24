@@ -48,13 +48,13 @@ admin의 `tsconfig.app.json`에 `erasableSyntaxOnly: true` 설정이 있어 파�
 }
 ```
 
-### Vite 버전 통일 (7)
+### Vite 버전 통일 (7 임시 고정에서 8로 migration)
 
 pnpm workspace 설정 후 `@tailwindcss/vite@4.3.0`의 Rust 네이티브 바인딩 버그로 frontend 빌드 실패.
 
 - 원인: admin의 vite@8 의존성으로 인해 pnpm이 workspace 전체에서 `@tailwindcss/vite`를 vite@8 바인딩으로 resolve. Astro(vite@7) 환경에서 실행 시 `tsconfigPaths` 필드 누락 에러.
-- 해결: admin을 `vite@^7` + `@vitejs/plugin-react@^5`로 낮추고, frontend `package.json`에 `vite@^7` devDep 명시해 peer 해석 고정.
-- 근본 해결: Astro 7 stable 출시 시 vite@8 일괄 업그레이드 (DECISIONS.md 참조).
+- 당시 해결: admin을 `vite@^7` + `@vitejs/plugin-react@^5`로 낮추고, frontend `package.json`에 `vite@^7` devDep을 명시해 peer 해석 고정.
+- 최종 해결(2026-08-24): frontend를 Astro 7로 올리고 admin을 `vite@^8` + `@vitejs/plugin-react@^6`으로 전환했다. frontend의 직접 Vite 고정을 제거하고 `pnpm why`로 양쪽이 `vite@8.2.2` 하나를 해석함을 확인했다.
 
 ## Why
 
@@ -63,12 +63,15 @@ pnpm workspace 설정 후 `@tailwindcss/vite@4.3.0`의 Rust 네이티브 바인�
 
 ## Caution
 
-- frontend `package.json`의 `vite@^7` devDep은 기능이 아닌 pnpm peer 해석 고정용. Astro 7 업그레이드 시 제거해야 한다.
-- admin의 `@vitejs/plugin-react@^5`는 vite@7 전용. vite@8 업그레이드 시 `@^6`으로 함께 올려야 한다.
+- 의존성 잠금의 단일 진실은 저장소 루트 `pnpm-lock.yaml`이다. frontend/admin 하위 `package-lock.json`은 두지 않으며 명령은 workspace 루트에서 pnpm으로 실행한다.
+- frontend는 Astro가 Vite 버전을 관리하므로 별도 Vite devDep을 두지 않는다. 다시 직접 고정해야 한다면 workspace 전체의 peer 해석을 먼저 확인한다.
+- admin은 Vite 8과 `@vitejs/plugin-react@^6`을 함께 유지한다. 한 앱의 Vite major만 바꾸지 말고 `pnpm why --filter <패키지> vite`로 실제 해석을 검증한다.
 - packages/shared의 zod 스키마 (`loginSchema`)는 v3 호환 문법 유지 중. zod v4 권장형(`z.email()`)으로 전환은 M1 인증 폼 작업 시 진행.
 
 ## Test Plan
 
 - [x] `pnpm --filter frontend run build` 통과
 - [x] `pnpm --filter admin run build` 통과
+- [x] Astro 7/Vite 8 migration 후 frontend lint, Astro check, 테스트, 빌드 통과 (2026-08-24)
+- [x] Vite 8 migration 후 admin lint, 테스트, 빌드 통과 (2026-08-24)
 - [ ] `pnpm --filter frontend dev` 실행 후 `/` 200 응답 확인 (빌드 통과로 대체)

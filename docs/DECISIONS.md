@@ -48,19 +48,18 @@
 - Vite+React SPA 단독: SEO 약해서 검색 유입 불가
 - SvelteKit/React Router v7: 한국 자료/결제 가이드 부족
 
-### Vite 버전: 현재 7 유지, Astro 7/Vite 8은 별도 migration으로 검토
+### Vite 버전: 8로 workspace 통일, Astro 7 migration 완료
 
-**현재 상태 (2026-08-23)**
-- Astro 6는 Vite 7 사용 (`astro@^6.3.7`, `vite@^7.3.0`)
-- admin도 Vite 7로 맞춰 workspace 전체를 vite@7으로 통일 (`@vitejs/plugin-react@^5`)
-- `@tailwindcss/vite@4.3.0`이 Vite 8 네이티브 바인딩에서 `tsconfigPaths` 누락 버그 있어 Vite 8 혼용 불가
-- frontend/package.json에 `vite@^7`을 devDep으로 명시해 pnpm peer 해석 고정
-- Astro 7은 2026-06-22 Vite 8 기반으로 출시되었다. 출시 자체를 자동 업그레이드 트리거로 삼지 않고 별도 호환성 조사와 전체 게이트를 거친다. 공식 발표: https://astro.build/blog/astro-7/
+**현재 상태 (2026-08-24)**
+- frontend는 `astro@^7.2.4`, `@astrojs/node@^11.1.4`, `@astrojs/react@^6.0.4`를 사용한다. Astro가 제공하는 Vite는 잠금 파일 기준 `8.2.2`다.
+- admin은 `vite@^8.2.2`, `@vitejs/plugin-react@^6.1.0`을 사용한다.
+- Astro 6 시기의 frontend `vite@^7` 직접 고정은 제거했다. `pnpm why`로 frontend와 admin의 Astro, Tailwind, TanStack Router, Vitest가 모두 `vite@8.2.2`를 해석함을 확인했다.
+- 프로젝트에 `build.rollupOptions`가 없어 `build.rolldownOptions` 전환은 필요하지 않았다. `@tailwindcss/vite@4.3.0`도 Vite 8 peer 범위를 지원하고 양쪽 빌드를 통과해 유지한다.
+- Astro 7의 Rust 컴파일러, `compressHTML: 'jsx'` 기본값, `src/fetch.ts` 예약, Sätteri 기본 Markdown 처리기를 공식 migration 문서와 대조했다. 현재 소스에는 충돌하는 실험 플래그, `src/fetch.ts`, Markdown/MDX, 제거 API가 없다.
+- 인증과 상태는 FastAPI의 HttpOnly 쿠키로 관리하며 Astro 세션을 사용하지 않으므로 `session: false`로 Node adapter의 기본 파일시스템 세션을 끈다.
+- 자동 검증은 frontend lint, Astro check, 테스트, 빌드와 admin lint, 테스트, 빌드를 모두 통과했다. Astro 7의 JSX 공백 처리에 따른 시각 결과는 사용자 브라우저 확인 대상으로 남긴다.
 
-**Astro 7 migration 착수 시 확인할 항목**
-- `frontend`: `astro@7`, devDep `vite` 고정 제거
-- `admin`: `vite@^8`, `@vitejs/plugin-react@^6`
-- `build.rollupOptions` -> `build.rolldownOptions` 이름 변경 여부 확인
+공식 근거: https://astro.build/blog/astro-7/ , https://docs.astro.build/en/guides/upgrade-to/v7/ , https://docs.astro.build/en/guides/sessions/
 
 ### Node 버전: 24 LTS
 
