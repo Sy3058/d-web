@@ -27,6 +27,10 @@ dist-ssr/
 .astro/
 *.local
 
+# pnpm workspace가 유일한 의존성 진실이다. 하위 npm lockfile을 만들지 않는다.
+/frontend/package-lock.json
+/admin/package-lock.json
+
 # 로그
 logs/
 *.log

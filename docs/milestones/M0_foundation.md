@@ -101,9 +101,8 @@
 - DoD: 더미 API 함수 + 타입 검증 통과, 양쪽 빌드 성공
 - 결정: **pnpm workspace + `packages/shared`** (DECISIONS "FE/Admin 공유 코드")
 - 메모:
-  - Astro 6는 Vite 7을 사용하므로 workspace 전체를 Vite 7로 통일 (admin도 vite@^7, @vitejs/plugin-react@^5)
-  - `@tailwindcss/vite@4.3.0`이 Vite 8 바인딩에서 tsconfigPaths 필드를 요구하는 버그 있음 - Vite 7로 고정해 회피
-  - Astro 7은 Vite 8 기반으로 출시됐지만 현재는 Astro 6/Vite 7 유지. 별도 migration 착수 시 frontend(astro@7), admin(vite@8 + @vitejs/plugin-react@6), frontend의 Vite 고정과 호환성을 함께 검증
+  - 초기에는 Astro 6/Vite 7과 admin Vite 8 혼용 시 `@tailwindcss/vite`의 `tsconfigPaths` 오류가 발생해 workspace 전체를 Vite 7로 고정했다.
+  - 2026-08-24 Astro 7 migration으로 frontend와 admin을 Vite 8.2.2에 통일했다. frontend의 직접 Vite 고정 제거, admin의 `@vitejs/plugin-react@^6` 전환, 양쪽 전체 게이트를 완료했다.
 
 ### B9. Sentry FE 양쪽 ✅
 - 선행: B6, B7, A7

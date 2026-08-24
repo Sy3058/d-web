@@ -1,4 +1,4 @@
-# Astro 작업 가이드 (현재 Astro 6.x)
+# Astro 작업 가이드 (현재 Astro 7.x)
 
 > **목적**: 버전별 Astro API 차이와 이 프로젝트의 Astro 컨벤션을 한 곳에 모아 반복 조사를 줄인다.
 >
@@ -7,7 +7,7 @@
 > 2. 아래 내용은 확인 날짜와 현재 설치 버전을 함께 본다.
 > 3. 버전 민감한 API는 **사용 시점에 Astro 공식 문서로 재확인**하고, 새 차이를 찾으면 근거와 날짜를 이 문서에 반영한다.
 >
-> **현재 스택**: `astro@6.3.7`, `vite@7.3.0`, `@astrojs/node@10`, `@astrojs/react@5`, `@tailwindcss/vite@4`, Node `>=24.16`. 실제 설치 범위는 `frontend/package.json`과 lockfile을 우선한다.
+> **현재 스택**: `astro@^7.2.4`, Astro 내장 `vite@8.2.2`, `@astrojs/node@^11.1.4`, `@astrojs/react@^6.0.4`, `@tailwindcss/vite@4`, Node `>=24.16`. 실제 설치 범위는 `frontend/package.json`과 lockfile을 우선한다.
 
 ---
 
@@ -80,13 +80,23 @@
 - **이 프로젝트 적용**: `works/[id]/[publicId].astro`의 이전/다음 화 네비 `<a>`에 사용한다. `Viewer`가 `client:only="react"` 아일랜드라 회차 간 상태 누수를 구조적으로 차단한다(M2 F1 후속 보완, 2026-07-26).
 - 출처: https://docs.astro.build/en/guides/view-transitions/
 
+### 6. Astro 7 migration 기준선 (검증 2026-08-24)
+
+- Astro 7은 Vite 8과 Rolldown을 사용한다. 현재 프로젝트에는 `build.rollupOptions`나 Vite 내부 API를 쓰는 사용자 설정이 없어 설정 이름 변경이 필요하지 않았다.
+- `.astro` Rust 컴파일러는 닫히지 않은 태그를 오류로 처리하고 무효 HTML을 자동 교정하지 않는다. 현재 템플릿은 `astro check`와 production build를 통과했다.
+- `compressHTML` 기본값은 `'jsx'`다. 인라인 요소 사이의 개행이 자동 공백이 되지 않으므로 문장 안의 요소 경계에는 명시적 공백을 둔다. 현재 인접 인라인 요소는 flex gap이나 구분점으로 배치되어 텍스트 공백 의존이 없음을 정적 확인했다.
+- Markdown과 MDX의 기본 처리기는 Sätteri다. 현재 프로젝트는 Markdown/MDX와 remark/rehype 플러그인을 사용하지 않아 추가 migration이 없다.
+- `src/fetch.ts`와 `src/fetch.js`는 advanced routing 예약 파일명이다. 현재 같은 이름의 파일이 없다.
+- Node adapter는 기본 세션 드라이버를 제공하지만 이 프로젝트는 FastAPI HttpOnly 쿠키만 사용한다. `session: false`를 유지해 Astro 파일시스템 세션과 세션 런타임을 끈다.
+- 출처: https://docs.astro.build/en/guides/upgrade-to/v7/ , https://docs.astro.build/en/guides/sessions/
+
 ---
 
 ## 이 프로젝트 Astro 컨벤션 (공식 문서에 없음)
 
 - **Tailwind는 `@tailwindcss/vite` 플러그인**(`vite.plugins`)으로 연결. 구 `@astrojs/tailwind` 통합 아님.
-- **현재는 Astro 6 + Vite 7 유지.** Astro 7은 2026-06-22 Vite 8 기반으로 출시되었지만 자동 업그레이드하지 않는다. 별도 호환성 조사, 결정, 검증 범위를 잡아 migration한다. [Astro 7 공식 발표](https://astro.build/blog/astro-7/)
-- adapter: `@astrojs/node`, `mode: 'standalone'`. integrations: `react()`, `sentry()`.
+- **현재는 Astro 7 + Vite 8을 사용한다.** frontend는 Astro가 Vite를 관리하므로 별도 Vite devDep을 두지 않고, admin도 Vite 8로 맞춘다. [Astro 7 공식 발표](https://astro.build/blog/astro-7/)
+- adapter: `@astrojs/node`, `mode: 'standalone'`, `session: false`. integrations: `react()`, `sentry()`.
 - 섬 지시어 규칙: 로그인·결제·OAuth=`client:load`, 댓글·하트·후원=`client:idle`, 하단 위젯=`client:visible`.
 - 쿠키: `.astro`(SSR)는 `Astro.request.headers`로, React 섬은 `fetch(..., { credentials: 'include' })`. JWT localStorage 금지.
 

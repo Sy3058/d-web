@@ -227,8 +227,8 @@ docs/MISTAKES.md 참고해서 FastAPI 라우터 작성해줘
 - pnpm workspace에서 `@tailwindcss/vite` peer dep 충돌
   → admin이 vite@8을 쓰면 workspace 전체에서 `@tailwindcss/vite`가 vite@8 바인딩으로 resolve됨
   → Astro 6 (vite@7) 환경에서 `tsconfigPaths` 누락 에러 발생
-  → 해결: 각 패키지에 peer 고정 (`frontend`에 `vite@^7` devDep 명시)
-  → Astro 7은 Vite 8 기반으로 출시됐지만 현재는 Astro 6/Vite 7을 유지한다. 별도 migration 범위와 전체 게이트를 잡은 뒤 업그레이드한다 (DECISIONS.md 참조)
+  → 당시 해결: 각 패키지에 peer 고정 (`frontend`에 `vite@^7` devDep 명시)
+  → 최종 해결(2026-08-24): Astro 7로 올리고 admin도 Vite 8 + React plugin 6으로 맞춘 뒤 frontend의 Vite 7 고정을 제거했다. `pnpm why`로 양쪽 플러그인이 모두 같은 `vite@8.2.2`를 해석하는지 확인하고 전체 frontend/admin 게이트를 통과시켰다.
 
 - pnpm workspace 추가 후 lockfile이 구버전 peer 해석을 캐싱할 수 있음
   → `pnpm install --force` 또는 `rm pnpm-lock.yaml && pnpm install`로 강제 재계산

@@ -1,43 +1,17 @@
-# Astro Starter Kit: Minimal
+# d-web 독자 사이트
 
-```sh
-npm create astro@latest -- --template minimal
-```
+Astro 기반 독자용 frontend이다. 의존성은 저장소 루트의 pnpm workspace와 `pnpm-lock.yaml`로 관리한다.
 
-> 🧑‍🚀 **Seasoned astronaut?** Delete this file. Have fun!
+## 명령
 
-## 🚀 Project Structure
+모든 명령은 저장소 루트에서 실행한다.
 
-Inside of your Astro project, you'll see the following folders and files:
-
-```text
-/
-├── public/
-├── src/
-│   └── pages/
-│       └── index.astro
-└── package.json
-```
-
-Astro looks for `.astro` or `.md` files in the `src/pages/` directory. Each page is exposed as a route based on its file name.
-
-There's nothing special about `src/components/`, but that's where we like to put any Astro/React/Vue/Svelte/Preact components.
-
-Any static assets, like images, can be placed in the `public/` directory.
-
-## 🧞 Commands
-
-All commands are run from the root of the project, from a terminal:
-
-| Command                   | Action                                           |
-| :------------------------ | :----------------------------------------------- |
-| `npm install`             | Installs dependencies                            |
-| `npm run dev`             | Starts local dev server at `localhost:4321`      |
-| `npm run build`           | Build your production site to `./dist/`          |
-| `npm run preview`         | Preview your build locally, before deploying     |
-| `npm run astro ...`       | Run CLI commands like `astro add`, `astro check` |
-| `npm run astro -- --help` | Get help using the Astro CLI                     |
-
-## 👀 Want to learn more?
-
-Feel free to check [our documentation](https://docs.astro.build) or jump into our [Discord server](https://astro.build/chat).
+| 명령 | 용도 |
+| :--- | :--- |
+| `pnpm install --frozen-lockfile` | workspace 의존성 설치 |
+| `pnpm --filter frontend dev` | 로컬 개발 서버 실행 |
+| `pnpm --filter frontend lint` | ESLint 검사 |
+| `pnpm --filter frontend astro check` | Astro 타입 및 템플릿 검사 |
+| `pnpm --filter frontend test` | 단위 테스트 실행 |
+| `pnpm --filter frontend build` | 프로덕션 빌드 |
+| `pnpm --filter frontend preview` | 빌드 결과 미리보기 |
