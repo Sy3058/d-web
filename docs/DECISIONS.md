@@ -470,30 +470,60 @@ bcrypt( base64( hmac_sha384(password, key=PASSWORD_PEPPER) ), gensalt(cost=12) )
 
 ## 결제 구조 결정
 
-### PG = 포트원 확정 + 결제 최후순위 재배치 (2026-07-03)
+### PG = PortOne V2 + M3 즉시 착수 (2026-07-03, 2026-08-30 갱신)
 
 **결정 1: PG는 처음부터 포트원. "개발은 토스 샌드박스, 출시 시 포트원 교체"(구 PRD Q4)는 폐기.**
 - 포트원은 사업자 등록 없이 가입 즉시 **테스트 채널**로 연동 개발 가능(실결제 전환 시에만 사업자 정보 + 가맹점 심사 필요) → 토스 경유의 존재 이유(사업자 없이 개발 시작)가 소멸하고, PG 교체 재작업 리스크도 제거.
-- 결제 식별자 용어는 포트원 기준(V1 `imp_uid` / V2 `paymentId`, SDK 버전은 M3 착수 시 결정).
+- M3는 카드뿐 아니라 카카오페이 `TC0ONETIME`과 토스페이 `tosstest` 직연동 테스트 channel도 개발자 Store에 만들고 공개 HTTPS에서 브라우저 스모크한다. 이 범용 테스트 MID는 계약 전 개발용이며, 계약·심사를 거친 작가 실 MID 검증만 M7 출시 gate다.
+- **2026-08-26 확정**: V2 `paymentId`만 사용한다. 프론트는 `@portone/browser-sdk/v2`, 백엔드 네트워크 I/O는 `httpx.AsyncClient` 기반 V2 REST adapter, server SDK는 raw webhook 서명 검증에만 사용한다.
+- **2026-08-27 계정 경계 확정**: M3는 개발자 본인 소유의 임시 PortOne 고객사·테스트 Store에서 진행한다. 개발자 계정에는 작가의 사업자·대표자·정산 정보를 넣거나 실채널을 신청하지 않는다. M7에서 작가가 새 Owner 계정과 실판매 Store를 만들고 개발자를 Dev로 초대하며, 애플리케이션은 Store·channel·secret 설정만 교체한다. 개발자 고객사를 작가 고객사로 전환하거나 외부 테스트 거래를 이관하지 않는다.
+- `test|live`는 계정 소유자가 아니라 서버 환경과 검증된 channel이 결정하는 immutable provenance다. staging·production은 DB와 secret set을 분리하되 같은 schema를 사용하고, 출시 후에도 회귀 테스트와 오배포 차단을 위해 환경 컬럼·제약을 제거하지 않는다. 개발자 테스트 계정 삭제는 작가 계정의 테스트·실결제 전환과 기존 webhook·대사 중단 뒤에만 한다.
+- 계정·전환 근거: [PortOne 전자결제 신청 전 개발 테스트](https://developers.portone.io/opi/ko/console/guide/reg?v=v2), [Owner·Dev 권한과 Owner 탈퇴 영향](https://developers.portone.io/opi/ko/console/guide/account), [카카오페이 테스트 channel](https://help.portone.io/content/kakaopay), [토스페이 테스트 channel](https://help.portone.io/content/tosspay).
 
-**결정 2: 결제(M3)를 실행 순서 마지막(M5·M6 뒤, M7 직전)으로 재배치.**
-- 결제 없이 완결되는 사이트(무료 열람 + 커뮤니티 + 관리자 + 알림)를 먼저 완성하고 결제를 마지막에 붙인다.
-- 이유: (a) **사업자 등록을 최대한 지연** - 사업자가 필요한 항목(포트원 실키 심사·카카오 비즈앱·통신판매업 신고)이 전부 M3~M7 구간으로 몰리고, 그 전 단계는 전부 사업자 불필요. (b) 법무(약관·청약철회, Q1/Q7)와 결제 화면이 M7 직전에 붙어 자연 연계. (c) 결제 외 기능이 결제 일정에 블로킹되지 않음.
-- 동반 이동: 후원(M4→M3), 수익·환불·후원 운영 도구(M5→M3). 마일스톤 번호는 식별자로 유지(재부여 없음), 실행 순서는 milestones README 다이어그램 기준.
+**결정 2: M3를 M2 다음에 즉시 진행한다.**
+- 사용자의 2026-08-26 최신 지시로 2026-07-03의 "M5·M6 뒤, M7 직전" 실행 순서 결정을 대체한다.
+- 사업자 등록 지연 목적은 테스트 채널 개발과 분리한다. M3는 사업자 없이 테스트 채널로 진행하고 실키 심사·카카오 비즈앱·통신판매업 신고·Q1/Q7 법무 검토는 M7 출시 gate로 유지한다.
+- 후원은 M3, 비결제 커뮤니티는 M4, 비결제 운영 도구·알림은 M5·M6이라는 범위 분리는 유지한다. 마일스톤 번호도 식별자로 유지한다.
+
+**결정 3: 자금·동기화·열람 권한의 진실을 분리하고 모든 외부 승인을 종결한다.**
+- PortOne은 실제 자금 상태, `payment_orders`는 서버 주문과 마지막 검증 결과, `purchases`는 열람 권한의 기준이다.
+- browser complete·서명 webhook·대사·owner 재조회는 같은 `sync_payment()`를 호출한다. 외부 `PAID`는 구매/후원 결과 또는 전액 보상 취소 중 하나로 반드시 수렴한다.
+- `ready`는 같은 사용자·회차·환경에서 30분만 재사용하고 만료 전 PortOne을 다시 조회한다. 같은 환경에서 같은 회차의 서로 다른 두 주문이 모두 승인되면 활성 구매 하나만 남기고 loser 승인을 전액 취소한다.
+- 외부 조회 응답 뒤 로컬 상태를 transaction 안에서 다시 읽고 허용 from-status CAS만 수행한다. `paid|cancel_pending|cancelled`는 늦은 `READY|PAID` 응답으로 회귀하지 않으며 expired의 늦은 `PAID`만 정상 검증 또는 보상으로 전진한다.
+- PortOne webhook은 30초 안에 응답해야 하지만 REST 조회는 read 60초 이상이 권고되므로, 서명 검증된 이벤트를 `payment_webhook_receipts`에 먼저 durable commit하고 2xx를 보낸다. scheduler가 같은 sync를 실행해 상태 전이와 receipt 완료를 함께 commit한다.
+- 취소는 DB에 고정한 16~256자 ASCII 멱등 키와 exact request snapshot을 사용한다. timeout·outstanding 409는 비terminal이며 매 재시도 전 외부 상태를 조회한다. PortOne의 멱등 보장 창 3시간 뒤에는 키만 믿지 않는다.
+- 주문과 구매 권한은 각각 `environment=test|live`를 immutable snapshot으로 보존한다. 활성 구매와 열린 주문의 UNIQUE는 환경을 포함하고, 전문은 purchase·order 환경이 현재 배포 환경과 모두 일치할 때만 연다. 따라서 test 구매는 live 권한이나 재구매를 막지 않는다.
+- 일반 거절·사용자 취소는 사용자 안내와 감사 로그만 남긴다. 금액 불일치·장기 미수렴·상태 불변식 위반만 Sentry 대상이다.
+- 세부 상태 머신, schema, API, 환불 race와 단계별 완료조건은 `docs/milestones/M3_foundation.md`가 정본이다.
+
+**결정 4: 결제 전 즉시 제공에 동의받고, 실제 첫 전문 발급을 환불 가능성의 경계로 삼는다.**
+- 결제 확인 UI는 회차·서버 기준 금액과 함께 "결제 완료 후 전체 내용이 즉시 제공됨", "전체 내용 제공이 시작되면 단순 변심 청약철회가 제한됨", "표시·광고와 다르거나 계약 내용대로 제공되지 않은 경우는 제외됨"을 결제 전에 알린다. 사용자는 비선택 상태의 동의 항목을 직접 선택하고 `결제하고 바로 보기`를 누른다. 결제 후 별도 `전문 이어보기` 단계는 두지 않는다.
+- 구매 intent에는 서버가 선택한 고지 버전과 즉시 제공 동의 시각을 snapshot한다. 클라이언트가 확인한 금액은 현재 서버 가격과의 불일치 탐지에만 쓰고 결제 금액의 원천으로 믿지 않는다.
+- 결제 redirect 복귀 뒤 검증된 구매가 active면 뷰어가 full content를 자동 요청한다. 결제 성공이나 purchase 생성만으로 `first_viewed_at`을 기록하지 않고, full 응답을 실제로 발급하는 CAS가 성공한 때에만 기록한다. 따라서 결제 뒤 복귀·콘텐츠 요청이 실패한 구매는 미발급 상태를 유지한다.
+- 첫 전문 자동 발급과 owner 환불 승인은 같은 `purchases` 행의 조건부 UPDATE로 한쪽만 성공시킨다. 테스트 환불 창은 `paid_at + 168시간` 미만이며 실결제 기간·동의·문구는 M7 법무 gate에서 확정한다. 포스타입의 구매 후 이어보기와 네이버웹툰의 `결제 후 작품 바로 보기`는 후속 버튼이 필수가 아님을 보여주는 UX 참고 사례일 뿐, 각 플랫폼의 환불 정책을 그대로 복사하지 않는다.
+- `episodes.sales_paused_at`은 신규 판매만 막고 기존 구매 열람은 유지한다. 일반 비공개도 카탈로그·신규 intent만 닫고 기존 구매의 direct viewer full은 유지한다. route를 없애는 soft delete는 미종결 구매가 있으면 409로 거부하고, 긴급 법적 차단은 환불·고객 고지 SOP와 함께 M7에서 확정한다.
+- 구매 sync와 판매 중지·비공개·soft delete는 Work→Episode→Order→Purchase의 공통 lock 순서로 단일 승자를 정한다. 구매 commit이 먼저면 판매 중지·일반 비공개 뒤에도 full이고 soft delete는 409다. 판매 중지·비공개·삭제 commit이 먼저면 열린 주문을 만료시키고 늦은 외부 `PAID`는 purchase 없이 전액 보상한다. 결제 성공인데 비공개 때문에 열람만 실패하는 상태는 금지한다.
+
+**결정 5: optional content 전에 refresh 수명의 세션 힌트로 access를 복구한다.**
+- access는 15분이라 401만으로 로그아웃을 판정하지 않는다. 표시 원천은 refresh 수명과 함께 발급·갱신되는 비-HttpOnly `login_hint`이고, 이 값은 권한 근거가 아니다.
+- Viewer·WorkExperience 같은 React island는 `login_hint`를 `useState` initializer나 SSR에서 읽지 않고 hydration 뒤 `useEffect`에서 읽어 hydration mismatch를 막는다. 네비 라벨의 기존 pre-paint inline script 결정은 그대로 유지한다.
+- 뷰어는 힌트가 있으면 공용 API wrapper로 보호된 `/auth/me`를 먼저 호출한다. access 만료 401은 refresh 1회와 원요청 재시도로 복구한다. refresh까지 최종 실패한 401 응답만 `clear_auth_cookies`로 access·refresh·hint를 함께 만료시키고 content를 익명 preview로 요청한다. optional content가 만료 access를 익명 처리해도 유효 사용자로 검증되지 않은 요청에는 full을 주지 않는다.
+- 공개 catalog가 숨긴 구매 회차도 열려야 하므로, 공개 SSR 조회가 404인 viewer route는 메타 없는 client shell을 렌더한다. hydration 뒤 no-store viewer-bootstrap이 공개 회차 또는 활성 구매자에게만 episode ID를 주고 비구매 비공개는 404로 존재를 숨긴다. 구매 내역 direct link는 이 경로를 사용한다.
+
+공식 참고: [PortOne V2 REST API timeout·멱등 키](https://developers.portone.io/api/rest-v2), [PortOne V2 webhook timeout·재전송](https://developers.portone.io/opi/ko/integration/webhook/readme-v2?v=v2), [포스타입 포스트 구매](https://help.postype.com/hc/ko/articles/360021416653-%ED%8F%AC%EC%8A%A4%ED%8A%B8-%EA%B5%AC%EB%A7%A4-%ED%9B%84%EC%9B%90%ED%95%98%EA%B8%B0), [네이버웹툰 구매 작품 사용과 환불](https://help.naver.com/service/5635/contents/6510?lang=ko&osType=MOBILE), [전자상거래법 제17조](https://www.law.go.kr/LSW/lsInfoP.do?ancNo=21312&ancYd=20260120&efYd=20260721&lsiSeq=282793).
 
 ### 기본 구조
 
 - 에피소드별 개별 구매 (500원 예정)
-- 전편 구매 옵션 추가
+- 전편 구매·묶음 할인은 현재 범위 제외
 - 충전식 코인 방식 채택 안 함 (개인 사이트 신뢰도 문제)
-- 카카오페이/토스페이 수수료가 카드보다 낮음 (1.5~2% vs 2.5~3.5%)
 - 소액 결제 마찰 줄이기 위해 카카오페이/토스페이 우선 노출
 
 ### 결제 내역 보관 기간: 5년
 
 **이유**
 - 전자상거래법상 대금 결제 및 재화 공급 기록은 5년 보관 의무
-- 회원 탈퇴 시에도 `purchases`, `payment_logs`, `donations` 테이블 데이터는 유지
+- 회원 탈퇴 시에도 `payment_orders`, `purchases`, `payment_logs`, `refund_requests`, `donations`의 결제·계약 데이터는 유지
 - 탈퇴 유저는 `users.deleted_at` 기록 + `nickname` 익명화로 처리, 결제 레코드는 user_id FK 유지
 
 ---
@@ -638,13 +668,14 @@ main (항상 배포 가능 상태)
 
 **복원 앵커 보강 (2026-08-14 사용자 결정, 2026-08-15 리뷰 보완)**: 위 판단은 회차 전체 진행률과 완독 판정에는 그대로 유효하지만, 복원까지 블록 인덱스만 쓰는 것은 실제 원고에서 충분하지 않았다. `398x5400`처럼 한 이미지 파일 안에 여러 패널이 들어가면 독자가 이미지 중간까지 읽어도 같은 블록 1개로만 기록돼 재진입 때 이미지 시작으로 돌아간다. M2는 `viewer_progress.page_no`와 함께 `block_offset_bp`(현재 블록 내부 0..10000)를 저장하고, 현재 렌더 높이에 같은 비율을 적용해 복원한다. 이 값은 회차 전체 분모를 쓰지 않으므로 이미지 공간 미예약 상태에서도 다른 블록의 로드 순서에 영향을 받지 않는다. 전체 진행률 표시, 완독 판정, 구매 후 CTA는 여전히 M3다. 복원 GET이 끝나기 전에는 초기 observer 값을 저장하지 않으며, 구버전 요청이 같은 블록을 다시 저장하면 기존 오프셋을 보존하고 블록이 바뀔 때만 0으로 초기화한다.
 
-**M3 순서(구매 회차 진행률을 만들 때)**: ① 이미지 높이 저장(변환 시 Pillow가 이미 `img.height`를 계산하고 있다 - `image_service.py`, 저장만 안 할 뿐이라 계산 비용은 0. 비싼 건 스키마 변경과 기존 이미지 백필) → ② 뷰어가 크기로 공간 예약 → ③ 회차 전체 스크롤 비율과 완독 상태 추가. M2의 하이브리드 앵커는 복원용으로 유지하고, M3 값은 진행률 표시·완독 판정에 쓴다. 그 위에서 미구매 회차의 가격 표시 자리를 구매 후 진행률 바로 교체한다(`is_purchased`는 이미 `EpisodeSummary`에 있다). 구매 회차는 전체 본문을 받으므로 분모가 하나뿐이라, 무료 절단으로 생기던 분모 불일치가 이 범위에선 발생하지 않는다.
+**M3 P1 순서(회차 진행률을 만들 때, 2026-08-26 보강)**: P0 판매 경로 뒤 ① 이미지 높이·byte size 저장 ② 뷰어 공간 예약 ③ 회차 전체 스크롤 비율과 완독 상태를 추가한다. M2의 하이브리드 앵커는 복원용으로 유지하고 M3 값은 표시·완독에 쓴다. 공개 `EpisodeSummary.is_purchased`는 항상 false인 placeholder라 제거하고, 기존 no-store `GET /works/{id}/progress`를 확장해 작품당 개인화 요청 1회로 구매 배지·완독·CTA를 갱신한다. 구매 회차와 paywall 없는 무료 회차는 `access_scope=full`, 미구매 부분 유료 회차는 `preview`라 분모가 섞이지 않는다.
 
 **M3 CTA 완료 판정 추가 결정 (2026-08-12)**: 작품 상세의 플로팅 CTA는 "최근에 연 회차"만으로 다음 회차를 고르지 않는다. 회차별 진행도를 조회해 현재 회차가 100% 완료됐을 때만 `다음 화 보기`로 전환하고, 100% 미만이면 `보던 회차 이어 보기`와 현재 회차 제목을 표시한다. 최초 진입은 기존처럼 `첫 화 보기`, 마지막 회차 완독 뒤에는 `마지막 화 다시 보기`다.
 
 - **100%는 실제 끝 도달 이벤트로 확정한다**: 표시용 비율을 반올림해 100으로 보이게 하거나 `99% 이상` 같은 임계값을 쓰지 않는다. 공간 예약으로 `scrollHeight`가 안정된 뒤, 뷰어가 제공받은 전문의 마지막 최상위 블록 끝에 실제로 도달했을 때만 저장값을 정확히 100%로 고정한다. 중간 진행률은 표시용이며 복원 기준은 `viewer_progress.page_no + block_offset_bp`다.
 - **부분 유료 미구매 회차는 무료 경계가 끝이 아니다**: 서버가 절단한 미리보기의 마지막 블록에 닿아도 회차 전문을 완독한 것이 아니므로 100%로 저장하지 않고 다음 화 CTA를 노출하지 않는다. 구매 검증 뒤 전문을 받은 상태에서 실제 끝에 도달해야 완료된다. 클라이언트가 보낸 완료값만 믿지 않고, 서버는 해당 사용자의 회차 열람 권한과 응답 범위를 기준으로 완료 저장 가능 여부를 검증한다.
 - **작품 단위 진행률 의미도 맞춘다**: M2의 `읽은 회차 수 / 전체 회차 수`는 열어 본 회차 수도 읽은 것으로 세는 임시 계약이다. M3부터 분자를 `100% 완료 회차 수`로 바꿔, CTA의 완료 판정과 진행률 바가 같은 의미를 사용하게 한다.
+- **게스트도 같은 완료 의미를 쓴다**: paywall 없는 무료 전문은 guest localStorage에 `progressBp`·`completed`를 저장할 수 있다. 유료 preview 끝은 완료가 아니며, 로컬 값은 로그인 상태와 자동 병합하지 않고 권한 근거로도 쓰지 않는다.
 - **검증 가능한 상태 전이**: 진행도 없음 → 첫 화, 현재 회차 0~100% 미만 → 현재 회차 이어 보기, 현재 회차 100% + 다음 회차 있음 → 다음 화, 현재 회차 100% + 다음 회차 없음 → 마지막 화 다시 보기. 이미지 로드 전후에도 비율이 역행하지 않고, 잠금 경계 도달만으로 완료되지 않는 테스트를 포함한다.
 
 이미지 높이 저장의 진짜 가치는 진행률이 아니라 **레이아웃 안정성**이다. 공간 예약이 없어 이미지가 로드될 때마다 콘텐츠가 튀고, 진행도 복원이 흔들린 이력도 있다(`50767af` 뷰어 진행도 복원 안정화). 진행률 정확도는 그 기반 작업의 부산물로 따라온다. ⚠️ **미검증**: 실제 CLS 수치는 측정하지 않았다 - 코드 구조에 근거한 추론이다.
