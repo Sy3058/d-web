@@ -2,7 +2,7 @@
 
 | 항목 | 내용 |
 |------|------|
-| 문서 버전 | v1.5 (2026-08-23, 현행/계획 스키마 구분과 키·인덱스 정정) · v1.4 (2026-08-11, episodes `first_published_at` + 현행 인덱스 반영) |
+| 문서 버전 | v1.9 (2026-08-30, 결제·비공개 직렬화와 webhook·환불 복구 상태) · v1.8 (2026-08-27) |
 | DB | PostgreSQL |
 | ORM | SQLModel |
 | 작성 기준 | 현재 SQLModel·Alembic migration 우선, 이후 마일스톤 계획은 별도 표시 |
@@ -17,7 +17,7 @@
 - 사용자 입력을 포함한 원시 SQL 문자열 조합 금지, SQLModel/SQLAlchemy 표현식과 바인딩 사용
 - 금액은 `INTEGER` (원 단위, 소수점 없음)
 
-> **상태 표기**: 1-2절은 현재 구현된 스키마다. 3절 이후에는 아직 migration이 없는 후속 마일스톤 초안이 포함되며, `[계획]` 표시는 구현 계약이 아니다. 실제 변경 전 해당 마일스톤과 `docs/DECISIONS.md`를 다시 확정한다.
+> **상태 표기**: 1-2절은 별도 `[계획]` 표시가 없으면 현재 구현된 스키마다. 3절 이후에는 아직 migration이 없는 후속 초안이 포함된다. M3 계획의 상세 상태·제약 정본은 `docs/milestones/M3_foundation.md`이며 실제 구현 뒤 모델·migration 기준으로 다시 갱신한다.
 
 ---
 
@@ -206,6 +206,29 @@ viewer_progress
 └── CHECK (block_offset_bp BETWEEN 0 AND 10000)
 ```
 
+### M3 뷰어 확장 [계획]
+
+```sql
+episode_images
+├── id          UUID PRIMARY KEY DEFAULT gen_random_uuid()
+├── episode_id  UUID NOT NULL REFERENCES episodes(id) ON DELETE CASCADE
+├── key         TEXT UNIQUE NOT NULL
+├── width       INTEGER NOT NULL CHECK (width > 0)
+├── height      INTEGER NOT NULL CHECK (height > 0)
+├── byte_size   BIGINT NOT NULL CHECK (byte_size > 0)
+├── created_at  TIMESTAMPTZ DEFAULT now()
+└── updated_at  TIMESTAMPTZ DEFAULT now()
+
+episodes
+└── sales_paused_at TIMESTAMPTZ  -- NULL이면 신규 판매 가능, 기존 구매 열람과 무관
+
+viewer_progress
+├── progress_bp INTEGER NOT NULL DEFAULT 0 CHECK (progress_bp BETWEEN 0 AND 10000)
+└── completed_at TIMESTAMPTZ
+```
+
+> `episode_images`는 `image_keys`의 소유권 매니페스트와 `content`의 표시 구성을 대체하지 않는다. M3 백필은 공개·비공개·draft의 모든 image key를 transaction 밖 R2 I/O로 읽고 재실행 가능한 batch upsert를 수행한다. `sales_paused_at`과 일반 비공개는 신규 intent만 막고 활성 구매 full은 유지한다. route를 없애는 soft delete는 `active|refund_pending|review_required` 구매가 남아 있으면 409로 막는다.
+
 ### commission_items (M2 그룹 G)
 ```sql
 commission_items
@@ -244,64 +267,155 @@ site_texts
 
 ## 3. 결제 도메인 [계획 - M3]
 
-> 아래는 M3 설계 입력이다. 현재 DB에는 없으며, 특히 `purchase_type='bundle'`과 `bundle_id`는 현재 범위 제외 항목이므로 명시적 결정 없이 migration이나 API를 구현하지 않는다.
+> 아래 테이블은 아직 DB에 없다. PortOne은 실제 자금 상태, `payment_orders`는 로컬 주문·동기화 상태, `purchases`는 열람 권한의 기준이다. 모든 외부 `PAID`는 구매/후원 결과 또는 전액 보상 취소로 종결한다. 구매 commit 뒤 일반 비공개는 기존 full 권한을 유지하고, 비공개·soft delete commit 뒤 늦은 `PAID`는 권한 없이 전액 보상한다. M3는 개발자 소유 테스트 고객사, M7 실결제는 작가 소유의 새 고객사를 사용하며 외부 거래를 이관하지 않는다. 두 환경은 같은 schema를 쓰되 Store·secret·DB를 분리하고 `environment`를 영구 provenance로 보존한다.
+
+### payment_orders
+```sql
+payment_orders
+├── id                     UUID PRIMARY KEY DEFAULT gen_random_uuid()
+├── payment_id             VARCHAR(64) UNIQUE NOT NULL  -- 서버 생성 V2 paymentId
+├── user_id                UUID NOT NULL REFERENCES users(id)
+├── kind                   VARCHAR(24) NOT NULL
+│                          CHECK (kind IN ('episode_purchase', 'donation'))
+├── episode_id             UUID REFERENCES episodes(id)
+├── expected_amount        INTEGER NOT NULL CHECK (expected_amount > 0)
+├── currency               VARCHAR(3) NOT NULL DEFAULT 'KRW' CHECK (currency = 'KRW')
+├── store_id               VARCHAR(255) NOT NULL
+├── requested_channel_key  VARCHAR(255) NOT NULL
+├── environment            VARCHAR(8) NOT NULL
+│                          CHECK (environment IN ('test', 'live'))
+├── order_name             VARCHAR(255) NOT NULL  -- PG 제한에 맞춘 안전 표시명
+├── item_title             VARCHAR(200) NOT NULL  -- 구매내역 표시 snapshot
+├── checkout_notice_version VARCHAR(32)
+├── immediate_supply_consented_at TIMESTAMPTZ
+├── donation_message       VARCHAR(500)
+├── status                 VARCHAR(24) NOT NULL
+│                          -- preparing | ready | expired | paid | cancel_pending
+│                          -- | cancelled | review_required
+│                          CHECK (status IN ('preparing', 'ready', 'expired', 'paid',
+│                                 'cancel_pending', 'cancelled', 'review_required'))
+├── provider_status        VARCHAR(40)
+├── transaction_id         VARCHAR(255)
+├── cancellation_id        VARCHAR(255)
+├── pg_provider            VARCHAR(40)
+├── payment_method         VARCHAR(40)
+├── easy_pay_provider      VARCHAR(40)
+├── receipt_url            TEXT
+├── cancel_reason          VARCHAR(40)
+├── cancel_idempotency_key VARCHAR(256)
+├── cancel_request_snapshot JSONB              -- 개인정보 없는 exact cancel body, immutable
+├── cancelled_amount       INTEGER
+├── expires_at             TIMESTAMPTZ NOT NULL
+├── next_reconcile_at      TIMESTAMPTZ
+├── reconcile_attempts     INTEGER NOT NULL DEFAULT 0
+├── last_synced_at         TIMESTAMPTZ
+├── needs_action_reason    VARCHAR(80)
+├── prepared_at            TIMESTAMPTZ
+├── paid_at                TIMESTAMPTZ
+├── cancelled_at           TIMESTAMPTZ
+├── created_at             TIMESTAMPTZ DEFAULT now()
+└── updated_at             TIMESTAMPTZ DEFAULT now()
+```
+> - 구매 주문은 `episode_id NOT NULL AND donation_message IS NULL`, 후원 주문은 `episode_id`와 message가 각각 nullable인 kind CHECK를 둔다.
+> - 구매 주문은 `checkout_notice_version`과 `immediate_supply_consented_at`이 NOT NULL이고 후원 주문은 둘 다 NULL이다. 서버가 현재 고지 버전과 동의 시각을 기록하며 클라이언트의 확인 금액은 서버 가격과의 stale 비교에만 사용한다. M3 테스트는 `episode-immediate-v1`로 시작하고 문구 변경 시 새 버전을 쓰며 기존 주문 snapshot은 갱신하지 않는다.
+> - 같은 사용자·회차·환경의 `preparing|ready` 주문은 하나만 허용한다. ready 재사용은 30분이며 만료 전 PortOne을 다시 조회한다.
+> - 결제 시도 `FAILED`는 주문 terminal 상태로 두지 않고 `payment_logs`에 남긴다. 늦은 `PAID`는 expired 주문에서도 정상 sync한다.
+> - `PARTIAL_CANCELLED`와 알 수 없는 자금 상태는 `review_required`로 격리하고 권한을 닫는다.
+> - 외부 응답 뒤 transaction에서 현재 상태를 다시 읽고 허용 from-status CAS만 수행한다. `paid`·`cancelled`·`cancel_pending`은 늦은 `READY|PAID` 응답으로 회귀하지 않는다.
+> - 취소 멱등 키는 16~256자 ASCII이고 request snapshot과 함께 한 번 정하면 바꾸지 않는다. 재시도 전 외부 상태를 먼저 조회하므로 PortOne의 3시간 멱등 보장 창 뒤에도 key 하나만 안전장치로 믿지 않는다.
+> - environment는 계정 이메일이 아니라 서버 설정과 검증된 PortOne channel에서 정한다. 생성 뒤 바꾸지 않고 개발자 테스트 Store를 작가 실판매 Store로 교체해도 기존 test 행을 live로 갱신하지 않는다.
 
 ### purchases
 ```sql
 purchases
-├── id              UUID PRIMARY KEY DEFAULT gen_random_uuid()
-├── user_id         UUID NOT NULL REFERENCES users(id)
-├── episode_id      UUID NOT NULL REFERENCES episodes(id)
-├── amount          INTEGER NOT NULL          -- 실제 결제 금액 (원)
-├── purchase_type   VARCHAR(20) DEFAULT 'single'
-│                   -- 'single' | 'bundle'    ← 낱개 vs 전편 구매 구분
-├── bundle_id       UUID                      -- 전편 구매 시 같은 트랜잭션 묶음 식별
-│                   -- 낱개 구매는 NULL, 전편 구매는 N개 레코드가 동일 bundle_id 공유
-├── pg_provider     VARCHAR(30) NOT NULL      -- 'tosspayments' 등
-├── pg_payment_id   VARCHAR(255) NOT NULL     -- PG사 결제 고유 ID
-├── paid_at         TIMESTAMPTZ NOT NULL
-├── first_viewed_at TIMESTAMPTZ               -- NULL = 미열람 → 환불 가능 판단 기준
-├── refunded_at     TIMESTAMPTZ               -- NULL = 환불 안 됨
-└── refund_amount   INTEGER                   -- 환불된 금액
+├── id               UUID PRIMARY KEY DEFAULT gen_random_uuid()
+├── payment_order_id UUID UNIQUE NOT NULL REFERENCES payment_orders(id)
+├── user_id          UUID NOT NULL REFERENCES users(id)
+├── episode_id       UUID NOT NULL REFERENCES episodes(id)
+├── environment      VARCHAR(8) NOT NULL
+│                    CHECK (environment IN ('test', 'live'))
+├── status           VARCHAR(24) NOT NULL
+│                    CHECK (status IN ('active', 'refund_pending', 'refunded', 'review_required'))
+├── amount           INTEGER NOT NULL CHECK (amount > 0)
+├── paid_at          TIMESTAMPTZ NOT NULL
+├── first_viewed_at  TIMESTAMPTZ
+├── refunded_at      TIMESTAMPTZ
+└── refund_amount    INTEGER
 ```
-> - 전편 구매는 에피소드 수만큼 `purchases` 레코드 N개 일괄 생성 (단일 트랜잭션)
-> - 전편 구매 레코드들은 동일한 `bundle_id` (UUID)를 공유 → 일괄 환불/통계 처리 가능
-> - 환불 가능 조건: `first_viewed_at IS NULL` AND `refunded_at IS NULL`
-> - 전편 일괄 환불 시: `WHERE bundle_id = ? AND first_viewed_at IS NULL` 로 대상 추출
-> - 중복 구매 방지는 partial unique index로 처리 (인덱스 정리 섹션 참조)
->   → 환불된 레코드(`refunded_at IS NOT NULL`)는 제외되어 재구매 허용
+> - 결제 완료나 purchase 생성만으로 `first_viewed_at`을 기록하지 않는다. 결제 복귀 뒤 자동 full 요청 또는 사용자의 직접 회차 진입에서 실제 전문을 처음 발급할 때만 기록한다.
+> - 전문 첫 발급과 환불 승인은 같은 행의 `status='active' AND first_viewed_at IS NULL` 조건부 UPDATE로 경합한다.
+> - environment는 구매를 생성한 payment_order에서 같은 transaction으로 복사하는 immutable snapshot이다. 전문 권한은 purchase와 order 환경이 모두 현재 `PAYMENT_ENVIRONMENT`와 일치할 때만 성립한다.
+> - 활성 구매의 full은 작품·회차의 일반 `is_published=false`보다 우선한다. soft delete는 route를 없애므로 `active|refund_pending|review_required` 구매가 남아 있으면 409로 막는다.
+> - `(user_id, episode_id, environment) WHERE status IN ('active','refund_pending','review_required')` partial unique가 같은 환경의 중복 권한과 환불 중 재구매를 막는다. test 구매는 live 구매를 막지 않는다.
+> - `purchase_type`, `bundle_id`, 전편 구매는 현재 범위 제외다.
+
+### payment_webhook_receipts
+```sql
+payment_webhook_receipts
+├── id              UUID PRIMARY KEY DEFAULT gen_random_uuid()
+├── webhook_id      VARCHAR(255) UNIQUE NOT NULL
+├── payment_id      VARCHAR(64)
+├── event_type      VARCHAR(40) NOT NULL
+├── attempts        INTEGER NOT NULL DEFAULT 0
+├── next_attempt_at TIMESTAMPTZ
+├── received_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+├── processed_at    TIMESTAMPTZ
+└── ignored_at      TIMESTAMPTZ
+```
+> raw webhook 서명 검증 뒤 이 receipt가 commit되기 전에는 2xx를 보내지 않는다. scheduler가 미처리 행을 bounded batch로 sync하고 상태 전이와 `processed_at`을 같은 transaction에 commit한다. 원시 body·헤더는 저장하지 않는다.
 
 ### payment_logs
 ```sql
 payment_logs
-├── id            UUID PRIMARY KEY DEFAULT gen_random_uuid()
-├── user_id       UUID REFERENCES users(id)
-├── episode_id    UUID REFERENCES episodes(id)
-├── pg_payment_id VARCHAR(255)
-├── status        VARCHAR(20) NOT NULL  -- 'success' | 'fail' | 'cancel'
-├── amount        INTEGER
-├── failure_reason TEXT
-└── created_at    TIMESTAMPTZ DEFAULT now()
+├── id               UUID PRIMARY KEY DEFAULT gen_random_uuid()
+├── payment_order_id UUID NOT NULL REFERENCES payment_orders(id)
+├── webhook_receipt_id UUID REFERENCES payment_webhook_receipts(id)
+├── source           VARCHAR(20) NOT NULL -- browser | webhook | reconcile | admin
+├── event_type       VARCHAR(40) NOT NULL
+├── from_status      VARCHAR(24)
+├── to_status        VARCHAR(24)
+├── provider_status  VARCHAR(40)
+├── failure_code     VARCHAR(80)          -- 제한 code만, PII·원시 payload 금지
+└── created_at       TIMESTAMPTZ DEFAULT now()
 ```
-> - 결제 성공/실패 모두 기록. Sentry 연동은 `status = 'fail'` 시
+> 일반 거절·사용자 취소는 감사 로그만, 불변식 위반·장기 미수렴만 Sentry 대상이다.
+
+### refund_requests
+```sql
+refund_requests
+├── id           UUID PRIMARY KEY DEFAULT gen_random_uuid()
+├── purchase_id  UUID NOT NULL REFERENCES purchases(id)
+├── requested_by UUID NOT NULL REFERENCES users(id)
+├── reason       VARCHAR(40) NOT NULL
+├── detail       VARCHAR(1000)
+├── status       VARCHAR(24) NOT NULL
+│                CHECK (status IN ('pending', 'processing', 'approved', 'rejected', 'action_required'))
+├── resolved_by  UUID REFERENCES users(id)
+├── admin_note   VARCHAR(1000)
+├── notification_status VARCHAR(24) NOT NULL DEFAULT 'none'
+│                CHECK (notification_status IN ('none', 'pending', 'sent', 'action_required'))
+├── notification_attempts INTEGER NOT NULL DEFAULT 0
+├── next_notification_at TIMESTAMPTZ
+├── notified_at  TIMESTAMPTZ
+├── requested_at TIMESTAMPTZ DEFAULT now()
+├── resolved_at  TIMESTAMPTZ
+└── updated_at   TIMESTAMPTZ DEFAULT now()
+```
+> 한 구매의 `pending|processing|action_required` 요청은 하나만 허용한다. approve는 request·purchase·order CAS를 한 transaction에 commit하고 reject는 pending에서만 성공한다. 테스트 자격은 `now < paid_at + 168 hours`와 `first_viewed_at IS NULL`이며 실결제 정책은 M7 법무 gate에서 확정한다. 승인·거부 확정은 결과 메일을 `pending`으로 함께 예약하며 발송 실패는 환불 transaction을 되돌리지 않고 scheduler가 재시도한다.
 
 ### donations
 ```sql
 donations
-├── id            UUID PRIMARY KEY DEFAULT gen_random_uuid()
-├── user_id       UUID NOT NULL REFERENCES users(id)
-├── post_id       UUID REFERENCES posts(id)   -- 게시글 후원 (NULL이면 작가 단위)
-├── episode_id    UUID REFERENCES episodes(id) -- 에피소드 후원
-├── amount        INTEGER NOT NULL             -- 100원 단위, 최소 100원
-├── message       TEXT
-├── visibility    VARCHAR(20) DEFAULT 'public'
-│                 -- 'public' | 'private' | 'author_only'
-├── pg_payment_id VARCHAR(255) NOT NULL
-├── paid_at       TIMESTAMPTZ NOT NULL
-└── CHECK (NOT (post_id IS NOT NULL AND episode_id IS NOT NULL))
-         -- post_id, episode_id 둘 다 NOT NULL 금지
-         -- 둘 다 NULL이면 작가 단위 후원, 하나만 NOT NULL이면 해당 대상 후원
+├── id               UUID PRIMARY KEY DEFAULT gen_random_uuid()
+├── payment_order_id UUID UNIQUE NOT NULL REFERENCES payment_orders(id)
+├── user_id          UUID NOT NULL REFERENCES users(id)
+├── episode_id       UUID REFERENCES episodes(id) -- NULL이면 작가 후원
+├── amount           INTEGER NOT NULL
+│                    CHECK (amount IN (1000, 3000, 5000))
+├── message          VARCHAR(500)              -- owner 전용
+└── paid_at          TIMESTAMPTZ NOT NULL
 ```
+> 게시글 후원, 공개 visibility, 후원 환불 자동화는 M3 범위 제외다.
 
 ---
 
@@ -455,14 +569,29 @@ notification_logs
 -- 자주 쓰이는 조회 기준 인덱스
 CREATE INDEX idx_episodes_work_id       ON episodes(work_id);
 CREATE INDEX idx_episodes_published     ON episodes(work_id) WHERE is_published = TRUE;
+CREATE INDEX idx_episode_images_episode ON episode_images(episode_id);
+CREATE INDEX idx_payment_orders_episode ON payment_orders(episode_id);
+CREATE INDEX idx_payment_orders_reconcile ON payment_orders(environment, status, next_reconcile_at);
+CREATE INDEX idx_payment_orders_user_created ON payment_orders(user_id, environment, created_at DESC);
+CREATE INDEX idx_payment_webhook_receipts_pending
+  ON payment_webhook_receipts(next_attempt_at, received_at)
+  WHERE processed_at IS NULL AND ignored_at IS NULL;
+CREATE UNIQUE INDEX uq_payment_orders_open_episode_intent
+  ON payment_orders(user_id, episode_id, environment)
+  WHERE kind = 'episode_purchase' AND status IN ('preparing', 'ready');
 CREATE INDEX idx_purchases_user_id      ON purchases(user_id);
 CREATE INDEX idx_purchases_episode_id   ON purchases(episode_id);
-CREATE INDEX idx_purchases_bundle_id    ON purchases(bundle_id) WHERE bundle_id IS NOT NULL;
 
--- 활성 구매(미환불) 중복 방지. 환불된 레코드는 제외되어 재구매 가능
+-- 열람 가능·환불 처리·검토 상태는 모두 재구매를 막는다.
 CREATE UNIQUE INDEX uq_purchases_active
-  ON purchases(user_id, episode_id)
-  WHERE refunded_at IS NULL;
+  ON purchases(user_id, episode_id, environment)
+  WHERE status IN ('active', 'refund_pending', 'review_required');
+CREATE UNIQUE INDEX uq_refund_requests_open
+  ON refund_requests(purchase_id)
+  WHERE status IN ('pending', 'processing', 'action_required');
+CREATE INDEX idx_refund_requests_notification_pending
+  ON refund_requests(next_notification_at)
+  WHERE notification_status = 'pending';
 CREATE INDEX idx_comments_target        ON comments(target_type, target_id);
 CREATE INDEX idx_comments_parent_id     ON comments(parent_id);
 CREATE INDEX idx_likes_target           ON likes(target_type, target_id);
@@ -502,6 +631,6 @@ CREATE INDEX idx_viewer_progress_episode_id ON viewer_progress(episode_id);
 
 | 항목 | 내용 | 결정 시점 |
 |------|------|-----------|
-| 환불 시간 제한 | 미열람 조건만 확정, 7일 기간 제한은 법무 검토 후 결정 | 런칭 전 |
+| 환불 시간 제한 | M3 테스트는 결제 후 168시간 미만·전문 미발급. 실결제 기간·문구는 법무 검토 후 확정 | M7 출시 gate |
 | 휴면 계정 분리 | 현재 스키마에 반영 안 함, 안정화 후 추가 | 6개월 후 |
 | push 토큰 저장 | 웹 푸시 도입 시 `push_tokens` 테이블 별도 추가 필요 | P1 작업 시 |
