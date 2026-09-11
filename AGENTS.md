@@ -22,6 +22,7 @@
 
 ## 문서 확인 시점
 
+- 아래 문서는 작업과 관련된 절만 확인한다. 같은 세션에서 이미 읽었고 변경되지 않은 내용은 재사용한다. 프로젝트 스킬은 적용 시 본문을 읽되, 모든 스킬과 참고 문서를 매 작업마다 일괄 로드하지 않는다.
 - 계획·설계 또는 기존 결정 변경 전: `docs/DECISIONS.md`
 - 구현·마이그레이션·테스트·CI 전: `docs/MISTAKES.md`의 관련 영역
 - 브랜치·커밋·PR·세션 종료 작업 전: `docs/guides/GUIDE_WORKFLOW.md`
@@ -37,7 +38,7 @@
 - Backend 기본 게이트: `cd backend && uv run ruff format --check . && uv run ruff check . && uv run pytest`.
 - Frontend 기본 게이트: `pnpm --filter frontend lint && pnpm --filter frontend astro check && pnpm --filter frontend test && pnpm --filter frontend build`.
 - Admin 기본 게이트: `pnpm --filter admin lint && pnpm --filter admin test && pnpm --filter admin build`.
-- 변경 범위에 맞는 최소 게이트부터 실행하고, 완료 전 관련 전체 게이트를 실행한다. 실행하지 못한 검증은 이유와 함께 명시한다.
+- 변경 범위에 맞는 최소 게이트부터 실행하고, 코드·실행 설정 변경은 완료 전 해당 앱의 관련 전체 게이트를 실행한다. 문서만 바뀌면 diff·링크·일관성을, 독립 도구만 바뀌면 해당 도구를 검증한다. 통과 후 새 변경·실패·미해결 우려가 없으면 같은 검증을 반복하지 않는다. 필요한 검증을 실행하지 못하면 이유를 명시한다.
 - 의미 있는 구현은 `docs/MODULES/.../IMPLEMENTATION_*.md` 작성 대상인지 확인하고, 완료된 작업은 관련 마일스톤과 결정 문서에 반영한다. 사소한 수정은 생략할 수 있다.
 - 현재 학습용 `LEARN:` 주석은 추가하지 않는다. 기존 방지 훅은 남은 마커가 커밋되는 것을 막기 위해 유지한다. `study/`와 `blog.md`는 gitignore된 로컬 자료다.
 
@@ -50,9 +51,10 @@
 
 ## Codex workflows
 
-- 계획·설계에는 `$fable-plan`, 구현·디버깅에는 `$fable-exec`, 리뷰에는 `$fable-review`를 사용한다.
+- 계획·설계에는 `$fable-plan`, 구현·디버깅에는 `$fable-exec`, 리뷰에는 `$fable-review`를 사용한다. 작업에 해당하는 스킬만 적용하며, 단순 수정에 계획·Council·별도 리뷰 절차를 일괄 강제하지 않는다.
 - 중요한 아키텍처·마일스톤 계획을 여러 관점으로 검증할 때 `$council-review`를 사용한다.
-- 현재 모델보다 높은 품질 설정이 필요한 DB·동시성·보안·아키텍처 작업은 착수 전에 사용자에게 권장 모델과 reasoning 수준 변경을 요청한다.
+- 메인 Astra는 기본 Medium으로 계획·오케스트레이션과 일반적인 최종 검토를 직접 맡고, 필요하면 High로 올린다. 어려운 DB·동시성·보안·아키텍처 판단은 XHigh 이상을 난도에 맞게 선택한다.
+- 구현은 기본 `gpt-5.6-sol` Low에 위임하고, 막힌 디버깅은 Sol Medium 또는 High로 올린다. 단순 검색·파일 탐색·확정된 규칙의 반복 수정은 저비용 subagent(기본 Luna Low)에 위임한다. 어려운 판단이 끝난 뒤에도 Astra를 Low로 낮춰 일상 작업을 처리하지 않으며, 메인은 독립적인 최종 reasoning과 보안·아키텍처 판정을 맡는다. 위임 범위와 reasoning 전환의 실행 기준은 `docs/guides/GUIDE_WORKFLOW.md`의 "모델과 작업 위임"을 따른다.
 
 ## 범위 제외
 

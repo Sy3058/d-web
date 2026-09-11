@@ -314,7 +314,7 @@ M4 (커뮤니티 - 후원 제외)
 > **DoD**: 보안/부하/법무 모두 통과, 베타 사용자 10~30명 1주일 운영 후 치명 버그 0.
 
 ### 보안
-- [ ] **보안 리뷰**: 결제·인증·Signed URL 권한·CORS·rate limit 종합 점검 (`$fable-review`, 착수 전 권장 모델과 reasoning 수준 사용자 확인)
+- [ ] **보안 리뷰**: 결제·인증·Signed URL 권한·CORS·rate limit 종합 점검 (`$fable-review`; 메인 Astra가 난도에 맞는 reasoning으로 판단, 모델·위임 기준은 `docs/guides/GUIDE_WORKFLOW.md`)
 - [ ] OWASP Top 10 자체 체크리스트 (XSS, CSRF, SQLi, IDOR)
 - [ ] 비밀번호 reset 토큰, 이메일 인증 토큰, JWT TTL 재검토
 - [ ] 환경변수 누출 점검 (Astro `PUBLIC_*` 외 빌드 산출물 grep)
