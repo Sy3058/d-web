@@ -198,7 +198,7 @@ M4 (커뮤니티 - 후원 제외)
 
 ### P0 판매 경로
 
-- [ ] `payment_orders` + `purchases` + durable `payment_webhook_receipts` + `payment_logs`와 PortOne V2 async REST adapter
+- [x] `payment_orders` + `purchases` + durable `payment_webhook_receipts` + `payment_logs`와 PortOne V2 async REST adapter *(그룹 C 완료 2026-09-01, 리뷰 보강 2026-09-03·09-05, 2026-09-11 금액 불일치 수정: `provider_total_amount` 금액 분리·취소 금액 CHECK. 2026-09-12 최종 자동검증 pytest 578·focused 43, scratch migration 왕복·취소 3건/거부 4건. 실제 API 읽기 전용 GET은 2026-09-01 기록이며 이번에는 재실행하지 않음. IMPLEMENTATION_PAYMENT_FOUNDATION.md)*
 - [ ] 서버 가격·Store·`test|live`·channel snapshot, 환경별 열린 주문·구매 UNIQUE, pre-register, 30분 주문 만료
 - [ ] browser·webhook receipt worker·대사·owner 공통 단조 sync, out-of-order 방어와 이중 `PAID` 보상 취소
 - [ ] 결제·비공개·soft delete race 단일 승자, 일반 비공개 뒤 기존 구매 full 유지, 먼저 비공개된 주문의 늦은 `PAID` 전액 보상

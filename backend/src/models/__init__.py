@@ -5,6 +5,18 @@ Alembic env.py가 이 패키지를 import하면 전체 테이블 메타데이터
 """
 
 from .commission import CommissionItem, SiteText, SiteTextKey, SiteTextSlotKey
+from .payment import (
+    PaymentCancelReason,
+    PaymentEnvironment,
+    PaymentLog,
+    PaymentLogSource,
+    PaymentOrder,
+    PaymentOrderKind,
+    PaymentOrderStatus,
+    PaymentWebhookReceipt,
+    Purchase,
+    PurchaseStatus,
+)
 from .user import (
     EmailVerification,
     OAuthAccount,
@@ -39,4 +51,14 @@ __all__ = [
     "SiteText",
     "SiteTextKey",
     "SiteTextSlotKey",
+    "PaymentOrder",
+    "PaymentOrderKind",
+    "PaymentOrderStatus",
+    "PaymentCancelReason",
+    "PaymentEnvironment",
+    "Purchase",
+    "PurchaseStatus",
+    "PaymentWebhookReceipt",
+    "PaymentLog",
+    "PaymentLogSource",
 ]
