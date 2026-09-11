@@ -138,7 +138,7 @@ M2 착수 전 확정. presigned·표지·콘텐츠 모델은 기존 결정(DECIS
 
 ## 그룹 B. 회차 목록 + 무료 구간 콘텐츠 API (WORK-03, 04) ⚠️ 보안 그룹
 
-> ⚠️ **유료 구간·미공개 원고 유출 방어선**. 같은 경계를 변경할 때는 `$fable-review`를 적용하고 착수 전 권장 모델·reasoning 수준을 사용자에게 제안한다. 절단·presign은 **#76 머지분(`lib/content_doc`·`presign_get_urls`) 재사용**(결정 1), M2는 독자용 절단·치환 층과 공개 엔드포인트만 얹는다.
+> ⚠️ **유료 구간·미공개 원고 유출 방어선**. 같은 경계를 변경할 때는 `$fable-review`를 적용한다. 메인 Astra가 난도에 맞는 reasoning으로 직접 판단하며, 모델·위임 기준은 `docs/guides/GUIDE_WORKFLOW.md`를 따른다. 절단·presign은 **#76 머지분(`lib/content_doc`·`presign_get_urls`) 재사용**(결정 1), M2는 독자용 절단·치환 층과 공개 엔드포인트만 얹는다.
 
 ### B1. 공개 회차 목록 API ✅ (2026-07-21 완료 - 브랜치 `be/feat/m2-episode-content`)
 - 선행: A2
@@ -331,7 +331,7 @@ M2 착수 전 확정. presigned·표지·콘텐츠 모델은 기존 결정(DECIS
 
 ## 메모
 
-- **현재 workflow**: 계획(`$fable-plan`) → 코딩(`$fable-exec`) → 검증(`$fable-review`, `docs/reviews/GUIDE_REVIEW.md` + 영역별 checklist) → 사용자 커밋 승인. B(절단·치환) 같은 콘텐츠 권한 경계는 착수 전 권장 모델과 reasoning 수준을 사용자에게 제안한다.
+- **현재 workflow**: 계획(`$fable-plan`) → 코딩(`$fable-exec`) → 검증(`$fable-review`, `docs/reviews/GUIDE_REVIEW.md` + 영역별 checklist) → 사용자 커밋 승인. 메인 Astra가 난도에 맞는 reasoning으로 직접 판단하며, 모델·위임 기준은 `docs/guides/GUIDE_WORKFLOW.md`를 따른다.
 - 백엔드 실행은 항상 `uv run` 접두사, cwd 명시(`cd .../backend && uv run ...`).
 - 새 패키지 설치 직전 공식 문서에서 최신 안정 버전과 호환성 확인(GUIDE_WORKFLOW 검색 규칙). FE 신규 의존성 = `@tiptap/core`(+`@tiptap/starter-kit` 등 렌더 스키마 - 에디터(#78) 머지분과 버전 통일: admin package.json 3.27.4), BE 신규 0(절단·presign·검증 전부 #76 재사용).
 - **확정된 결정**(M2 착수 시 DECISIONS.md 반영 - 대부분 기존 결정 참조):
