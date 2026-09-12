@@ -2,6 +2,8 @@
 
 작업을 시작할 때 **무엇을·어떻게·어디까지** 할지 한 장으로 고정하고(= [A] GOAL 입력판), 그 위에서 **늘 같은 방식으로 진행**(= [B] 고정 루프)하기 위한 프레임워크.
 
+사용자가 harness를 요청했거나 여러 세션에 걸친 작업의 상태 보존이 필요할 때 적용한다. 단순 수정·질문·리뷰에는 입력판이나 ledger를 강제하지 않는다. 사용자 요청과 이미 받은 권한이 양식보다 우선한다.
+
 - 마일스톤 doc(M1, M2 …)이 "여러 goal의 지도"라면, 이 문서는 "goal 하나를 어떻게 정의하고 굴리는가"의 규칙이다.
 - 브랜치/커밋/PR 규칙은 `docs/guides/GUIDE_WORKFLOW.md`, 리뷰 원칙은 `docs/reviews/GUIDE_REVIEW.md`와 병행한다.
 - 계획·설계는 `$fable-plan`, 구현·디버깅은 `$fable-exec`, 리뷰는 `$fable-review`를 사용한다. 분해는 **검증 가능한 단일 goal까지만** 한다.
@@ -14,7 +16,7 @@
 [A] 작업마다 입력판을 채운다  →  [B] 고정 루프가 그 위로 돈다
 ```
 
-- 입력판 누락·모순이면 STOP. 충돌 시 PRIORITY 순. STOP RULES에 걸리면 멈추고 묻는다.
+- 입력판은 요청과 저장소 근거에서 채운다. 누락된 형식 항목만으로 중단하지 않으며, 결과를 바꾸는 필수 선택이나 권한이 없을 때만 확인한다.
 - **운영 방식**: 작업 착수 시 [A] 7칸을 채워 강 모델(오케스트레이터)에게 kickoff로 전달한다. 입력판은 **커밋하지 않는 작업 지침**이지만 **채팅에만 두지 않는다** - 채팅은 길어지면 요약·소실되고 "뭘 했고 안 했는지"를 체크할 수 없다. 대신 **gitignore되는 ledger 파일**(레포 루트 `*.local`, 예: `task_harness.local`)에 **현재 goal 하나의** [A] 입력판 + [B] 체크리스트(단계 done/not-done, DONE EVIDENCE 검증 결과)를 적고, 진행하며 그 파일을 갱신한다(B5 외부 progress file). 강 모델은 같은 미완료 goal을 재개할 때 이 ledger의 마지막 검증 지점부터 이어 간다.
 
 ---
@@ -26,12 +28,12 @@
 | 1 | GOAL | 측정 가능한 단일 목표. 확장 금지. |
 | 2 | DONE EVIDENCE | 완료 증거(테스트/빌드/before-after metric/문서/배포 등). 검증 불가한 건 완료조건으로 쓰지 않는다. |
 | 3 | CONTEXT | 현재 상태·기존 구조·이전 결정·관련 파일/의존성·알려진 제약. |
-| 4 | STARTING POINT | 먼저 볼 파일/로그/테스트/문서/실패출력/기존계획. 여기서 시작, 광역 탐색 금지. |
+| 4 | STARTING POINT | 먼저 볼 파일/로그/테스트/문서/실패출력/기존계획. 여기서 시작하고 근거가 부족하면 관련 호출·의존 경로로 탐색을 넓힌다. |
 | 5 | SCOPE | Include(수정 가능 영역 + 필요 작업) / Exclude(범위 밖·무관 리팩터·신기능·기존 API·schema·production behavior 임의 변경). |
 | 6 | CONSTRAINTS | 각 허용/금지: 새 dependency / network·API / commit·PR·push / migration·DB / 비용 / destructive. |
 | 7 | BUDGET | 시간·토큰·호출·비용 상한(있으면 따름, 없으면 임의 생성 금지). |
 
-> 7칸 중 **누락·모순 → 추측 금지, STOP.**
+> 선택 항목은 해당 없음으로 두고, 합리적 가정은 명시한다. 사용자가 정하지 않은 예산 상한은 만들지 않는다.
 
 ### 빈 템플릿 (복붙용)
 
@@ -67,27 +69,26 @@ BUDGET        :
 
 ### B3. 실행 루프 (PLAN → DO → VERIFY → FINALIZE → OUTPUT)
 
-- **PLAN GATE**: 즉시 수정 금지. root cause + 짧은 계획 먼저. 큰 변경·schema·dependency·behavior 변경 전 멈추고 승인받는다.
-- **DO**: 최소 변경으로 달성. 착수 전 RISKS 점검(breaking / race / stale state / memory leak / data loss / security·permission / perf regression / backward compat).
-- **VERIFY**: 완료 전 tests·build·lint/typecheck·수동검증·before/after metric·변경 diff 확인. 검증 못한 건 **NOT RUN + 사유** 명시.
+- **PLAN GATE**: 요청과 근거에서 짧은 실행 방향을 정한다. 구현 요청에 필요한 schema·dependency·behavior 변경은 승인된 범위에서 진행한다. 계획만 요청받았거나 범위를 실질적으로 확장해야 할 때만 구현 전 확인한다.
+- **DO**: 목표를 완결하는 일관된 변경으로 달성한다. 해당 변경에 실제로 관련된 실패 시나리오를 검토한다.
+- **VERIFY**: 변경 diff와 해당 범위의 테스트·정적 검사·빌드를 확인한다. 모든 검증 종류를 일괄 실행하지 않는다. 브라우저 실기능 확인은 사용자가 수행한다. 필요한 검증을 못 하면 **NOT RUN + 사유**를 명시한다.
 - **FINALIZE**: 목표 달성 후 추가 리팩터 금지. 임시코드·debug·실패실험·잡파일 정리. 보고 전 범위 + 검증 재확인.
 - **OUTPUT**: 변경 파일 / 핵심 수정 / 완료 증거 / 실행한 검증 / 리스크·trade-off / 남은 known issue / 후속 작업. **최종 상태: WORKING / PARTIAL / BROKEN.**
 
-### B4. STOP RULES (멈추고 질문, 답 전까지 진행 금지)
+### B4. 확인이 필요한 경우
 
-- 목표가 둘 이상으로 갈라짐
-- 입력 누락·모순 / 완료기준 충족 판단 불가
-- scope 밖 변경 · destructive · 외부 side effect 필요
-- credentials/secret/권한 문제
-- 수정·판단에 필요한 root cause 또는 핵심 전제 확신 부족
-- 같은 blocker 반복
+- 결과를 실질적으로 바꾸는 필수 사용자 선택이 없거나 지시가 충돌한다.
+- 요청 범위 밖 변경, 승인되지 않은 파괴적 작업·외부 변경 또는 추가 권한이 필요하다.
+- 안전한 진단과 대안을 확인해도 credentials·외부 상태 등으로 더 진행할 수 없다.
+
+필수 답변에 의존하는 작업만 보류하고 독립적인 조사·구현은 계속한다. 목표 분해, 원인 불확실성, 첫 실패는 중단 사유가 아니다. 반복 실패 시 근거를 비교해 가설·접근법·reasoning을 바꾸고, 진전 없는 동일 재시도는 피한다.
 
 ### B5. 장기 작업 (해당 시)
 
 - 주요 단계마다 짧은 상태 보고(완료 증거와 미완료를 분리).
 - 외부 기록(progress file/checklist/commit/draft PR)에 상태 저장.
 - 재개 시 마지막 검증 지점부터. 처음부터 다시 금지.
-- BUDGET 80% 도달 또는 장시간 정체 → 현황 보고 후 계속 여부 질문.
+- 명시된 예산 상한을 지킨다. 소진 위험이나 장시간 정체는 현황과 다음 접근을 알리되 임의의 80% 지점에서 승인을 다시 요구하지 않는다.
 
 ---
 
@@ -200,4 +201,4 @@ OUTPUT : 수정된 파일 내용(또는 해당 부분)만. 설명·잡담 없이
 - **끝난 작업 소급 재작성 금지.** 이미 완료(✅)된 task를 새 양식으로 다시 쓰지 않는다. **다음 작업부터** 적용.
 - **[B]는 이 문서에만 1회.** 작업마다 복붙하지 않는다.
 - **소형 로컬 모델로 실행할 땐 "로컬 실행 모델 모드"를 따른다** - 강 모델이 분해·검증을 소유하고, 9B에는 판단 제거된 DO만 트림해 건넨다.
-- 보안·결제 등 민감 작업은 PLAN GATE에서 권장 모델과 reasoning 수준을 사용자에게 먼저 제안하고, `$fable-review`와 `docs/reviews/GUIDE_REVIEW.md`를 적용한다.
+- 보안·결제 등 민감 작업은 메인 Astra가 난도에 맞는 reasoning으로 판단하고, 모델·위임 기준은 `docs/guides/GUIDE_WORKFLOW.md`를 따른다. `$fable-review`와 `docs/reviews/GUIDE_REVIEW.md`를 적용한다.

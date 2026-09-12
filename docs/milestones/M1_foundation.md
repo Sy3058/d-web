@@ -362,7 +362,7 @@ git stash pop stash@{0}
 
 ## 메모
 
-- **현재 workflow**: 계획(`$fable-plan`, 필요 시) → 코딩(`$fable-exec`) → 검증(`$fable-review`, `docs/reviews/GUIDE_REVIEW.md` + 영역별 checklist) → 사용자 커밋 승인. 인증·토큰·쿠키 착수 전 권장 모델과 reasoning 수준을 사용자에게 제안한다.
+- **현재 workflow**: 계획(`$fable-plan`, 필요 시) → 코딩(`$fable-exec`) → 검증(`$fable-review`, `docs/reviews/GUIDE_REVIEW.md` + 영역별 checklist) → 사용자 커밋 승인. 메인 Astra가 난도에 맞는 reasoning으로 직접 판단하며, 모델·위임 기준은 `docs/guides/GUIDE_WORKFLOW.md`를 따른다.
 - 백엔드 실행은 항상 `uv run` 접두사 (`uv run uvicorn`, `uv run pytest`, `uv run alembic`).
 - 패키지/라이브러리(bcrypt, JWT, rate limit 등)는 설치 직전 공식 문서에서 최신 안정 버전과 호환성 확인 (GUIDE_WORKFLOW "검색 규칙").
 - 결정 필요 항목(OAuth state/nonce 저장 방식, rate limit 라이브러리, `__Host-` 프리픽스 적용 범위, 회전 시 refresh 절대 수명 cap)은 해당 작업 직전 짧게 합의 후 진행. → 모두 해소(refresh 절대 수명 cap = ✅ M1 A, 최초 발급 30일 상한 `original_issued_at`+cap 거부, `be/feat/refresh-absolute-lifetime-cap`, 2026-06-27).
