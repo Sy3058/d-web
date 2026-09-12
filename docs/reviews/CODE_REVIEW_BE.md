@@ -35,7 +35,7 @@ routers/, services/, models/, lib/, config.py, main.py 변경사항
 
 ## ⚠️ Major - 수정 필요
 
-- [ ] **결제 흐름**: 포트원 API 검증 → 금액 확인 → DB insert 순서. 검증 실패 시 DB 변경 없음
+- [ ] **결제 흐름**: PortOne 단건 조회 → 서버 주문 snapshot 대조 → 권한 생성 순서. 검증 실패 시 권한을 만들지 않는다. 이미 승인된 금액 불일치는 서버 예상 금액을 바꾸지 않고 검증된 provider 총액으로 보상 취소하며, 취소를 확정할 수 없으면 대사·격리 상태를 DB에 보존한다.
 - [ ] **Webhook**: `PORTONE_WEBHOOK_SECRET` 검증, 타임스탬프 확인
 - [ ] **N+1**: 관계 데이터 조회 시 `selectinload` 명시 (lazy loading 금지)
 - [ ] **JWT**: 액세스 15분 / 리프레시 7일 일관성

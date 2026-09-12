@@ -68,10 +68,10 @@
 
 | 항목 | 현재 상태 | 착수 조건 |
 |------|-----------|-----------|
-| 개발자 테스트 고객사 이용 자격 | 미검증 | PortOne의 고객사 정의는 사업체와 타 고객사 결제를 개발하는 에이전시 예외를 둔다. 개발자 본인 정보로 사실대로 가입하고, 현재 협업 형태가 테스트 고객사 이용 조건에 맞는지 C 실연동 전 PortOne에 확인한다. |
-| 개발자 소유 PortOne 테스트 Store ID, V2 API Secret, webhook secret | 발급 여부 미검증 | 개발자 본인 정보로 만든 테스트 전용 고객사에서 C 실연동 전에 확인한다. 작가 사업자·대표자·계좌 정보를 입력하지 않고 두 secret은 `SecretStr`로 다룬다. |
-| 카드 테스트 channel key·최소 결제 금액 | 발급 여부 미검증 | 카드 1종은 M3 공개 HTTPS E2E 필수다. 확인된 테스트 하한을 M3 결제 하한으로 고정한다. |
-| 카카오페이·토스페이 channel key | 계약 전 범용 테스트 MID 공식 확인, 개발자 Store channel 생성 미완료 | 카카오페이 `TC0ONETIME`, 토스페이 `tosstest` 직연동 테스트 channel을 만들고 M3 공개 HTTPS에서 실제 브라우저 스모크한다. 계약·심사를 거친 실 MID 검증만 M7 gate다. |
+| 개발자 테스트 고객사 이용 자격 | 개발자 명의 테스트 고객사 생성, 이용 조건 확인 기록은 미완료 | PortOne의 고객사 정의는 사업체와 타 고객사 결제를 개발하는 에이전시 예외를 둔다. 개발자 본인 정보로 사실대로 가입하고, 현재 협업 형태가 테스트 고객사 이용 조건에 맞는지 공개 실연동 전 PortOne에 확인한다. |
+| 개발자 소유 PortOne 테스트 Store ID, V2 API Secret, webhook secret | 발급·backend 로컬 설정 완료, V2 API secret 읽기 전용 실조회 완료, Store·webhook 통신 미검증 | 작가 사업자·대표자·계좌 정보를 입력하지 않고 두 secret은 `SecretStr`로 다룬다. D~F 공개 실연동에서 Store와 secret 조합을 검증한다. |
+| 카드 테스트 channel key·최소 결제 금액 | 테스트 channel 생성·backend 로컬 설정 완료, 최소 금액·브라우저 스모크 미검증 | 카드 1종은 M3 공개 HTTPS E2E 필수다. 확인된 테스트 하한을 M3 결제 하한으로 고정한다. |
+| 카카오페이·토스페이 channel key | `TC0ONETIME`·`tosstest` channel 생성과 backend 로컬 설정 완료, 브라우저 스모크 미검증 | M3 공개 HTTPS에서 실제 브라우저 스모크한다. 계약·심사를 거친 실 MID 검증만 M7 gate다. |
 | 공개 frontend·API·webhook HTTPS 주소 | 미검증 | 모바일 redirect, HttpOnly 쿠키, CORS, webhook 실수신 스모크에 필요하다. 로컬 fixture는 이를 대체하지 않는다. |
 | 결제 운영 스위치 | 미구현 | `payments_accept_new=false`면 신규 intent만 503으로 닫고 webhook·대사·기존 구매 열람·환불은 계속 작동하게 한다. |
 | 환불·만 14세 약관 문구 | 법무 미검토 | 테스트 UI는 즉시 제공·단순 변심 청약철회 제한·계약 불일치 예외를 결제 전에 고지한다. 168시간 정책과 문구는 잠정이며 실결제는 M7 Q1·Q7 승인 없이는 차단한다. |
@@ -155,6 +155,7 @@ cancel_pending 실패 확정 ─→ paid (사용자 환불) | review_required (�
 - pre-register 뒤 `ready`로 바꾸는 transaction도 작품·회차가 여전히 공개·미삭제·판매 중인지 다시 확인한다. 그 사이 비공개·판매 중지·삭제가 이겼으면 결제 config를 반환하지 않고 주문을 `status='expired', needs_action_reason='content_unavailable'`로 닫는다. 이미 열린 결제창에서 늦은 `PAID`가 오면 상태 전이표의 시스템 보상 경로로 간다.
 - intent의 결제수단은 `card|kakaopay|tosspay` allowlist이면서 현재 배포의 활성 capability여야 한다. 서버가 대응 channel key를 고르고, 조회 결과의 Store·`test|live`·currency·amount·channel·method를 snapshot과 대조한다. M3 test 환경은 세 수단 channel을 모두 구성해야 P0를 통과하며, channel이 빠진 수단은 UI와 intent에서 fail-closed로 닫고 M3 미완료로 남긴다. live capability는 M7의 작가 계약 MID 스모크 뒤 설정으로 연다.
 - `PAID` 불일치는 권한을 만들지 않고 곧바로 `cancel_pending(system_verification)`으로 전환한다. 같은 주문 ID에서 파생한 멱등 키로 전액 취소하고, timeout·`REQUESTED`는 대사가 종결할 때까지 유지한다.
+- 금액 불일치 보상에서도 서버 주문의 `expected_amount`는 바꾸지 않는다. 인증된 PortOne 단건 조회의 `amount.total`을 `provider_total_amount`에 기록하고 이를 전액 취소 snapshot과 취소 완료 금액의 기준으로 삼는다. 클라이언트 값이나 `amount.paid`는 이 총액의 대체 출처가 아니며, 양수 총액을 확인할 수 없으면 취소 금액을 추측하지 않고 `review_required`로 격리한다. 최초 snapshot은 재시도에서 다시 계산하지 않는다.
 - 시스템 보상 취소가 최종 실패하면 주문을 `paid`로 되돌리지 않고 `review_required`로 격리한다. 돈은 결제됐지만 권한을 줄 수 없는 건으로 owner가 수동 PortOne 확인·고객 응대를 끝낼 때까지 남긴다.
 - 취소를 시작할 때 16~256자 ASCII 멱등 키와 개인정보 없는 exact request snapshot을 주문에 한 번 저장한다. 재시도는 같은 키를 RFC 8941 quoted string으로 보내고 snapshot을 다시 계산하거나 다른 body에 재사용하지 않는다. `IDEMPOTENCY_OUTSTANDING_REQUEST` 409와 timeout은 비terminal이다. 매 재시도 전, 특히 PortOne 보장 창 3시간이 지난 뒤에는 결제를 먼저 재조회해 이미 전액 취소면 로컬만 확정하고 아직 취소 가능한 승인일 때만 같은 요청을 보낸다.
 - `environment='test'` 주문은 수익·전환율 기본 집계에서 제외한다. owner가 `environment=test`를 명시한 화면에서만 TEST 배지와 함께 본다. 환경은 생성 뒤 바꾸지 않으며 계정 교체 때 기존 행을 live로 갱신하지 않는다.
@@ -256,6 +257,7 @@ cancel_pending 실패 확정 ─→ paid (사용자 환불) | review_required (�
 | `user_id` | users FK RESTRICT, 5년 보존 |
 | `kind`, `episode_id` | `episode_purchase|donation`, 구매면 episode 필수 |
 | `expected_amount`, `currency` | INTEGER `> 0`, `KRW` CHECK |
+| `provider_total_amount` | nullable INTEGER `> 0`, 인증된 PortOne 조회의 `amount.total`. 주문 예상 금액과 분리한 실제 총액 |
 | `store_id`, `requested_channel_key`, `environment` | 주문 시 Store·channel·`VARCHAR(8) CHECK test|live` immutable snapshot |
 | `order_name`, `item_title` | PG 안전 표시명, 사용자 표시 snapshot |
 | `checkout_notice_version`, `immediate_supply_consented_at` | 구매 시 서버가 선택한 결제 고지 버전과 즉시 제공 동의 시각, donation은 NULL |
@@ -264,7 +266,7 @@ cancel_pending 실패 확정 ─→ paid (사용자 환불) | review_required (�
 | `provider_status`, `transaction_id`, `cancellation_id` | 마지막 검증 응답의 비민감 ID·상태 |
 | `pg_provider`, `payment_method`, `easy_pay_provider` | 검증된 결제수단 breakdown snapshot |
 | `receipt_url` | 검증된 URL만 저장 |
-| `cancel_reason`, `cancel_idempotency_key`, `cancel_request_snapshot`, `cancelled_amount` | 보상·환불 수렴 정보. snapshot은 개인정보 없는 exact JSONB이며 key와 함께 immutable |
+| `cancel_reason`, `cancel_idempotency_key`, `cancel_request_snapshot`, `cancelled_amount` | 보상·환불 수렴 정보. reason은 개인정보 없는 내부 code allowlist이고 exact JSONB·key와 함께 immutable |
 | `expires_at`, `next_reconcile_at`, `reconcile_attempts`, `last_synced_at` | 생명주기·대사 |
 | `needs_action_reason` | nullable 제한 enum/code, 원시 응답 금지 |
 | `prepared_at`, `paid_at`, `cancelled_at`, `created_at`, `updated_at` | UTC timestamptz |
@@ -273,6 +275,9 @@ cancel_pending 실패 확정 ─→ paid (사용자 환불) | review_required (�
 
 - 구매는 `episode_id NOT NULL AND donation_message IS NULL`, 후원은 `episode_id`와 message가 각각 nullable인 kind CHECK
 - 구매는 `checkout_notice_version`과 `immediate_supply_consented_at`이 NOT NULL이고 후원은 둘 다 NULL인 kind CHECK
+- 취소 사유는 `system_verification|system_unavailable|system_duplicate|customer_refund`만 허용한다. 사유·멱등 키·snapshot은 모두 NULL이거나 모두 존재하고 `cancel_pending`에서는 필수다. 취소 묶음은 양수 `provider_total_amount`를 요구하며 snapshot은 Store·사유·해당 총액 기준 `amount`·`currentCancellableAmount`·사유별 requester의 정확한 5-key JSONB
+- `cancelled_amount`는 NULL이거나 provider 총액이 존재하면서 `0 < cancelled_amount <= provider_total_amount`. 과다 승인 보상도 원래 `expected_amount`를 바꾸지 않고 전액 취소를 기록
+- 구매 권한의 composite FK 대상인 `(id, user_id, kind, episode_id, environment, expected_amount, paid_at)` UNIQUE
 - `(user_id, episode_id, environment) WHERE kind='episode_purchase' AND status IN ('preparing','ready')` partial unique
 - `(environment, status, next_reconcile_at)`, `(user_id, environment, created_at DESC)`, `(episode_id)` index
 
@@ -280,15 +285,16 @@ cancel_pending 실패 확정 ─→ paid (사용자 환불) | review_required (�
 
 | 컬럼 | 계약 |
 |------|------|
-| `id`, `payment_order_id` | UUID PK, payment_orders FK UNIQUE |
+| `id`, `payment_order_id` | UUID PK, payment_orders composite FK의 선두 열이며 주문당 UNIQUE |
 | `user_id`, `episode_id` | FK RESTRICT |
+| `payment_order_kind` | `episode_purchase` 고정 CHECK. purchase 유형이 아닌 FK provenance discriminator |
 | `environment` | 주문에서 복사한 `VARCHAR(8) CHECK test|live` immutable snapshot |
 | `status` | `active|refund_pending|refunded|review_required` |
 | `amount`, `paid_at` | 주문 snapshot |
 | `first_viewed_at` | 최초 full 응답 발급 시각 |
 | `refunded_at`, `refund_amount` | 전액 취소 확인 뒤 기록 |
 
-`(user_id, episode_id, environment) WHERE status IN ('active','refund_pending','review_required')` partial unique가 같은 환경의 중복 권한과 환불 중 재구매를 막는다. test 구매는 live 재구매를 막지 않는다. purchase 생성 transaction은 주문 environment를 복사하고, 권한 조회는 purchase와 order 환경이 모두 현재 배포 환경과 일치하는지 확인한다. 전편 구매용 `purchase_type`, `bundle_id`는 만들지 않는다.
+`(payment_order_id, user_id, payment_order_kind, episode_id, environment, amount, paid_at)` composite FK가 참조 주문의 ID·사용자·`episode_purchase` kind·회차·환경·금액·결제 시각과 모두 일치하는 권한만 허용한다. 주문 `status`는 취소 전이를 위해 FK에서 제외하고, purchase 생성 시 `paid` 확인은 공통 sync transaction이 강제한다. `(user_id, episode_id, environment) WHERE status IN ('active','refund_pending','review_required')` partial unique가 같은 환경의 중복 권한과 환불 중 재구매를 막는다. test 구매는 live 재구매를 막지 않는다. 권한 조회는 purchase와 order 환경이 모두 현재 배포 환경과 일치하는지 확인한다. 전편 구매용 `purchase_type`, `bundle_id`는 만들지 않는다.
 
 ### `payment_webhook_receipts`
 
@@ -391,7 +397,8 @@ cancel_pending 실패 확정 ─→ paid (사용자 환불) | review_required (�
 ### C. 결제 schema·PortOne adapter
 
 - 주문·구매·webhook receipt·로그 모델과 첫 migration, SecretStr config, async REST·webhook adapter를 만든다. refund·donation 테이블은 G·H에서 각각 추가한다.
-- 완료 증거: kind·status·environment CHECK와 partial unique, migration 왕복, test 구매 뒤 같은 사용자·회차 live 주문 허용, `read=65초`·unknown response fake, 취소 key·snapshot 고정, secret 노출 0.
+- 완료 증거: kind·status·environment CHECK와 partial unique, 작가·에피소드 후원 target, Purchase-order 7열 provenance FK, migration 왕복, test 구매 뒤 같은 사용자·회차 live 주문 허용, 세 REST endpoint의 정확한 URL, typed·일반 404 분리, outstanding 409 분류, `read=65초`·unknown response fake, 취소 key·snapshot 고정, secret 노출 0, 설정된 V2 API secret의 읽기 전용 실제 GET.
+- **완료 (2026-09-01, 2026-09-03·09-05 리뷰 보강, 2026-09-11 금액 불일치 수정, 2026-09-12 최종 자동검증)**: 결제 테이블 4개와 revision `d0c3a4b5e6f7`, `httpx` REST adapter, raw webhook verifier를 구현했다. PostgreSQL 통합 테스트 23개와 adapter 단위 테스트 20개, scratch DB `upgrade → check → downgrade → upgrade → check`, Backend 전체 gate 578개가 통과했다. 리뷰에서 실제 API hostname과 에피소드 후원 target CHECK를 바로잡은 뒤, Purchase-order provenance composite FK, typed 404·outstanding 409 분류, 복구 가능한 `cancel_pending` bundle과 PII 없는 exact snapshot을 보강했다. 2026-09-11 `provider_total_amount` 금액 분리와 취소 금액 범위 CHECK를 보강했다. 상세는 [IMPLEMENTATION_PAYMENT_FOUNDATION.md](../MODULES/BE/Payment/IMPLEMENTATION_PAYMENT_FOUNDATION.md)를 따른다.
 
 ### D. intent 생명주기
 
@@ -497,7 +504,7 @@ pnpm --filter admin lint && pnpm --filter admin test && pnpm --filter admin buil
 
 - [ ] **0·C 외부 연동**: 개발자 소유 PortOne V2 Store·API/webhook secret, 카드·카카오페이·토스페이 테스트 channel과 공개 FE/API/webhook HTTPS 준비
 - [ ] **0·C 브라우저 결제**: 카드·카카오페이 `TC0ONETIME`·토스페이 `tosstest`의 PC 결제창 완료와 모바일 redirect 복귀, 서버 사후 검증 스모크
-- [ ] **C schema·adapter**: CHECK·partial unique와 test/live 공존, migration 왕복, SecretStr·65초 read timeout·unknown 응답 격리·secret 노출 0
+- [x] **C schema·adapter**: CHECK·partial unique와 test/live 공존, 작가·에피소드 후원 target, Purchase-order provenance FK, 복구 가능한 cancel bundle·PII 없는 exact snapshot, migration 왕복, 정확한 REST endpoint, typed 404·outstanding 409, SecretStr·65초 read timeout·unknown 응답 격리·secret 노출 0, 실제 API 읽기 전용 GET *(2026-09-01 완료, 2026-09-03·09-05 리뷰 보강, 2026-09-11 provider_total_amount 금액 분리와 취소 금액 CHECK 보강, 2026-09-12 최종 자동검증: pytest 578·focused 43, scratch 왕복·취소 3건/거부 4건)*
 - [ ] **D 주문·intent**: 서버 가격·고지 snapshot, pre-register·사후 조회, 30분 재사용·만료와 오래된 가격·0원 paywall 차단
 - [ ] **D fail-closed**: 결제 중지 중 신규 intent 차단·기존 후처리 유지, 필수 Store·channel·secret·공개 URL 누락 시 기동 거부, 동일 intent와 비공개 전환 race 단일 결과
 - [ ] **E 공통 sync**: browser·webhook·reconcile·owner 4경로의 동시·재전송 1결과와 서로 다른 이중 `PAID`의 1구매·loser 보상 취소

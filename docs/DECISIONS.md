@@ -500,7 +500,10 @@ bcrypt( base64( hmac_sha384(password, key=PASSWORD_PEPPER) ), gensalt(cost=12) )
 - 외부 조회 응답 뒤 로컬 상태를 transaction 안에서 다시 읽고 허용 from-status CAS만 수행한다. `paid|cancel_pending|cancelled`는 늦은 `READY|PAID` 응답으로 회귀하지 않으며 expired의 늦은 `PAID`만 정상 검증 또는 보상으로 전진한다.
 - PortOne webhook은 30초 안에 응답해야 하지만 REST 조회는 read 60초 이상이 권고되므로, 서명 검증된 이벤트를 `payment_webhook_receipts`에 먼저 durable commit하고 2xx를 보낸다. scheduler가 같은 sync를 실행해 상태 전이와 receipt 완료를 함께 commit한다.
 - 취소는 DB에 고정한 16~256자 ASCII 멱등 키와 exact request snapshot을 사용한다. timeout·outstanding 409는 비terminal이며 매 재시도 전 외부 상태를 조회한다. PortOne의 멱등 보장 창 3시간 뒤에는 키만 믿지 않는다.
+- 취소 사유는 `system_verification|system_unavailable|system_duplicate|customer_refund` 내부 code만 허용하고 사용자 입력을 PortOne 취소 요청이나 DB snapshot에 넣지 않는다. 사유·멱등 키·snapshot은 모두 NULL이거나 모두 존재하고 `cancel_pending`에서는 필수다. snapshot은 주문의 Store·사유·전액 금액·사유별 requester로 재구성한 정확한 5-key JSONB만 허용한다.
+- **2026-09-11 금액 불일치 보상 제약 수정**: 서버 주문·구매 provenance인 `expected_amount`와 인증된 PortOne 조회의 `amount.total`을 담는 nullable 양수 `provider_total_amount`를 분리한다. 취소 묶음은 provider 총액이 필수이며 snapshot의 `amount`·`currentCancellableAmount`와 `cancelled_amount` 상한은 이 총액을 기준으로 한다. 예상 500원·승인 700원도 주문 금액을 바꾸지 않고 700원 전액 취소를 기록한다. 클라이언트 금액이나 `amount.paid`로 대체하지 않고, 재시도는 최초 snapshot을 그대로 사용한다. 양수 총액을 확인할 수 없으면 취소 금액을 추측하지 않고 격리한다.
 - 주문과 구매 권한은 각각 `environment=test|live`를 immutable snapshot으로 보존한다. 활성 구매와 열린 주문의 UNIQUE는 환경을 포함하고, 전문은 purchase·order 환경이 현재 배포 환경과 모두 일치할 때만 연다. 따라서 test 구매는 live 권한이나 재구매를 막지 않는다.
+- Purchase는 주문 ID만 참조하지 않고 사용자·`episode_purchase` kind·회차·환경·금액·결제 시각까지 composite FK로 결속한다. donation이나 다른 사용자·회차·환경·금액·결제 시각의 주문으로 권한을 만들 수 없고, 구매 뒤 이 provenance도 바꿀 수 없다. 취소 과정에서 바뀌는 주문 status는 FK에서 제외하며 Purchase 생성 시 `paid` 확인은 공통 sync transaction이 강제한다.
 - 일반 거절·사용자 취소는 사용자 안내와 감사 로그만 남긴다. 금액 불일치·장기 미수렴·상태 불변식 위반만 Sentry 대상이다.
 - 세부 상태 머신, schema, API, 환불 race와 단계별 완료조건은 `docs/milestones/M3_foundation.md`가 정본이다.
 

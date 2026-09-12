@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import SecretStr, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -50,9 +52,10 @@ class Settings(BaseSettings):
     google_client_secret: str = ""
 
     # 결제 - 포트원 V2
-    portone_v2_api_secret: str = ""
+    payment_environment: Literal["test", "live"] = "test"
+    portone_v2_api_secret: SecretStr = SecretStr("")
     portone_store_id: str = ""
-    portone_webhook_secret: str = ""
+    portone_webhook_secret: SecretStr = SecretStr("")
     portone_channel_key_card: str = ""
     portone_channel_key_kakaopay: str = ""
     portone_channel_key_tosspay: str = ""
