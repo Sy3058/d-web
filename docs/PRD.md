@@ -2,7 +2,7 @@
 
 | 항목 | 내용 |
 |------|------|
-| 문서 버전 | v1.7 (2026-08-30, 간편결제 테스트 channel과 M3 완료 판정 동기화) |
+| 문서 버전 | v1.9 (2026-09-22, M3 취소 발송 선점·시도별 멱등 키 계약 동기화) |
 | 작성자 | Product Owner |
 | 대상 독자 | Backend / Frontend / Admin 개발자, 디자이너 |
 | 관련 문서 | [AGENTS.md](../AGENTS.md), [DECISIONS.md](./DECISIONS.md), [COMMON_RULES.md](./guides/COMMON_RULES.md), [DB_GUIDE.md](./guides/DB_GUIDE.md) |
@@ -175,10 +175,10 @@
 |----|--------|------|----------|
 | PAY-01 | 에피소드 단건 구매 | 작품별 설정 가격. 결제 전 회차·서버 기준 금액·즉시 제공과 단순 변심 청약철회 제한을 고지하고 명시적 동의를 받은 뒤 포트원 결제창 호출 → 서버 검증 → 구매 권한 부여 → 전문 자동 발급. 결제 뒤 별도 이어보기 버튼은 두지 않음. | P0 |
 | PAY-02 | 결제 수단 | 카드 / 카카오페이 / 토스페이. 카카오페이·토스페이 우선 노출. M3는 개발자 Store의 카드와 카카오페이 `TC0ONETIME`·토스페이 `tosstest` 직연동 테스트 channel을 모두 공개 HTTPS에서 E2E 검증한다. 계약·심사를 거친 작가 실 MID는 M7에서 브라우저 스모크한다. | P0 |
-| PAY-03 | 결제 서버 검증 | 서버가 V2 `paymentId`·금액·Store·`test|live`·channel을 immutable snapshot·pre-register하고 PortOne REST 단건 조회로 재확인. browser·durable webhook receipt·대사·owner가 같은 단조 CAS sync를 사용하며 일치할 때만 결과를 만든다. | P0 |
+| PAY-03 | 결제 서버 검증 | 서버가 V2 `paymentId`·금액·Store·`test|live`·channel을 immutable snapshot·pre-register하고 PortOne REST 단건 조회로 재확인한다. 확인 금액은 실제 주문 금액과도 일치해야 하며 변경 시 UI 재확인을 요구한다. browser·durable webhook receipt·대사·owner가 같은 단조 CAS sync를 사용하며 expired 주문의 늦은 승인도 검증한다. | P0 |
 | PAY-04 | 구매 권한 부여 | 검증된 주문과 같은 transaction에서 주문 환경을 복사한 `purchases.status=active`를 1건 생성. 구매 확정과 비공개·삭제는 공통 DB lock 순서로 단일 승자를 정한다. 구매가 이기면 비공개 뒤에도 full, 비공개가 이기면 늦은 `PAID`를 전액 보상한다. 같은 환경의 중복 승인은 loser를 전액 보상하며 test 구매는 live 권한·재구매에 영향을 주지 않는다. | P0 |
 | PAY-05 | 구매 내역 페이지 | `/my/purchases`. 구매 일자·작품·회차·금액·영수증 링크. 페이지네이션 20건/페이지. | P0 |
-| PAY-06 | 환불 (관리자) | 테스트 계약은 결제 후 168시간 미만·전문 미발급 회차의 관리자 수동 환불. 첫 전문 발급과 승인 race는 단일 승자이며, 취소는 고정 멱등 키·request snapshot·선조회로 복구하고 결과 메일은 지속 상태로 재시도. 실결제 기간·문구는 M7 법무 gate에서 확정. | P0 |
+| PAY-06 | 환불 (관리자) | 테스트 계약은 결제 후 168시간 미만·전문 미발급 회차의 관리자 수동 환불이다. 첫 전문 발급과 승인 race는 단일 승자이며, 취소는 시도별 멱등 키·고정 request snapshot·선조회·DB 발송 token으로 복구한다. 같은 미확정 시도만 같은 키로 재생하고 확정 실패 뒤 자격 있는 새 시도는 새 키를 쓴다. 취소 최종 실패와 발송 종료가 확인된 뒤에만 권한을 복원하며 결과 메일은 지속 상태로 재시도한다. 실결제 기간·문구는 M7 법무 gate에서 확정. | P0 |
 | PAY-07 | 전편 구매 | **현재 범위 제외**. 별도 결정 전 묶음 할인·bundle schema·일괄 환불을 구현하지 않는다. | - |
 | PAY-08 | 영수증 발급 | 포트원 영수증 URL 제공. | P0 |
 | PAY-09 | 후원 | 1,000원/3,000원/5,000원 단위. 에피소드 단위 또는 작가 단위 후원. 메시지 입력 가능. | P1 |
@@ -317,7 +317,7 @@
 2. 환불 사유 선택 → 신청
 3. 관리자 대시보드 [환불 요청] 탭에 노출
 4. 관리자 [승인] → 첫 전문 발급과 같은 Purchase 행에서 환불 권한을 조건부 선점
-5. 저장된 같은 멱등 키·request snapshot으로 PortOne cancel. timeout·3시간 경계 재시도 전에는 외부 상태를 먼저 조회
+5. DB 발송 token을 CAS로 선점한 worker만 저장된 시도별 멱등 키·고정 request snapshot으로 PortOne cancel을 호출한다. 같은 미확정 시도는 key 발급 뒤 3시간 안에서만 같은 키로 재생하고, timeout/REQUESTED·발송 token 잔존은 권한 잠금을 유지한다. 현재 취소의 최종 실패와 발송 종료가 모두 확인된 뒤에만 권한을 복원한다. 그 뒤 재시도는 미발급·168시간 자격을 다시 선점해 새 attempt key를 쓰며, 자격 상실이 확정되면 사유를 안내하고 취소 없이 요청을 종결한다
 6. 전액 취소 확인 뒤 권한 회수와 결과 메일 pending을 함께 commit
 7. 메일 실패는 환불을 되돌리지 않고 scheduler가 재시도하며 최종 실패는 owner 조치 목록에 표시
 ```

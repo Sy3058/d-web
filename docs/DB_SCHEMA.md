@@ -2,7 +2,7 @@
 
 | 항목 | 내용 |
 |------|------|
-| 문서 버전 | v2.1 (2026-09-11, 금액 불일치 보상 취소 금액 분리) · v2.0 (2026-09-01, M3 그룹 C 결제 schema 구현) |
+| 문서 버전 | v2.3 (2026-09-22, M3 취소 발송·시도별 키 계획 보강, 구현 schema 변경 없음) |
 | DB | PostgreSQL |
 | ORM | SQLModel |
 | 작성 기준 | 현재 SQLModel·Alembic migration 우선, 이후 마일스톤 계획은 별도 표시 |
@@ -305,6 +305,9 @@ payment_orders
 ├── cancel_reason          VARCHAR(40)             -- 내부 allowlist code만 허용
 ├── cancel_idempotency_key VARCHAR(256)
 ├── cancel_request_snapshot JSONB              -- 개인정보 없는 exact cancel body, immutable
+├── cancel_key_issued_at    TIMESTAMPTZ           -- 계획: E, 재생 창의 보수적 시작점
+├── cancel_dispatch_token  UUID                  -- 계획: E, 외부 POST 발송 선점
+├── cancel_dispatch_started_at TIMESTAMPTZ       -- 계획: E, token과 함께 존재
 ├── cancelled_amount       INTEGER
 ├── expires_at             TIMESTAMPTZ NOT NULL
 ├── next_reconcile_at      TIMESTAMPTZ
@@ -318,13 +321,14 @@ payment_orders
 └── updated_at             TIMESTAMPTZ DEFAULT now()
 ```
 > - 구매 주문은 `episode_id NOT NULL AND donation_message IS NULL`, 후원 주문은 `episode_id`와 message가 각각 nullable인 kind CHECK를 둔다.
-> - 구매 주문은 `checkout_notice_version`과 `immediate_supply_consented_at`이 NOT NULL이고 후원 주문은 둘 다 NULL이다. 서버가 현재 고지 버전과 동의 시각을 기록하며 클라이언트의 확인 금액은 서버 가격과의 stale 비교에만 사용한다. M3 테스트는 `episode-immediate-v1`로 시작하고 문구 변경 시 새 버전을 쓰며 기존 주문 snapshot은 갱신하지 않는다.
-> - 같은 사용자·회차·환경의 `preparing|ready` 주문은 하나만 허용한다. ready 재사용은 30분이며 만료 전 PortOne을 다시 조회한다.
+> - 구매 주문은 `checkout_notice_version`과 `immediate_supply_consented_at`이 NOT NULL이고 후원 주문은 둘 다 NULL이다. 서버가 현재 고지 버전과 동의 시각을 기록하며 클라이언트의 확인 금액을 현재 서버 가격과 실제 선택 주문의 `expected_amount`에 모두 대조한다. M3 테스트는 `episode-immediate-v1`로 시작하고 문구 변경 시 새 버전을 쓰며 기존 주문 snapshot은 갱신하지 않는다.
+> - 같은 사용자·회차·환경의 `preparing|ready` 주문은 하나만 허용한다. ready 재사용은 금액·channel·현재 고지 버전이 호환될 때만 30분 허용하며 만료 전 PortOne을 다시 조회한다. `expired`는 checkout 재사용 종료이지 자금 종결이 아니므로 대사 대상에서 제외하지 않는다.
 > - 결제 시도 `FAILED`는 주문 terminal 상태로 두지 않고 `payment_logs`에 남긴다. 늦은 `PAID`는 expired 주문에서도 정상 sync한다.
 > - `PARTIAL_CANCELLED`와 알 수 없는 자금 상태는 `review_required`로 격리하고 권한을 닫는다.
 > - 외부 응답 뒤 transaction에서 현재 상태를 다시 읽고 허용 from-status CAS만 수행한다. `paid`·`cancelled`·`cancel_pending`은 늦은 `READY|PAID` 응답으로 회귀하지 않는다.
 > - `expected_amount`는 서버 주문·구매 provenance로 보존한다. `provider_total_amount`는 서버가 인증된 PortOne 단건 조회의 `amount.total`에서 기록하며, 클라이언트 값이나 할인 등이 반영된 `amount.paid`로 대체하지 않는다. 금액 불일치도 실제 총액을 보존해 권한 없이 전액 보상한다.
-> - 취소 사유는 `system_verification|system_unavailable|system_duplicate|customer_refund`만 허용한다. 사유·16~256자 ASCII 멱등 키·request snapshot은 모두 NULL이거나 모두 존재하고, `cancel_pending`에서는 반드시 존재한다. 취소 묶음에는 양수 `provider_total_amount`가 필수다. snapshot은 주문의 Store·사유·`provider_total_amount` 기준 전액 `amount`·`currentCancellableAmount`와 사유별 requester로 DB에서 재구성한 5-key JSONB와 정확히 같아야 하므로 추가 키나 개인정보를 넣을 수 없다. 이 묶음은 한 번 정하면 바꾸지 않으며, 재시도 전 외부 상태를 먼저 조회하므로 PortOne의 3시간 멱등 보장 창 뒤에도 key 하나만 안전장치로 믿지 않는다. `cancelled_amount`는 NULL이거나 `0 < cancelled_amount <= provider_total_amount`여야 하고 후자는 provider 총액도 필수다.
+> - 취소 사유는 `system_verification|system_unavailable|system_duplicate|customer_refund`만 허용한다. 사유·16~256자 ASCII 멱등 키·request snapshot·E 계획의 key 발급 시각은 모두 NULL이거나 모두 존재하고, `cancel_pending`에서는 반드시 존재한다. 취소 묶음에는 양수 `provider_total_amount`가 필수다. snapshot은 주문의 Store·사유·`provider_total_amount` 기준 전액 `amount`·`currentCancellableAmount`와 사유별 requester로 DB에서 재구성한 5-key JSONB와 정확히 같아야 하므로 추가 키나 개인정보를 넣을 수 없다. reason·snapshot은 한 번 정하면 유지하고, 같은 미확정 시도의 key만 발급 시각 기준 3시간 안에 재생한다. 확정 실패 뒤 사용자 환불의 새 시도는 새 key·발급 시각으로 원자적으로 교체한다. 기존 key가 있는 행의 E migration은 `created_at`을 보수적 시각으로 사용하고 불명확한 건은 자동 POST하지 않는다. `cancelled_amount`는 NULL이거나 `0 < cancelled_amount <= provider_total_amount`여야 하고 후자는 provider 총액도 필수다.
+> - E 계획의 `cancel_dispatch_token`·`cancel_dispatch_started_at`은 함께 NULL 또는 존재하고 token이 있으면 order는 `cancel_pending`이어야 한다. 현재 상태·key와, 사용자 환불이면 현재 시도 번호까지 다시 확인한 worker만 token NULL→UUID CAS로 발송권을 얻는다. HTTP 호출이 응답·예외·로컬 timeout으로 끝난 뒤 같은 token·key와 사용자 환불 시도 번호로만 응답 반영과 token 해제를 commit한다. timeout은 외부 실패 확정이 아니다. 발송권이 있는 동안 실패 복원·새 시도·다른 POST를 금지한다. task 취소·프로세스 중단·응답 반영 commit 실패로 token이 남으면 TTL 자동 회수 없이 권한을 잠그고, 발송 프로세스 종료와 외부 자금 상태를 확인한 통제된 복구만 허용한다.
 > - environment는 계정 이메일이 아니라 서버 설정과 검증된 PortOne channel에서 정한다. 생성 뒤 바꾸지 않고 개발자 테스트 Store를 작가 실판매 Store로 교체해도 기존 test 행을 live로 갱신하지 않는다.
 > - 구매 권한이 참조하는 주문 provenance는 `(id, user_id, kind, episode_id, environment, expected_amount, paid_at)` UNIQUE로 고정한다. `status`는 취소 상태 전이를 허용해야 하므로 이 묶음에 넣지 않는다.
 
@@ -387,7 +391,7 @@ payment_logs
 ```
 > 일반 거절·사용자 취소는 감사 로그만, 불변식 위반·장기 미수렴만 Sentry 대상이다.
 
-### refund_requests
+### refund_requests [계획 - M3 그룹 G]
 ```sql
 refund_requests
 ├── id           UUID PRIMARY KEY DEFAULT gen_random_uuid()
@@ -397,6 +401,7 @@ refund_requests
 ├── detail       VARCHAR(1000)
 ├── status       VARCHAR(24) NOT NULL
 │                CHECK (status IN ('pending', 'processing', 'approved', 'rejected', 'action_required'))
+├── cancel_attempt_no INTEGER NOT NULL DEFAULT 0 CHECK (cancel_attempt_no >= 0)
 ├── resolved_by  UUID REFERENCES users(id)
 ├── admin_note   VARCHAR(1000)
 ├── notification_status VARCHAR(24) NOT NULL DEFAULT 'none'
@@ -408,7 +413,10 @@ refund_requests
 ├── resolved_at  TIMESTAMPTZ
 └── updated_at   TIMESTAMPTZ DEFAULT now()
 ```
-> 한 구매의 `pending|processing|action_required` 요청은 하나만 허용한다. approve는 request·purchase·order CAS를 한 transaction에 commit하고 reject는 pending에서만 성공한다. 테스트 자격은 `now < paid_at + 168 hours`와 `first_viewed_at IS NULL`이며 실결제 정책은 M7 법무 gate에서 확정한다. 승인·거부 확정은 결과 메일을 `pending`으로 함께 예약하며 발송 실패는 환불 transaction을 되돌리지 않고 scheduler가 재시도한다.
+> - 한 구매의 `pending|processing|action_required` 요청은 하나만 허용한다. 최초 승인 또는 최종 실패 뒤 재선점 때 `cancel_attempt_no`를 증가시키고 `refund_<request UUID hex>_<attempt no>` key를 생성한다. 같은 `processing` 시도의 timeout 재생에는 번호·key·body를 유지하며 168시간이 지나도 기존 권한 잠금을 유지한다. 동일 key 재생은 `cancel_key_issued_at + 3시간` 안에만 허용하고 이후 불명확한 건은 GET 대사·격리한다.
+> - token owner가 최종 실패를 받으면 같은 token·시도 번호·key로 현재 cancellation ID와 실패 증거를 기록하고 token만 먼저 해제한다. 별도 짧은 transaction이 현재 cancellation의 `FAILED`·payment `PAID`·token NULL을 다시 확인한 뒤에만 order `paid`·purchase `active`·request `action_required`를 함께 확정한다. `action_required` 재시작은 이 상태와 `now < paid_at + 168 hours`, `first_viewed_at IS NULL`, purchase `active`를 다시 확인해 request `processing`·purchase `refund_pending`·order `cancel_pending`, 시도 번호 증가, 새 key·발급 시각, `cancellation_id=NULL`을 한 transaction에서 CAS한다. exact body는 유지한다. 외부 POST는 별도 발송 token CAS 선점 뒤에만 가능하고 응답 반영은 같은 token·시도 번호·key를 요구한다. 이전 시도 응답은 새 시도를 덮지 못한다.
+> - reject는 취소 시도 전 `pending`, 또는 이전 취소의 최종 실패·order `paid`·purchase `active`와 첫 발급/168시간 경과에 따른 자격 상실이 모두 확인된 `action_required`에서만 허용한다. 자격이 남으면 같은 요청을 retry하고 `processing`은 거부하지 않는다. 자격을 잃은 retry는 요청 `rejected`·사유·메일 `pending`을 함께 commit한 뒤 409를 반환하며 취소 호출은 하지 않는다. CAS loser는 상대 시도를 덮지 않고 재조회한다.
+> - 실결제 자격 정책은 M7 법무 gate에서 확정한다. 승인·거부 확정은 결과 메일을 `pending`으로 함께 예약하며 발송 실패는 환불 transaction을 되돌리지 않고 scheduler가 재시도한다.
 
 ### donations
 ```sql
