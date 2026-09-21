@@ -201,9 +201,13 @@ M4 (커뮤니티 - 후원 제외)
 - [x] `payment_orders` + `purchases` + durable `payment_webhook_receipts` + `payment_logs`와 PortOne V2 async REST adapter *(그룹 C 완료 2026-09-01, 리뷰 보강 2026-09-03·09-05, 2026-09-11 금액 불일치 수정: `provider_total_amount` 금액 분리·취소 금액 CHECK. 2026-09-12 최종 자동검증 pytest 578·focused 43, scratch migration 왕복·취소 3건/거부 4건. 실제 API 읽기 전용 GET은 2026-09-01 기록이며 이번에는 재실행하지 않음. IMPLEMENTATION_PAYMENT_FOUNDATION.md)*
 - [ ] 서버 가격·Store·`test|live`·channel snapshot, 환경별 열린 주문·구매 UNIQUE, pre-register, 30분 주문 만료
 - [ ] browser·webhook receipt worker·대사·owner 공통 단조 sync, out-of-order 방어와 이중 `PAID` 보상 취소
+- [ ] E 선행: GET `payment.cancellations` typed allowlist와 현재 취소 ID 매칭(누락·빈 목록·불일치는 실패 확정 아님), key 발급 시각과 DB 발송 token CAS
+- [ ] expired를 자금 종결로 오인하지 않는 대사, bounded batch·최대 1시간 backoff와 늦은 `PAID` 선택 검증
+- [ ] intent 금액·주문 expected_amount 일치와 호환 재사용, 변경 시 `checkout_changed` 재확인 흐름
 - [ ] 결제·비공개·soft delete race 단일 승자, 일반 비공개 뒤 기존 구매 full 유지, 먼저 비공개된 주문의 늦은 `PAID` 전액 보상
 - [ ] 결제 전 즉시 제공 고지·동의 snapshot, 미구매 paywall 절단, `useEffect` login_hint 판별·access 자동 refresh, 활성 구매 full 자동 반환, 첫 전문 발급·환불 승인 race 단일 승자
 - [ ] 구매 내역·영수증, 잠정 168시간 전문 미발급 환불, owner 승인·거부·취소·결과 메일 복구
+- [ ] 환불 확정 실패 복원·재선점 race, `cancel_attempt_no`·시도별 새 key·발송 token CAS와 자격 상실 거부 계약
 - [ ] 구매 gross/refund/net과 대사 필요 화면, test 결제 기본 제외
 - [ ] 개발자 test Store에서 작가 live Store로 DB 이관 없이 배포 설정 교체
 

@@ -123,9 +123,9 @@ SDK는 raw body와 Standard Webhooks header를 이용한 로컬 서명 검증에
 | 항목 | 이동처 |
 |------|--------|
 | preparing 주문 생성, pre-register crash 복구, 30분 재사용·만료, 신규 결제 kill switch | 그룹 D |
-| browser·webhook receipt worker·scheduler·owner 공통 `sync_payment`와 보상 취소 | 그룹 E |
+| browser·webhook receipt worker·scheduler·owner 공통 `sync_payment`와 보상 취소, GET cancellations typed allowlist 매핑·현재 취소 ID 매칭, key 발급 시각·발송 token CAS | 그룹 E |
 | 결제 고지 UI, redirect, 구매 권한 resolver, 비공개 구매 회차 전문 | 그룹 F |
-| `refund_requests`, 취소 key·snapshot 최초 저장 CAS, 기본 매출 | 그룹 G |
+| `refund_requests`, 시도 번호별 환불 key 교체, 기본 매출 | 그룹 G (취소 key·snapshot 최초 저장과 발송 token CAS는 E 제공, G 재사용) |
 | `donations` 결과 테이블과 후원 UI | 그룹 H |
 
-그룹 C에는 router와 외부 호출 중 DB transaction을 여는 서비스가 없다. 이후 그룹도 PortOne I/O 전후의 짧은 DB transaction을 분리해야 한다.
+그룹 C에는 router와 외부 호출 중 DB transaction을 여는 서비스가 없다. GET `payment`의 `cancellations` typed allowlist와 현재 취소 ID 매칭, 취소 key 발급 시각·발송 token CAS는 그룹 E 선행 작업이며 C snapshot에는 구현되지 않았다. 시스템 보상에 필요한 취소 key·snapshot 최초 저장 CAS도 E가 제공하고 G가 재사용한다. G는 확인된 최종 실패 뒤 새 시도 번호에서 새 key를 만들되 exact body는 유지한다. 이후 그룹도 PortOne I/O 전후의 짧은 DB transaction을 분리해야 한다.
