@@ -1,0 +1,52 @@
+[
+  {
+    "id": "policy_locations",
+    "task": "Find every repository document that mentions the current agent delegation policy and report paths and relevant lines. Do not edit files.",
+    "expected": "luna_low"
+  },
+  {
+    "id": "fixed_doc_edit",
+    "task": "Apply an already approved wording change to a fixed list of documentation files. Preserve existing completion evidence and verify links and the diff; make no policy decision.",
+    "expected": "luna_low"
+  },
+  {
+    "id": "literal_rename",
+    "task": "Replace a deprecated constant name with its approved replacement in a specified list of test fixtures. The replacement is literal and behavior must remain unchanged; report the diff.",
+    "expected": "luna_low"
+  },
+  {
+    "id": "approved_endpoint",
+    "task": "Implement a new API endpoint and unit tests from an approved request, response, and validation contract. No architecture or security policy decision remains open.",
+    "expected": "sol_low"
+  },
+  {
+    "id": "barrier_test",
+    "task": "Write a deterministic concurrent database test that waits until both transactions finish SELECT, then releases both at the barrier immediately before UPDATE. The expected single-winner result is already specified.",
+    "expected": "sol_low"
+  },
+  {
+    "id": "known_bug_fix",
+    "task": "Fix an isolated serializer bug whose root cause and correct field mapping are already established. Add a regression test and run the relevant application checks.",
+    "expected": "sol_low"
+  },
+  {
+    "id": "blocked_race_debug",
+    "task": "A flaky async database race still fails after two reasonable fixes. Reproduce it, inspect transaction ordering, determine the root cause, and implement the fix.",
+    "expected": "sol_medium"
+  },
+  {
+    "id": "blocked_provider_debug",
+    "task": "A payment provider timeout recovery test remains intermittently wrong after the first debugging attempt. Trace the external response and local state transitions to find and fix the unresolved cause without changing the approved payment policy.",
+    "expected": "sol_medium"
+  },
+  {
+    "id": "payment_invariant",
+    "task": "Decide the security and database invariants for concurrent payment approval and refund cancellation so purchase entitlement cannot be issued twice or retained after a confirmed cancellation. Delegate implementation only after the design is settled.",
+    "expected": "main_astra"
+  },
+  {
+    "id": "milestone_architecture",
+    "task": "Review conflicting milestone contracts for late payment reconciliation, failed cancellation recovery, and refund retry eligibility. Choose a consistent safe architecture and observable completion criteria before coding.",
+    "expected": "main_astra"
+  }
+]
