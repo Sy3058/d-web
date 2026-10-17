@@ -408,6 +408,7 @@ cancel_pending 실패 확정 ─→ paid (사용자 환불) | review_required (�
 - 주문·구매·webhook receipt·로그 모델과 첫 migration, SecretStr config, async REST·webhook adapter를 만든다. refund·donation 테이블은 G·H에서 각각 추가한다.
 - 완료 증거: kind·status·environment CHECK와 partial unique, 작가·에피소드 후원 target, Purchase-order 7열 provenance FK, migration 왕복, test 구매 뒤 같은 사용자·회차 live 주문 허용, 세 REST endpoint의 정확한 URL, typed·일반 404 분리, outstanding 409 분류, `read=65초`·unknown response fake, 취소 key·snapshot 고정, secret 노출 0, 설정된 V2 API secret의 읽기 전용 실제 GET.
 - **완료 (2026-09-01, 2026-09-03·09-05 리뷰 보강, 2026-09-11 금액 불일치 수정, 2026-09-12 최종 자동검증)**: 결제 테이블 4개와 revision `d0c3a4b5e6f7`, `httpx` REST adapter, raw webhook verifier를 구현했다. PostgreSQL 통합 테스트 23개와 adapter 단위 테스트 20개, scratch DB `upgrade → check → downgrade → upgrade → check`, Backend 전체 gate 578개가 통과했다. 리뷰에서 실제 API hostname과 에피소드 후원 target CHECK를 바로잡은 뒤, Purchase-order provenance composite FK, typed 404·outstanding 409 분류, 복구 가능한 `cancel_pending` bundle과 PII 없는 exact snapshot을 보강했다. 2026-09-11 `provider_total_amount` 금액 분리와 취소 금액 범위 CHECK를 보강했다. 상세는 [IMPLEMENTATION_PAYMENT_FOUNDATION.md](../MODULES/BE/Payment/IMPLEMENTATION_PAYMENT_FOUNDATION.md)를 따른다.
+- **2026-10-04 조회 Store 보강**: 단건 GET의 `store_id`를 필수로 받아 query에 전달하고 빈 값은 외부 요청 전에 거부한다. 하위 Store 등록·조회 일치와 재시도 Store 유지 회귀 검증을 포함한 focused 45개(adapter·webhook 22개 + DB 통합 23개), Backend 전체 gate 580개가 통과했다. 모델·migration 변경은 없고 migration 왕복·실제 PortOne 조회는 기존 증거를 유지한다.
 
 ### D. intent 생명주기
 

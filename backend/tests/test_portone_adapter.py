@@ -46,7 +46,7 @@ def test_portone_config_masks_secrets(monkeypatch):
 async def test_rest_adapter_uses_explicit_timeout_and_allowlist_response():
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.headers["Authorization"] == f"PortOne {API_SECRET}"
-        assert str(request.url) == "https://api.portone.io/payments/pay_123"
+        assert str(request.url) == ("https://api.portone.io/payments/pay_123?storeId=store-123")
         return httpx.Response(
             200,
             json={
@@ -72,7 +72,7 @@ async def test_rest_adapter_uses_explicit_timeout_and_allowlist_response():
 
     adapter = PortOneRestAdapter(_secret(), transport=httpx.MockTransport(handler))
     try:
-        snapshot = await adapter.get_payment("pay_123")
+        snapshot = await adapter.get_payment("pay_123", store_id="store-123")
         assert adapter._client.timeout.connect == 5.0
         assert adapter._client.timeout.read == 65.0
         assert adapter._client.timeout.write == 10.0
@@ -101,7 +101,7 @@ async def test_unknown_payment_response_is_isolated_without_crashing():
         )
 
     async with PortOneRestAdapter(_secret(), transport=httpx.MockTransport(handler)) as adapter:
-        snapshot = await adapter.get_payment("pay_unknown")
+        snapshot = await adapter.get_payment("pay_unknown", store_id="store-123")
 
     assert snapshot is not None
     assert snapshot.money_state is PortOneMoneyState.UNKNOWN
@@ -122,7 +122,7 @@ async def test_get_returns_none_only_for_typed_payment_not_found():
         )
 
     async with PortOneRestAdapter(_secret(), transport=httpx.MockTransport(handler)) as adapter:
-        snapshot = await adapter.get_payment("pay_missing")
+        snapshot = await adapter.get_payment("pay_missing", store_id="store-123")
 
     assert snapshot is None
 
@@ -157,7 +157,7 @@ async def test_get_fails_closed_for_untyped_404(
 
     async with PortOneRestAdapter(_secret(), transport=httpx.MockTransport(handler)) as adapter:
         with pytest.raises(PortOneApiError) as caught:
-            await adapter.get_payment("pay_unknown_404")
+            await adapter.get_payment("pay_unknown_404", store_id="store-123")
 
     assert caught.value.status_code == 404
     assert caught.value.error_type == expected_error_type
@@ -174,9 +174,10 @@ async def test_get_retries_one_temporary_response_with_jitter():
     async def fake_sleep(delay: float) -> None:
         delays.append(delay)
 
-    def handler(_request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx.Request) -> httpx.Response:
         nonlocal calls
         calls += 1
+        assert request.url.params["storeId"] == "store-retry"
         if calls == 1:
             return httpx.Response(503, json={"type": "TEMPORARY_ERROR"})
         return httpx.Response(200, json={"status": "READY", "id": "pay_retry"})
@@ -187,7 +188,7 @@ async def test_get_retries_one_temporary_response_with_jitter():
         sleep=fake_sleep,
         jitter=lambda _start, _end: 0.1,
     ) as adapter:
-        snapshot = await adapter.get_payment("pay_retry")
+        snapshot = await adapter.get_payment("pay_retry", store_id="store-retry")
 
     assert calls == 2
     assert delays == [0.1]
@@ -206,9 +207,64 @@ async def test_get_does_not_retry_read_timeout():
 
     async with PortOneRestAdapter(_secret(), transport=httpx.MockTransport(handler)) as adapter:
         with pytest.raises(PortOneTransportError, match="timed out"):
-            await adapter.get_payment("pay_timeout")
+            await adapter.get_payment("pay_timeout", store_id="store-123")
 
     assert calls == 1
+
+
+@pytest.mark.asyncio
+async def test_pre_register_and_get_use_the_same_sub_store():
+    registered_store_ids: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        payment_id = request.url.path.split("/")[2]
+        if request.method == "POST":
+            registered_store_ids[payment_id] = json.loads(request.content)["storeId"]
+            return httpx.Response(200, json={})
+        store_id = request.url.params.get("storeId")
+        if registered_store_ids.get(payment_id) != store_id:
+            return httpx.Response(404, json={"type": "PAYMENT_NOT_FOUND"})
+        return httpx.Response(
+            200,
+            json={
+                "status": "PAID",
+                "id": payment_id,
+                "storeId": store_id,
+                "amount": {"total": 500},
+                "currency": "KRW",
+            },
+        )
+
+    async with PortOneRestAdapter(_secret(), transport=httpx.MockTransport(handler)) as adapter:
+        await adapter.pre_register_payment(
+            payment_id="pay_sub_store",
+            store_id="store-sub",
+            total_amount=500,
+        )
+        snapshot = await adapter.get_payment(
+            "pay_sub_store",
+            store_id="store-sub",
+        )
+
+    assert snapshot is not None
+    assert snapshot.money_state is PortOneMoneyState.PAID
+    assert snapshot.store_id == "store-sub"
+
+
+@pytest.mark.asyncio
+async def test_get_rejects_empty_store_id_before_request():
+    calls = 0
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return httpx.Response(200, json={})
+
+    async with PortOneRestAdapter(_secret(), transport=httpx.MockTransport(handler)) as adapter:
+        with pytest.raises(ValueError, match="store_id is required"):
+            await adapter.get_payment("pay_empty_store", store_id="")
+
+    assert calls == 0
 
 
 @pytest.mark.asyncio
