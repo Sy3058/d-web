@@ -242,7 +242,7 @@ def main(argv=None):
             matched = answer["choice"] == case["expected"]
             correct += matched
             expected = case["expected"] if args.cases else "-"
-            match = "yes" if matched else "no" if args.cases else "-"
+            match = ("yes" if matched else "no") if args.cases else "-"
             route = ROUTES[answer["choice"]]
             print(
                 f"{case['id']:<18} {answer['choice']:<20} {route['model']:<13} "
