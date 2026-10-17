@@ -19,28 +19,63 @@ from urllib import error, request
 
 API_URL = "https://api.typesafe.ai/v1/systemone"
 ENV_FILE = Path(__file__).with_name(".env")
-LABELS = ("luna_low", "sol_low", "sol_medium", "main_astra")
-CRITERIA = {
-    "luna_low": (
-        "Only bounded search, file discovery, or repetition of a fully decided "
-        "mechanical edit rule; no implementation design or independent judgment."
-    ),
-    "sol_low": (
-        "Ordinary application or tool implementation with established requirements, "
-        "tests, and limited design decisions; not merely mechanical work."
-    ),
-    "sol_medium": (
-        "Stuck debugging where evidence is conflicting or the root cause is not yet "
-        "clear; investigate and test hypotheses before fixing."
-    ),
-    "main_astra": (
-        "Planning, orchestration, final independent review, or a difficult new "
-        "database, concurrency, security, payment, or architecture decision. Do not "
-        "choose merely because the task mentions these domains if its rule is already decided."
-    ),
+ROUTES = {
+    "worker_luna_low": {
+        "model": "gpt-6-luna",
+        "effort": "low",
+        "criteria": (
+            "Only bounded search, file discovery, or repetition of a fully decided "
+            "mechanical edit rule; no implementation design or independent judgment."
+        ),
+    },
+    "worker_sol_low": {
+        "model": "gpt-6.1-sol",
+        "effort": "low",
+        "criteria": (
+            "A small, isolated implementation or fix whose root cause, exact change, "
+            "and verification are already settled; only limited local judgment is needed. "
+            "Do not use for a new feature, endpoint, or multi-file implementation."
+        ),
+    },
+    "worker_sol_medium": {
+        "model": "gpt-6.1-sol",
+        "effort": "medium",
+        "criteria": (
+            "Everyday application or tool implementation, including a new feature, "
+            "endpoint, coordinated multi-file change, or nontrivial test, that needs normal "
+            "coding judgment and completeness without a new high-risk decision."
+        ),
+    },
+    "worker_sol_high": {
+        "model": "gpt-6.1-sol",
+        "effort": "high",
+        "criteria": (
+            "Complex or stuck debugging where evidence conflicts or the root cause is "
+            "unclear; reproduce the failure and test competing hypotheses before fixing."
+        ),
+    },
+    "main_astra_medium": {
+        "model": "gpt-6-astra",
+        "effort": "medium",
+        "criteria": (
+            "Planning, orchestration, scope decisions, or independent final review that "
+            "must remain with the main agent but does not require an unusually hard judgment."
+        ),
+    },
+    "main_astra_xhigh": {
+        "model": "gpt-6-astra",
+        "effort": "xhigh",
+        "criteria": (
+            "A difficult new database, concurrency, security, payment, or architecture "
+            "decision with material failure cost. Do not choose merely because the task "
+            "mentions one of these domains when its rule is already settled."
+        ),
+    },
 }
+LABELS = tuple(ROUTES)
+CRITERIA = {label: route["criteria"] for label, route in ROUTES.items()}
 QUESTION = (
-    "Under this project's AGENTS.md and model delegation guide, who should own "
+    "Under this routing policy, who should own "
     "the task at `tasks[{index}].text`? Select the least costly sufficient tier. "
     "Classify the work actually requested, not just domain words. "
     "This is advisory only; do not execute or delegate the task."
@@ -193,21 +228,26 @@ def main(argv=None):
         else:
             if not args.task or not args.task.strip():
                 raise RouteError("Task text must not be empty.")
-            cases = [{"id": "task", "task": args.task, "expected": "sol_low"}]
+            cases = [{"id": "task", "task": args.task, "expected": "worker_sol_medium"}]
         api_key = load_api_key()
         if not api_key:
             raise RouteError("TYPESAFE_API_KEY is not set in the shell or scripts/.env.")
         answers = validate_answers(fetch(build_payload(cases), api_key), len(cases))
-        print(f"{'ID':<18} {'PREDICTED':<14} {'EXPECTED':<14} {'MATCH':<5} CONF")
+        print(
+            f"{'ID':<18} {'PREDICTED':<20} {'MODEL':<13} {'EFFORT':<7} "
+            f"{'EXPECTED':<20} {'MATCH':<5} CONF"
+        )
         correct = 0
         for case, answer in zip(cases, answers, strict=True):
             matched = answer["choice"] == case["expected"]
             correct += matched
             expected = case["expected"] if args.cases else "-"
             match = "yes" if matched else "no" if args.cases else "-"
+            route = ROUTES[answer["choice"]]
             print(
-                f"{case['id']:<18} {answer['choice']:<14} {expected:<14} "
-                f"{match:<5} {answer['confidence']:.2f}"
+                f"{case['id']:<18} {answer['choice']:<20} {route['model']:<13} "
+                f"{route['effort']:<7} {expected:<20} {match:<5} "
+                f"{answer['confidence']:.2f}"
             )
             if args.probabilities:
                 print(
