@@ -5,7 +5,7 @@
 | 모듈 | Backend / Payment |
 | 관련 마일스톤 | [M3](../../../milestones/M3_foundation.md) 그룹 C |
 | 작성 시점 | M3 C (2026-09-01) |
-| 리뷰 보강 | 2026-09-05 적대적 결제 무결성 리뷰, 2026-09-11 금액 불일치 보상 취소 제약 수정 |
+| 리뷰 보강 | 2026-09-05 적대적 결제 무결성 리뷰, 2026-09-11 금액 불일치 보상 취소 제약 수정, 2026-10-04 조회 Store 지정 보강 |
 | 상태 | 결제 schema, migration, async REST·webhook adapter 구현 완료. Backend 전체 gate와 scratch migration 왕복 통과 |
 | 관련 문서 | DB_SCHEMA.md §3, DECISIONS.md "결제 구조 결정", MISTAKES.md, DB_GUIDE.md |
 
@@ -75,6 +75,8 @@ FK는 결제·계약 기록을 5년 보존하도록 `RESTRICT`다. 기존 사용
 - `409 IDEMPOTENCY_OUTSTANDING_REQUEST`: 비terminal·재시도 가능으로 분류하되 POST를 adapter가 자동 재시도하지 않음
 - cancel request: `amount`와 `currentCancellableAmount`가 같은 전액 취소만 허용
 
+2026-10-04 리뷰에서 pre-register는 주문의 `storeId`를 지정하지만 단건 GET에는 Store를 지정할 수 없는 차이가 확인됐다. `get_payment(payment_id, *, store_id)`의 Store ID를 필수로 받고 query의 `storeId`에 전달한다. 빈 Store ID는 외부 요청 전에 거부한다. 후속 D·E 호출자는 현재 배포 설정이 아니라 조회할 주문의 `store_id` snapshot을 넘겨야 하며, GET 재시도에도 같은 query를 유지한다.
+
 응답은 원시 dict를 반환하지 않는다. 결제 ID, 상태, Store, channel, 금액, 통화, 주문명, 결제수단, 영수증 URL과 시각만 frozen snapshot으로 옮긴다. 새 필드와 새 oneOf는 무시하고, 모르는 자금 상태는 `UNKNOWN`으로 격리한다. API 오류도 HTTP status와 제한된 ASCII error type만 남겨 provider message의 secret·PII가 예외 문자열이나 로그로 전파되지 않게 한다.
 
 ---
@@ -101,7 +103,14 @@ SDK는 raw body와 Standard Webhooks header를 이용한 로컬 서명 검증에
 
 ## 5. 검증
 
-자동 검증 결과 (2026-09-12 최종 확인):
+Store 지정 보강 검증 (2026-10-04):
+
+- 하위 Store에 pre-register한 결제를 같은 Store query로 조회하는 회귀 테스트, GET 재시도에서 Store 유지, 빈 Store ID의 외부 요청 0건을 확인했다.
+- 결제 모델 PostgreSQL 통합 테스트 23개와 adapter·webhook 단위 테스트 22개, focused 45개가 모두 통과했다.
+- Backend `ruff format --check`, `ruff check`, 전체 `pytest` 580개가 통과했다.
+- 모델과 migration은 변경하지 않았다. migration 왕복과 실제 PortOne API 조회 증거는 아래 기존 기록이며 이번에는 재실행하지 않았다.
+
+기존 schema·migration 검증 기록 (2026-09-12):
 
 - PortOne adapter·webhook 단위 테스트 20개 통과
 - 주문 provenance 불일치, donation 기반 구매, 취소 snapshot의 자유 문자열 사유·불완전한 묶음·PII 거부, 과소·정상·과다 승인 전액 취소와 provider 총액 제약을 포함한 결제 모델 PostgreSQL 통합 테스트 23개 통과

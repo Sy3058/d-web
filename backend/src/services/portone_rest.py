@@ -277,10 +277,13 @@ class PortOneRestAdapter:
             },
         )
 
-    async def get_payment(self, payment_id: str) -> PortOnePaymentSnapshot | None:
+    async def get_payment(self, payment_id: str, *, store_id: str) -> PortOnePaymentSnapshot | None:
+        if not store_id:
+            raise ValueError("store_id is required")
         response = await self._request(
             "GET",
             f"/payments/{quote(payment_id, safe='')}",
+            params={"storeId": store_id},
             not_found_is_none=True,
         )
         if response is None:
