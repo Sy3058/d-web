@@ -99,6 +99,21 @@ class JevRouteTests(unittest.TestCase):
             self.assertIn("gpt-6-luna", output.getvalue())
             self.assertNotIn("secret", output.getvalue())
 
+    def test_single_task_report_has_no_match(self):
+        for choice in ("worker_sol_medium", "worker_luna_low"):
+            with self.subTest(choice=choice):
+                output = io.StringIO()
+                with (
+                    patch.object(jev_route, "load_api_key", return_value="secret"),
+                    patch.object(jev_route, "fetch", return_value=response(choice)),
+                    redirect_stdout(output),
+                ):
+                    code = jev_route.main(["--task", "Find files"])
+                self.assertEqual(code, 0)
+                row = output.getvalue().splitlines()[1].split()
+                self.assertEqual(row[4:6], ["-", "-"])
+                self.assertNotIn("Accuracy:", output.getvalue())
+
     def test_case_validation(self):
         for cases in (
             [],
