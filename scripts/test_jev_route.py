@@ -16,9 +16,13 @@ CASES = [
     {
         "id": "search",
         "task": "Find references to a config key.",
-        "expected": "luna_low",
+        "expected": "worker_luna_low",
     },
-    {"id": "feature", "task": "Implement an approved endpoint.", "expected": "sol_low"},
+    {
+        "id": "feature",
+        "task": "Implement an approved endpoint.",
+        "expected": "worker_sol_medium",
+    },
 ]
 
 
@@ -56,6 +60,19 @@ class JevRouteTests(unittest.TestCase):
         self.assertEqual(payload["questions"]["route_0"]["type"], "choice")
         self.assertEqual(set(payload["questions"]["route_1"]["criteria"]), set(jev_route.LABELS))
 
+    def test_routes_use_current_models_and_explicit_effort(self):
+        self.assertEqual(
+            {label: (route["model"], route["effort"]) for label, route in jev_route.ROUTES.items()},
+            {
+                "worker_luna_low": ("gpt-6-luna", "low"),
+                "worker_sol_low": ("gpt-6.1-sol", "low"),
+                "worker_sol_medium": ("gpt-6.1-sol", "medium"),
+                "worker_sol_high": ("gpt-6.1-sol", "high"),
+                "main_astra_medium": ("gpt-6-astra", "medium"),
+                "main_astra_xhigh": ("gpt-6-astra", "xhigh"),
+            },
+        )
+
     def test_http_request_and_batch_report(self):
         with tempfile.TemporaryDirectory() as temp:
             path = Path(temp) / "cases.json"
@@ -68,7 +85,7 @@ class JevRouteTests(unittest.TestCase):
                 self.assertEqual(req.get_header("Authorization"), "Bearer secret")
                 self.assertEqual(timeout, 25)
                 self.assertEqual(len(json.loads(req.data)["questions"]), 2)
-                return FakeResponse(response("luna_low", "sol_medium"))
+                return FakeResponse(response("worker_luna_low", "worker_sol_high"))
 
             with (
                 patch.dict(os.environ, {"TYPESAFE_API_KEY": "secret"}),
@@ -78,13 +95,14 @@ class JevRouteTests(unittest.TestCase):
                 code = jev_route.main(["--cases", str(path), "--probabilities"])
             self.assertEqual(code, 0)
             self.assertIn("Accuracy: 1/2", output.getvalue())
-            self.assertIn("luna_low=1.00", output.getvalue())
+            self.assertIn("worker_luna_low=1.00", output.getvalue())
+            self.assertIn("gpt-6-luna", output.getvalue())
             self.assertNotIn("secret", output.getvalue())
 
     def test_case_validation(self):
         for cases in (
             [],
-            [{"id": "x", "task": "", "expected": "sol_low"}],
+            [{"id": "x", "task": "", "expected": "worker_sol_low"}],
             [CASES[0], CASES[0]],
             [{"id": "x", "task": "Do it", "expected": "bad"}],
         ):
@@ -101,8 +119,8 @@ class JevRouteTests(unittest.TestCase):
         for value in invalid:
             with self.subTest(value=value), self.assertRaises(jev_route.RouteError):
                 jev_route.validate_answers(value, 1)
-        value = response("sol_low")
-        value["answers"]["route_0"]["probabilities"]["sol_low"] = 0.2
+        value = response("worker_sol_low")
+        value["answers"]["route_0"]["probabilities"]["worker_sol_low"] = 0.2
         with self.assertRaises(jev_route.RouteError):
             jev_route.validate_answers(value, 1)
 
@@ -144,13 +162,13 @@ class JevRouteTests(unittest.TestCase):
             side_effect=[
                 HTTPError(jev_route.API_URL, 429, "rate limited", {}, None),
                 URLError("offline"),
-                FakeResponse(response("luna_low")),
+                FakeResponse(response("worker_luna_low")),
             ],
         ) as urlopen:
             value = jev_route.fetch(
                 jev_route.build_payload(CASES[:1]), "secret", sleep=lambda _: None
             )
-        self.assertEqual(value["answers"]["route_0"]["choice"], "luna_low")
+        self.assertEqual(value["answers"]["route_0"]["choice"], "worker_luna_low")
         self.assertEqual(urlopen.call_count, 3)
 
 
