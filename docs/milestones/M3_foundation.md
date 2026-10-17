@@ -73,7 +73,7 @@
 | 카드 테스트 channel key·최소 결제 금액 | 테스트 channel 생성·backend 로컬 설정 완료, 최소 금액·브라우저 스모크 미검증 | 카드 1종은 M3 공개 HTTPS E2E 필수다. 확인된 테스트 하한을 M3 결제 하한으로 고정한다. |
 | 카카오페이·토스페이 channel key | `TC0ONETIME`·`tosstest` channel 생성과 backend 로컬 설정 완료, 브라우저 스모크 미검증 | M3 공개 HTTPS에서 실제 브라우저 스모크한다. 계약·심사를 거친 실 MID 검증만 M7 gate다. |
 | 공개 frontend·API·webhook HTTPS 주소 | 미검증 | 모바일 redirect, HttpOnly 쿠키, CORS, webhook 실수신 스모크에 필요하다. 로컬 fixture는 이를 대체하지 않는다. |
-| 결제 운영 스위치 | 미구현 | `payments_accept_new=false`면 신규 intent만 503으로 닫고 webhook·대사·기존 구매 열람·환불은 계속 작동하게 한다. |
+| 결제 운영 스위치 | 설정 가드 구현, intent 503 미구현 | `payments_accept_new=false`면 신규 intent만 503으로 닫고 webhook·대사·기존 구매 열람·환불은 계속 작동하게 한다. |
 | 환불·만 14세 약관 문구 | 법무 미검토 | 테스트 UI는 즉시 제공·단순 변심 청약철회 제한·계약 불일치 예외를 결제 전에 고지한다. 168시간 정책과 문구는 잠정이며 실결제는 M7 Q1·Q7 승인 없이는 차단한다. |
 
 Day 0 증거에는 개발자 소유 테스트 고객사·Store·channel 식별자, 공개 URL, 카드·카카오페이·토스페이 브라우저 종료, webhook 재전송, 취소 timeout의 스모크 결과를 기록한다. secret 원문과 결제 개인정보는 기록하지 않는다.
@@ -414,6 +414,7 @@ cancel_pending 실패 확정 ─→ paid (사용자 환불) | review_required (�
 
 - preparing→ready, pre-register crash 복구, 30분 checkout 재사용 종료, 가격·수단·server channel·고지 호환 검증, `checkout_changed` 409·no-config 응답, fail-closed kill switch를 구현한다. `payments_accept_new` 기본은 false이고 true인데 Store·channel·secret·공개 URL이 빠지면 기동을 거부한다. false여도 webhook·대사·열람·환불은 계속 돈다.
 - 완료 증거: 요청 확인 금액·현재 서버 가격·선택 주문 금액이 모두 같을 때만 config 반환, 700원 ready 뒤 현재 500원·500원 확인 요청과 반대 방향 가격 변경에서 기존 config 0·현재 정보만 담은 409, 수단·channel·고지 불일치 미재사용, UNIQUE loser의 winner 호환 재검증, 조회 장애·승인·상태 race에서 강제 만료·새 checkout 0, 0원 paywall 차단, pre-register 성공 뒤 DB 실패 복구, 비공개가 먼저 이긴 ready 응답·구매 0건.
+- **부분 완료 (2026-10-18)**: `PAYMENTS_ACCEPT_NEW` 기본값을 false로 추가했다. true에서는 Store, API·webhook secret, 카드·카카오페이·토스페이 channel과 공개 HTTPS APP/API URL이 모두 유효해야 기동한다. 오류는 설정 이름만 표시하고 입력값을 숨긴다. intent의 503 응답과 주문 생명주기는 아직 구현하지 않았다.
 
 ### E. 공통 sync·webhook·대사
 

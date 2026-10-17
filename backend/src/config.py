@@ -1,7 +1,38 @@
-from typing import Literal
+import ipaddress
+import re
+from typing import Literal, Self
+from urllib.parse import urlsplit
 
-from pydantic import SecretStr, computed_field
+from pydantic import SecretStr, computed_field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_PUBLIC_HOST_LABEL = re.compile(r"^(?!-)[a-z0-9-]{1,63}(?<!-)$")
+
+
+def _is_public_https_url(value: str) -> bool:
+    value = value.strip()
+    if any(character.isspace() or ord(character) < 32 for character in value):
+        return False
+    try:
+        parsed = urlsplit(value)
+        hostname = parsed.hostname
+        _ = parsed.port
+    except ValueError:
+        return False
+    if parsed.scheme != "https" or not hostname or parsed.username or parsed.password:
+        return False
+    hostname = hostname.rstrip(".").lower()
+    if hostname == "localhost" or hostname.endswith(".localhost"):
+        return False
+    try:
+        return ipaddress.ip_address(hostname).is_global
+    except ValueError:
+        labels = hostname.split(".")
+        return (
+            len(labels) >= 2
+            and not all(label.isdecimal() for label in labels)
+            and all(_PUBLIC_HOST_LABEL.fullmatch(label) for label in labels)
+        )
 
 
 class Settings(BaseSettings):
@@ -10,6 +41,7 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
+        hide_input_in_errors=True,
     )
 
     # 환경
@@ -52,6 +84,7 @@ class Settings(BaseSettings):
     google_client_secret: str = ""
 
     # 결제 - 포트원 V2
+    payments_accept_new: bool = False
     payment_environment: Literal["test", "live"] = "test"
     portone_v2_api_secret: SecretStr = SecretStr("")
     portone_store_id: str = ""
@@ -99,6 +132,33 @@ class Settings(BaseSettings):
     totp_trusted_device_days: int = 30
 
     # ── 조립 필드 ──────────────────────────────────────────────────────────────
+
+    @model_validator(mode="after")
+    def validate_new_payment_settings(self) -> Self:
+        if not self.payments_accept_new:
+            return self
+
+        required_values = {
+            "PORTONE_V2_API_SECRET": self.portone_v2_api_secret.get_secret_value(),
+            "PORTONE_STORE_ID": self.portone_store_id,
+            "PORTONE_WEBHOOK_SECRET": self.portone_webhook_secret.get_secret_value(),
+            "PORTONE_CHANNEL_KEY_CARD": self.portone_channel_key_card,
+            "PORTONE_CHANNEL_KEY_KAKAOPAY": self.portone_channel_key_kakaopay,
+            "PORTONE_CHANNEL_KEY_TOSSPAY": self.portone_channel_key_tosspay,
+        }
+        invalid = [name for name, value in required_values.items() if not value.strip()]
+        for name, value in (
+            ("APP_BASE_URL", self.app_base_url),
+            ("API_BASE_URL", self.api_base_url),
+        ):
+            if not _is_public_https_url(value):
+                invalid.append(f"{name} (public HTTPS URL)")
+
+        if invalid:
+            raise ValueError(
+                "PAYMENTS_ACCEPT_NEW=true requires valid settings: " + ", ".join(invalid)
+            )
+        return self
 
     @computed_field
     @property
