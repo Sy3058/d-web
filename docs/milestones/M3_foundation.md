@@ -2,7 +2,7 @@
 
 | 항목 | 내용 |
 |------|------|
-| 문서 버전 | v0.8 (2026-09-22, 취소 발송 선점·시도별 멱등 키 계약 보강) |
+| 문서 버전 | v0.9 (2026-10-26, 그룹 D 에피소드 결제 intent 완료 증거 반영) |
 | 상위 마일스톤 | [M3](./README.md#m3-결제--유료-콘텐츠-잠금--후원) |
 | 예상 기간 | 약 6~8주 + 외부 채널·법무 일정 |
 | P0 완료 기준 | `결제 전 고지·동의 → 서버 주문 → 검증된 결제 → 구매 권한 1건 → 전문 자동 발급 → 환불·장애 복구 → 기본 매출 확인`이 PortOne 테스트 채널에서 끝까지 작동한다. |
@@ -73,7 +73,7 @@
 | 카드 테스트 channel key·최소 결제 금액 | 테스트 channel 생성·backend 로컬 설정 완료, 최소 금액·브라우저 스모크 미검증 | 카드 1종은 M3 공개 HTTPS E2E 필수다. 확인된 테스트 하한을 M3 결제 하한으로 고정한다. |
 | 카카오페이·토스페이 channel key | `TC0ONETIME`·`tosstest` channel 생성과 backend 로컬 설정 완료, 브라우저 스모크 미검증 | M3 공개 HTTPS에서 실제 브라우저 스모크한다. 계약·심사를 거친 실 MID 검증만 M7 gate다. |
 | 공개 frontend·API·webhook HTTPS 주소 | 미검증 | 모바일 redirect, HttpOnly 쿠키, CORS, webhook 실수신 스모크에 필요하다. 로컬 fixture는 이를 대체하지 않는다. |
-| 결제 운영 스위치 | 설정 가드 구현, intent 503 미구현 | `payments_accept_new=false`면 신규 intent만 503으로 닫고 webhook·대사·기존 구매 열람·환불은 계속 작동하게 한다. |
+| 결제 운영 스위치 | 설정 가드와 신규 episode intent 503 구현 완료 | `payments_accept_new=false`면 신규 intent만 503으로 닫고 webhook·대사·기존 구매 열람·환불은 계속 작동하게 한다. |
 | 환불·만 14세 약관 문구 | 법무 미검토 | 테스트 UI는 즉시 제공·단순 변심 청약철회 제한·계약 불일치 예외를 결제 전에 고지한다. 168시간 정책과 문구는 잠정이며 실결제는 M7 Q1·Q7 승인 없이는 차단한다. |
 
 Day 0 증거에는 개발자 소유 테스트 고객사·Store·channel 식별자, 공개 URL, 카드·카카오페이·토스페이 브라우저 종료, webhook 재전송, 취소 timeout의 스모크 결과를 기록한다. secret 원문과 결제 개인정보는 기록하지 않는다.
@@ -414,7 +414,7 @@ cancel_pending 실패 확정 ─→ paid (사용자 환불) | review_required (�
 
 - preparing→ready, pre-register crash 복구, 30분 checkout 재사용 종료, 가격·수단·server channel·고지 호환 검증, `checkout_changed` 409·no-config 응답, fail-closed kill switch를 구현한다. `payments_accept_new` 기본은 false이고 true인데 Store·channel·secret·공개 URL이 빠지면 기동을 거부한다. false여도 webhook·대사·열람·환불은 계속 돈다.
 - 완료 증거: 요청 확인 금액·현재 서버 가격·선택 주문 금액이 모두 같을 때만 config 반환, 700원 ready 뒤 현재 500원·500원 확인 요청과 반대 방향 가격 변경에서 기존 config 0·현재 정보만 담은 409, 수단·channel·고지 불일치 미재사용, UNIQUE loser의 winner 호환 재검증, 조회 장애·승인·상태 race에서 강제 만료·새 checkout 0, 0원 paywall 차단, pre-register 성공 뒤 DB 실패 복구, 비공개가 먼저 이긴 ready 응답·구매 0건.
-- **부분 완료 (2026-10-18)**: `PAYMENTS_ACCEPT_NEW` 기본값을 false로 추가했다. true에서는 Store, API·webhook secret, 카드·카카오페이·토스페이 channel과 공개 HTTPS APP/API URL이 모두 유효해야 기동한다. 오류는 설정 이름만 표시하고 입력값을 숨긴다. intent의 503 응답과 주문 생명주기는 아직 구현하지 않았다.
+- **완료 (2026-10-26)**: `POST /payments/episode-intents`에 이메일 인증, IP당 10회/분, `no-store`를 적용했다. `PAYMENTS_ACCEPT_NEW` 기본 false와 활성화 설정 완전성·channel 중복 거부, 서버 가격·수단·channel·고지·동의 검증, `preparing -> ready`, 30분 재사용과 `checkout_changed`, 같은 ID의 pre-register 복구, UNIQUE loser 재검증과 비공개·삭제·가격·상태 race를 구현했다. Provider `READY`의 Store·금액·통화·환경·channel과 존재하는 method·간편결제사를 검증한다. 만료 처리에서는 typed not-found와 신원이 모두 일치하는 `FAILED`만 추가로 허용하며, 그 외 자금 상태나 불명확한 응답으로 ready 승격·강제 만료·새 checkout을 만들지 않는다. focused 143개, Backend 전체 678개, Admin 타입 생성물 lint·115개 테스트·build가 통과했다. 실제 PortOne write와 브라우저 결제창은 외부 P0 gate로 남는다. 상세는 [IMPLEMENTATION_PAYMENT_INTENTS.md](../MODULES/BE/Payment/IMPLEMENTATION_PAYMENT_INTENTS.md)를 따른다.
 
 ### E. 공통 sync·webhook·대사
 
@@ -524,8 +524,8 @@ pnpm --filter admin lint && pnpm --filter admin test && pnpm --filter admin buil
 - [ ] **0·C 외부 연동**: 개발자 소유 PortOne V2 Store·API/webhook secret, 카드·카카오페이·토스페이 테스트 channel과 공개 FE/API/webhook HTTPS 준비
 - [ ] **0·C 브라우저 결제**: 카드·카카오페이 `TC0ONETIME`·토스페이 `tosstest`의 PC 결제창 완료와 모바일 redirect 복귀, 서버 사후 검증 스모크
 - [x] **C schema·adapter**: CHECK·partial unique와 test/live 공존, 작가·에피소드 후원 target, Purchase-order provenance FK, 복구 가능한 cancel bundle·PII 없는 exact snapshot, migration 왕복, 정확한 REST endpoint, typed 404·outstanding 409, SecretStr·65초 read timeout·unknown 응답 격리·secret 노출 0, 실제 API 읽기 전용 GET *(2026-09-01 완료, 2026-09-03·09-05 리뷰 보강, 2026-09-11 provider_total_amount 금액 분리와 취소 금액 CHECK 보강, 2026-09-12 최종 자동검증: pytest 578·focused 43, scratch 왕복·취소 3건/거부 4건)*
-- [ ] **D 주문·intent**: 확인 금액=현재 가격=주문 금액과 수단 channel·고지까지 호환될 때만 config 반환, UNIQUE loser 동일 검증, pre-register·사후 조회, 30분 checkout 재사용 종료, `checkout_changed` 재확인과 오래된 가격·0원 paywall 차단
-- [ ] **D fail-closed**: 결제 중지 중 신규 intent 차단·기존 후처리 유지, 필수 Store·channel·secret·공개 URL 누락 시 기동 거부, 동일 intent와 비공개 전환 race 단일 결과
+- [x] **D 주문·intent**: 확인 금액=현재 가격=주문 금액과 수단 channel·고지까지 호환될 때만 config 반환, UNIQUE loser 동일 검증, pre-register·사후 조회, 30분 checkout 재사용 종료, `checkout_changed` 재확인과 오래된 가격·0원 paywall 차단 *(2026-10-26, focused 143·Backend 678)*
+- [x] **D fail-closed**: 결제 중지 중 신규 intent 차단·기존 후처리 유지, 필수 Store·channel·secret·공개 URL 누락 시 기동 거부, 동일 intent와 비공개 전환 race 단일 결과 *(2026-10-26, 실제 외부 write·브라우저 스모크는 P0 외부 gate에 유지)*
 - [ ] **E 공통 sync**: browser·webhook·reconcile·owner 4경로의 동시·재전송 1결과와 서로 다른 이중 `PAID`의 1구매·loser 보상 취소
 - [ ] **E webhook·복구**: 서명 검증·durable receipt·30초 내 ack, commit 뒤 crash 재처리, `expired` 포함 selector·별도 bounded 예산·계속 재예약, cancellation typed 조회와 현재 ID 매칭·불명확 시 실패 추측 금지, key 발급 시각·발송 token CAS 단일 POST, token 유실 자동 회수 금지, 단조 상태 전이와 `cancel_pending`·timeout·외부 취소 복구 또는 격리
 - [ ] **F 콘텐츠 권한**: 중앙 access resolver가 미구매·환불 처리 중 paid key·presign·full 문서를 반환하지 않고 개인 응답을 no-store로 유지

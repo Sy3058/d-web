@@ -88,3 +88,15 @@ def test_new_payments_enabled_accepts_complete_configuration():
     settings = _settings(payments_accept_new=True)
 
     assert settings.payments_accept_new is True
+
+
+def test_new_payments_enabled_rejects_duplicate_channel_keys():
+    with pytest.raises(ValidationError) as exc_info:
+        _settings(
+            payments_accept_new=True,
+            portone_channel_key_kakaopay="channel-key-card",
+        )
+
+    message = str(exc_info.value)
+    assert "PORTONE_CHANNEL_KEY_*" in message
+    assert "api-secret-value" not in message

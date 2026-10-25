@@ -147,6 +147,13 @@ class Settings(BaseSettings):
             "PORTONE_CHANNEL_KEY_TOSSPAY": self.portone_channel_key_tosspay,
         }
         invalid = [name for name, value in required_values.items() if not value.strip()]
+        channel_keys = [
+            self.portone_channel_key_card.strip(),
+            self.portone_channel_key_kakaopay.strip(),
+            self.portone_channel_key_tosspay.strip(),
+        ]
+        if all(channel_keys) and len(set(channel_keys)) != len(channel_keys):
+            invalid.append("PORTONE_CHANNEL_KEY_* (must be distinct)")
         for name, value in (
             ("APP_BASE_URL", self.app_base_url),
             ("API_BASE_URL", self.api_base_url),

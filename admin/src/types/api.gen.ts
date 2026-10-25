@@ -681,6 +681,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/payments/episode-intents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Episode Intent */
+        post: operations["episode_intent_payments_episode_intents_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/episodes/{episode_id}/progress": {
         parameters: {
             query?: never;
@@ -1011,6 +1028,52 @@ export interface components {
             /** Url */
             url: string;
         };
+        /** EpisodePaymentIntentCreate */
+        EpisodePaymentIntentCreate: {
+            /**
+             * Episode Id
+             * Format: uuid
+             */
+            episode_id: string;
+            /** Expected Amount */
+            expected_amount: number;
+            payment_method: components["schemas"]["EpisodePaymentMethod"];
+            /** Checkout Notice Version */
+            checkout_notice_version: string;
+            /** Immediate Supply Consented */
+            immediate_supply_consented: boolean;
+        };
+        /** EpisodePaymentIntentRead */
+        EpisodePaymentIntentRead: {
+            /** Payment Id */
+            payment_id: string;
+            /** Store Id */
+            store_id: string;
+            /** Channel Key */
+            channel_key: string;
+            /** Order Name */
+            order_name: string;
+            /** Total Amount */
+            total_amount: number;
+            /** Currency */
+            currency: string;
+            /** Pay Method */
+            pay_method: string;
+            /** Notice Version */
+            notice_version: string;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /** Reused */
+            reused: boolean;
+        };
+        /**
+         * EpisodePaymentMethod
+         * @enum {string}
+         */
+        EpisodePaymentMethod: "card" | "kakaopay" | "tosspay";
         /**
          * EpisodeReorder
          * @description 회차 재배열 - 살아있는 회차 **전량**을 원하는 순서로 나열한 id 목록.
@@ -2800,6 +2863,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EpisodeContent"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    episode_intent_payments_episode_intents_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EpisodePaymentIntentCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EpisodePaymentIntentRead"];
                 };
             };
             /** @description Validation Error */

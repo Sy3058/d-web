@@ -20,6 +20,7 @@ from src.routers import (
     commission,
     episodes,
     oauth,
+    payments,
     progress,
     tags,
     works,
@@ -82,6 +83,7 @@ app.include_router(commission.router)
 app.include_router(works.router)
 app.include_router(tags.router)
 app.include_router(episodes.router)
+app.include_router(payments.router)
 app.include_router(progress.router)
 app.include_router(progress.work_router)
 
