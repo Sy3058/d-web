@@ -148,6 +148,11 @@ async def test_new_intent_and_ready_reuse(
     assert len(adapter.registered) == len(adapter.gets) == 1
     (order,) = await orders(db_session)
     assert order.status == PaymentOrderStatus.READY
+    assert (order.requested_payment_method, order.requested_easy_pay_provider) == {
+        "card": ("PaymentMethodCard", None),
+        "kakaopay": ("PaymentMethodEasyPay", "KAKAOPAY"),
+        "tosspay": ("PaymentMethodEasyPay", "TOSSPAY"),
+    }[method]
     assert order.immediate_supply_consented_at is not None
     assert order.expires_at - order.immediate_supply_consented_at == timedelta(minutes=30)
     assert order.next_reconcile_at == order.expires_at
@@ -755,3 +760,39 @@ async def test_http_success_changed_and_provider_failure_are_no_store(
     assert response.status_code == 409 and response.headers["cache-control"] == "no-store"
     assert response.json()["detail"]["code"] == "checkout_changed"
     assert "payment_id" not in response.text and "channel_key" not in response.text
+
+
+async def test_channel_rotation_preserves_original_method_snapshot(
+    db_session, session_factory, checkout, monkeypatch
+):
+    user_id, _, episode_id = checkout
+    adapter = FakePortOne(db_session, session_factory)
+    response = await intents.create_episode_intent(
+        body(episode_id), user_id, db_session, adapter=adapter
+    )
+    monkeypatch.setattr(settings, "portone_channel_key_card", "rotated-card")
+    adapter.state = "PAID"
+    with pytest.raises(intents.IntentError):
+        await intents.create_episode_intent(body(episode_id), user_id, db_session, adapter=adapter)
+    (order,) = await orders(db_session)
+    assert order.payment_id == response.payment_id
+    assert order.requested_channel_key == "channel-card-test"
+    assert order.requested_payment_method == "PaymentMethodCard"
+    assert order.requested_easy_pay_provider is None
+    assert order.status == "ready"
+
+
+async def test_legacy_unknown_method_is_not_reused(db_session, session_factory, checkout):
+    user_id, _, episode_id = checkout
+    adapter = FakePortOne(db_session, session_factory)
+    await intents.create_episode_intent(body(episode_id), user_id, db_session, adapter=adapter)
+    (order,) = await orders(db_session)
+    order.requested_payment_method = None
+    db_session.add(order)
+    await db_session.commit()
+    with pytest.raises(intents.IntentError) as exc:
+        await intents.create_episode_intent(body(episode_id), user_id, db_session, adapter=adapter)
+    assert exc.value.status_code == 409
+    (order,) = await orders(db_session)
+    assert order.status == "expired"
+    assert order.requested_payment_method is None

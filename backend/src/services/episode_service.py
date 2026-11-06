@@ -30,10 +30,10 @@ from src.lib.content_doc import (
     has_meaningful_content,
     validate_content,
 )
-from src.lib.exceptions import EpisodeConflictError, EpisodeValidationError
+from src.lib.exceptions import EpisodeConflictError, EpisodeValidationError, WorkConflictError
 from src.models.work import Episode, Work
 from src.schemas.work import EpisodeCreate, EpisodeUpdate
-from src.services import r2_service
+from src.services import r2_service, work_service
 from src.services.image_service import MAX_IMAGES_PER_EPISODE, THUMB_WIDTH, convert_to_webp
 
 _STALE_EPISODE = "회차가 다른 요청으로 먼저 변경되었습니다 - 새로고침 후 다시 시도하세요"
@@ -375,6 +375,17 @@ async def update_episode(episode: Episode, data: EpisodeUpdate, session: AsyncSe
         page_bytes = await r2_service.download_bytes(new_thumbnail)
         thumb_webp = await convert_to_webp(page_bytes, target_width=THUMB_WIDTH)
 
+    try:
+        await work_service.lock_catalog_work(session, episode.work_id)
+        deleted_at = (
+            await session.exec(select(Episode.deleted_at).where(Episode.id == episode.id))
+        ).one()
+        if deleted_at is not None:
+            raise EpisodeConflictError(_STALE_EPISODE)
+    except WorkConflictError as exc:
+        raise EpisodeConflictError(str(exc)) from exc
+    expire_orders = changes.get("is_published") is False or changes.get("is_free") is True
+
     invariant_write = new_keys is not None or "content" in changes or "thumbnail" in changes
     if invariant_write or changes.get("draft") is not None:
         if new_keys is not None:
@@ -405,6 +416,8 @@ async def update_episode(episode: Episode, data: EpisodeUpdate, session: AsyncSe
         if result.rowcount != 1:
             await session.rollback()
             raise EpisodeConflictError(_STALE_EPISODE)
+        if expire_orders:
+            await work_service.expire_catalog_orders(session, [episode.id])
         if thumb_webp is not None:
             try:
                 await r2_service.upload_bytes(
@@ -429,6 +442,9 @@ async def update_episode(episode: Episode, data: EpisodeUpdate, session: AsyncSe
     for field, value in changes.items():
         setattr(episode, field, value)
     session.add(episode)
+    await session.flush()
+    if expire_orders:
+        await work_service.expire_catalog_orders(session, [episode.id])
     await session.commit()
     if should_delete_public_thumb:
         await r2_service.delete_object(
@@ -455,9 +471,16 @@ async def soft_delete_episode(episode: Episode, session: AsyncSession) -> None:
     아는 사람에게 계속 서빙된다. 페이지 원본에서 다시 만들 수 있는 파생물이라 지워도
     복구 가능성은 줄지 않는다. image_keys의 원고는 건드리지 않는다(soft delete의 요점).
     """
+    try:
+        await work_service.lock_catalog_work(session, episode.work_id)
+        await session.refresh(episode, with_for_update=True)
+        await work_service.ensure_catalog_deletable(session, [episode.id])
+    except WorkConflictError as exc:
+        raise EpisodeConflictError(str(exc)) from exc
     thumbnail = episode.thumbnail
     work_id = episode.work_id
     episode_id = episode.id
+    await work_service.expire_catalog_orders(session, [episode_id])
 
     result = await session.exec(
         update(Episode)

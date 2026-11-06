@@ -11,7 +11,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.lib.auth import require_owner
 from src.lib.db import get_session
-from src.lib.exceptions import ImageValidationError
+from src.lib.exceptions import ImageValidationError, WorkConflictError
 from src.lib.uploads import R2_UNAVAILABLE, read_image_upload
 from src.models.user import User
 from src.models.work import Work
@@ -60,14 +60,20 @@ async def update_work(
     work_id: uuid.UUID, body: WorkUpdate, owner: OwnerDep, session: SessionDep
 ) -> Work:
     work = await _get_or_404(work_id, session)
-    return await work_service.update_work(work, body, session)
+    try:
+        return await work_service.update_work(work, body, session)
+    except WorkConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @router.delete("/{work_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_work(work_id: uuid.UUID, owner: OwnerDep, session: SessionDep) -> None:
     # 204 응답은 태그를 읽지 않으므로 with_tags=False로 불필요한 조인 로드를 생략.
     work = await _get_or_404(work_id, session, with_tags=False)
-    await work_service.soft_delete_work(work, session)
+    try:
+        await work_service.soft_delete_work(work, session)
+    except WorkConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @router.post("/{work_id}/cover", response_model=WorkRead)

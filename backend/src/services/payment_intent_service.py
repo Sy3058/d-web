@@ -185,11 +185,21 @@ async def _ensure_not_purchased(
         raise IntentError(409, "이미 구매한 회차입니다")
 
 
+def _requested_method(method: EpisodePaymentMethod) -> tuple[str, str | None]:
+    return {
+        EpisodePaymentMethod.CARD: ("PaymentMethodCard", None),
+        EpisodePaymentMethod.KAKAOPAY: ("PaymentMethodEasyPay", "KAKAOPAY"),
+        EpisodePaymentMethod.TOSSPAY: ("PaymentMethodEasyPay", "TOSSPAY"),
+    }[method]
+
+
 def _compatible(order: PaymentOrder, body: EpisodePaymentIntentCreate, checkout: _Checkout) -> bool:
     return (
         order.expected_amount == body.expected_amount == checkout.amount
         and order.store_id == settings.portone_store_id
         and order.requested_channel_key == checkout.channel_key
+        and (order.requested_payment_method, order.requested_easy_pay_provider)
+        == _requested_method(body.payment_method)
         and order.checkout_notice_version == body.checkout_notice_version == NOTICE_VERSION
     )
 
@@ -241,14 +251,9 @@ def _provider_matches(
     # 신원 근거로 쓰지 않고, method가 있다면 channel의 서버 capability와 모두 맞춘다.
     if snapshot.payment_method is None:
         return is_ready and snapshot.easy_pay_provider is None
-    capabilities = {
-        settings.portone_channel_key_card: ("PaymentMethodCard", None),
-        settings.portone_channel_key_kakaopay: ("PaymentMethodEasyPay", "KAKAOPAY"),
-        settings.portone_channel_key_tosspay: ("PaymentMethodEasyPay", "TOSSPAY"),
-    }
-    expected = capabilities.get(order.requested_channel_key)
+    expected = (order.requested_payment_method, order.requested_easy_pay_provider)
     return (
-        expected is not None
+        order.requested_payment_method is not None
         and (
             snapshot.payment_method,
             snapshot.easy_pay_provider,
@@ -398,6 +403,8 @@ async def create_episode_intent(
                 expected_amount=checkout.amount,
                 store_id=settings.portone_store_id,
                 requested_channel_key=channel_key,
+                requested_payment_method=_requested_method(body.payment_method)[0],
+                requested_easy_pay_provider=_requested_method(body.payment_method)[1],
                 environment=_environment(),
                 order_name=ORDER_NAME,
                 item_title=checkout.item_title,

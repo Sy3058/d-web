@@ -114,6 +114,16 @@ class PaymentOrder(SQLModel, table=True):
         ),
         CheckConstraint("currency = 'KRW'", name="ck_payment_orders_currency"),
         CheckConstraint(
+            "(requested_payment_method IS NULL AND requested_easy_pay_provider IS NULL) OR "
+            "(requested_payment_method IS NOT NULL AND ("
+            "(requested_payment_method = 'PaymentMethodCard' "
+            "AND requested_easy_pay_provider IS NULL) OR "
+            "(requested_payment_method = 'PaymentMethodEasyPay' "
+            "AND requested_easy_pay_provider IS NOT NULL "
+            "AND requested_easy_pay_provider IN ('KAKAOPAY', 'TOSSPAY'))))",
+            name="ck_payment_orders_requested_method",
+        ),
+        CheckConstraint(
             "(kind = 'episode_purchase' AND episode_id IS NOT NULL "
             "AND donation_message IS NULL) OR "
             "(kind = 'donation')",
@@ -230,6 +240,12 @@ class PaymentOrder(SQLModel, table=True):
     )
     store_id: str = Field(sa_column=Column(String(255), nullable=False))
     requested_channel_key: str = Field(sa_column=Column(String(255), nullable=False))
+    requested_payment_method: str | None = Field(
+        default=None, sa_column=Column(String(40), nullable=True)
+    )
+    requested_easy_pay_provider: str | None = Field(
+        default=None, sa_column=Column(String(40), nullable=True)
+    )
     environment: PaymentEnvironment = Field(sa_column=Column(String(8), nullable=False))
     order_name: str = Field(sa_column=Column(String(255), nullable=False))
     item_title: str = Field(sa_column=Column(String(200), nullable=False))
