@@ -498,10 +498,14 @@ async def test_http_auth_validation_kill_switch_and_rate_limit(
         {"immediate_supply_consented": False},
         {"immediate_supply_consented": "true"},
         {"payment_method": "bank"},
+        {"currency": "USD"},
+        {"currency": "JPY"},
         {"unexpected": "private-input-secret"},
     ],
 )
-async def test_invalid_http_input_is_no_store_and_never_echoed(async_client, checkout, overrides):
+async def test_invalid_http_input_is_no_store_and_never_echoed(
+    async_client, db_session, checkout, overrides
+):
     user_id, _, episode_id = checkout
     async_client.cookies.set(
         access_cookie_name(), create_access_token(str(user_id)), domain="test.example"
@@ -512,6 +516,7 @@ async def test_invalid_http_input_is_no_store_and_never_echoed(async_client, che
     assert response.status_code == 422
     assert response.headers["cache-control"] == "no-store"
     assert "private-input-secret" not in response.text
+    assert not await orders(db_session)
 
 
 async def test_ready_without_channel_recovers_preparing(db_session, session_factory, checkout):

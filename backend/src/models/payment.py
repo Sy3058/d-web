@@ -138,11 +138,17 @@ class PaymentOrder(SQLModel, table=True):
         ),
         CheckConstraint(
             "(cancel_reason IS NULL AND cancel_idempotency_key IS NULL "
-            "AND cancel_request_snapshot IS NULL) OR "
+            "AND cancel_request_snapshot IS NULL AND cancel_key_issued_at IS NULL) OR "
             "(cancel_reason IS NOT NULL AND cancel_idempotency_key IS NOT NULL "
-            "AND cancel_request_snapshot IS NOT NULL "
+            "AND cancel_request_snapshot IS NOT NULL AND cancel_key_issued_at IS NOT NULL "
             "AND provider_total_amount IS NOT NULL)",
             name="ck_payment_orders_cancel_request_bundle",
+        ),
+        CheckConstraint(
+            "(cancel_dispatch_token IS NULL AND cancel_dispatch_started_at IS NULL) OR "
+            "(cancel_dispatch_token IS NOT NULL AND cancel_dispatch_started_at IS NOT NULL "
+            "AND cancel_reason IS NOT NULL)",
+            name="ck_payment_orders_cancel_dispatch_bundle",
         ),
         CheckConstraint(
             "status <> 'cancel_pending' OR cancel_reason IS NOT NULL",
@@ -266,6 +272,15 @@ class PaymentOrder(SQLModel, table=True):
     cancel_idempotency_key: str | None = Field(
         default=None,
         sa_column=Column(String(256), nullable=True),
+    )
+    cancel_key_issued_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), nullable=True),
+    )
+    cancel_dispatch_token: uuid.UUID | None = Field(default=None)
+    cancel_dispatch_started_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), nullable=True),
     )
     cancel_request_snapshot: dict | None = Field(
         default=None,

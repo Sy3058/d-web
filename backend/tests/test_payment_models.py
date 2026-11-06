@@ -1,3 +1,4 @@
+import uuid
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -103,6 +104,7 @@ def _set_cancel_bundle(
     order.provider_total_amount = provider_total_amount
     order.cancel_reason = reason
     order.cancel_idempotency_key = f"cancel-{order.payment_id}"
+    order.cancel_key_issued_at = _now()
     order.cancel_request_snapshot = _cancel_snapshot(order, reason, provider_total_amount)
 
 
@@ -477,6 +479,7 @@ async def test_cancel_request_bundle_rejects_free_form_reason(
     order.cancel_reason = "buyer@example.com requested a refund"  # type: ignore[assignment]
     order.cancel_idempotency_key = "cancel-key-123456"
     order.provider_total_amount = order.expected_amount
+    order.cancel_key_issued_at = _now()
     order.cancel_request_snapshot = {
         "storeId": order.store_id,
         "reason": PaymentCancelReason.SYSTEM_VERIFICATION,
@@ -520,6 +523,7 @@ async def test_cancel_pending_requires_exact_replay_bundle(
     invalid_snapshot.cancel_reason = PaymentCancelReason.SYSTEM_UNAVAILABLE
     invalid_snapshot.cancel_idempotency_key = "cancel-invalid-123456"
     invalid_snapshot.provider_total_amount = invalid_snapshot.expected_amount
+    invalid_snapshot.cancel_key_issued_at = _now()
     invalid_snapshot.cancel_request_snapshot = {
         **_cancel_snapshot(
             invalid_snapshot,
@@ -545,6 +549,7 @@ async def test_cancel_pending_requires_exact_replay_bundle(
     mismatched_reason.cancel_reason = PaymentCancelReason.SYSTEM_UNAVAILABLE
     mismatched_reason.cancel_idempotency_key = "cancel-mismatch-12345"
     mismatched_reason.provider_total_amount = mismatched_reason.expected_amount
+    mismatched_reason.cancel_key_issued_at = _now()
     mismatched_reason.cancel_request_snapshot = _cancel_snapshot(
         mismatched_reason,
         PaymentCancelReason.SYSTEM_VERIFICATION,
@@ -569,6 +574,8 @@ async def test_cancel_pending_requires_exact_replay_bundle(
         PaymentCancelReason.SYSTEM_DUPLICATE,
         provider_total_amount=valid_bundle.expected_amount,
     )
+    valid_bundle.cancel_dispatch_token = uuid.uuid4()
+    valid_bundle.cancel_dispatch_started_at = _now()
     db_session.add(valid_bundle)
     await db_session.commit()
     await db_session.refresh(valid_bundle)
@@ -654,6 +661,7 @@ async def test_cancel_bundle_requires_authenticated_provider_total(
     )
     order.cancel_reason = PaymentCancelReason.SYSTEM_VERIFICATION
     order.cancel_idempotency_key = "cancel-without-provider-total"
+    order.cancel_key_issued_at = _now()
     order.cancel_request_snapshot = {
         "storeId": order.store_id,
         "reason": order.cancel_reason.value,
@@ -689,6 +697,7 @@ async def test_cancel_snapshot_must_match_authenticated_provider_total(
     order.provider_total_amount = 700
     order.cancel_reason = PaymentCancelReason.SYSTEM_VERIFICATION
     order.cancel_idempotency_key = "cancel-mismatched-provider-total"
+    order.cancel_key_issued_at = _now()
     order.cancel_request_snapshot = {
         "storeId": order.store_id,
         "reason": order.cancel_reason.value,
@@ -812,3 +821,62 @@ async def test_payment_order_database_checks_kind_status_environment_and_cancel_
     with pytest.raises(IntegrityError):
         await db_session.commit()
     await db_session.rollback()
+
+
+@pytest.mark.parametrize(
+    ("bundle", "issued", "token", "started", "valid"),
+    [
+        (True, False, False, False, False),
+        (False, True, False, False, False),
+        (True, True, True, False, False),
+        (True, True, False, True, False),
+        (False, False, True, True, False),
+        (True, True, False, False, True),
+        (True, True, True, True, True),
+        (False, False, False, False, True),
+    ],
+)
+@pytest.mark.parametrize(
+    "status", [PaymentOrderStatus.CANCELLED, PaymentOrderStatus.REVIEW_REQUIRED]
+)
+@pytest.mark.asyncio
+async def test_cancel_dispatch_bundle_checks(
+    db_session: AsyncSession,
+    user: User,
+    bundle: bool,
+    issued: bool,
+    token: bool,
+    started: bool,
+    valid: bool,
+    status: PaymentOrderStatus,
+):
+    episode = await _episode(db_session, user)
+    order = _order(
+        user,
+        episode,
+        payment_id="pay_dispatch_bundle",
+        environment=PaymentEnvironment.TEST,
+        status=status,
+    )
+    if bundle:
+        _set_cancel_bundle(
+            order, PaymentCancelReason.SYSTEM_VERIFICATION, provider_total_amount=500
+        )
+    order.cancel_key_issued_at = _now() if issued else None
+    order.cancel_dispatch_token = uuid.uuid4() if token else None
+    order.cancel_dispatch_started_at = _now() if started else None
+    db_session.add(order)
+    if not valid:
+        with pytest.raises(IntegrityError):
+            await db_session.commit()
+        await db_session.rollback()
+        return
+    await db_session.commit()
+    await db_session.refresh(order)
+    assert (order.cancel_dispatch_token is not None) is token
+    if issued:
+        assert order.cancel_key_issued_at is not None
+        assert order.cancel_key_issued_at.utcoffset() == timedelta(0)
+    if started:
+        assert order.cancel_dispatch_started_at is not None
+        assert order.cancel_dispatch_started_at.utcoffset() == timedelta(0)

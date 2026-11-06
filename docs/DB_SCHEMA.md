@@ -305,9 +305,9 @@ payment_orders
 ├── cancel_reason          VARCHAR(40)             -- 내부 allowlist code만 허용
 ├── cancel_idempotency_key VARCHAR(256)
 ├── cancel_request_snapshot JSONB              -- 개인정보 없는 exact cancel body, immutable
-├── cancel_key_issued_at    TIMESTAMPTZ           -- 계획: E, 재생 창의 보수적 시작점
-├── cancel_dispatch_token  UUID                  -- 계획: E, 외부 POST 발송 선점
-├── cancel_dispatch_started_at TIMESTAMPTZ       -- 계획: E, token과 함께 존재
+├── cancel_key_issued_at    TIMESTAMPTZ           -- E1, 재생 창의 보수적 시작점
+├── cancel_dispatch_token  UUID                  -- E1, 외부 POST 발송 선점
+├── cancel_dispatch_started_at TIMESTAMPTZ       -- E1, token과 함께 존재
 ├── cancelled_amount       INTEGER
 ├── expires_at             TIMESTAMPTZ NOT NULL
 ├── next_reconcile_at      TIMESTAMPTZ
@@ -327,8 +327,8 @@ payment_orders
 > - `PARTIAL_CANCELLED`와 알 수 없는 자금 상태는 `review_required`로 격리하고 권한을 닫는다.
 > - 외부 응답 뒤 transaction에서 현재 상태를 다시 읽고 허용 from-status CAS만 수행한다. `paid`·`cancelled`·`cancel_pending`은 늦은 `READY|PAID` 응답으로 회귀하지 않는다.
 > - `expected_amount`는 서버 주문·구매 provenance로 보존한다. `provider_total_amount`는 서버가 인증된 PortOne 단건 조회의 `amount.total`에서 기록하며, 클라이언트 값이나 할인 등이 반영된 `amount.paid`로 대체하지 않는다. 금액 불일치도 실제 총액을 보존해 권한 없이 전액 보상한다.
-> - 취소 사유는 `system_verification|system_unavailable|system_duplicate|customer_refund`만 허용한다. 사유·16~256자 ASCII 멱등 키·request snapshot·E 계획의 key 발급 시각은 모두 NULL이거나 모두 존재하고, `cancel_pending`에서는 반드시 존재한다. 취소 묶음에는 양수 `provider_total_amount`가 필수다. snapshot은 주문의 Store·사유·`provider_total_amount` 기준 전액 `amount`·`currentCancellableAmount`와 사유별 requester로 DB에서 재구성한 5-key JSONB와 정확히 같아야 하므로 추가 키나 개인정보를 넣을 수 없다. reason·snapshot은 한 번 정하면 유지하고, 같은 미확정 시도의 key만 발급 시각 기준 3시간 안에 재생한다. 확정 실패 뒤 사용자 환불의 새 시도는 새 key·발급 시각으로 원자적으로 교체한다. 기존 key가 있는 행의 E migration은 `created_at`을 보수적 시각으로 사용하고 불명확한 건은 자동 POST하지 않는다. `cancelled_amount`는 NULL이거나 `0 < cancelled_amount <= provider_total_amount`여야 하고 후자는 provider 총액도 필수다.
-> - E 계획의 `cancel_dispatch_token`·`cancel_dispatch_started_at`은 함께 NULL 또는 존재하고 token이 있으면 order는 `cancel_pending`이어야 한다. 현재 상태·key와, 사용자 환불이면 현재 시도 번호까지 다시 확인한 worker만 token NULL→UUID CAS로 발송권을 얻는다. HTTP 호출이 응답·예외·로컬 timeout으로 끝난 뒤 같은 token·key와 사용자 환불 시도 번호로만 응답 반영과 token 해제를 commit한다. timeout은 외부 실패 확정이 아니다. 발송권이 있는 동안 실패 복원·새 시도·다른 POST를 금지한다. task 취소·프로세스 중단·응답 반영 commit 실패로 token이 남으면 TTL 자동 회수 없이 권한을 잠그고, 발송 프로세스 종료와 외부 자금 상태를 확인한 통제된 복구만 허용한다.
+> - 취소 사유는 `system_verification|system_unavailable|system_duplicate|customer_refund`만 허용한다. 사유·16~256자 ASCII 멱등 키·request snapshot·key 발급 시각은 모두 NULL이거나 모두 존재하고, `cancel_pending`에서는 반드시 존재한다. 취소 묶음에는 양수 `provider_total_amount`가 필수다. snapshot은 주문의 Store·사유·`provider_total_amount` 기준 전액 `amount`·`currentCancellableAmount`와 사유별 requester로 DB에서 재구성한 5-key JSONB와 정확히 같아야 하므로 추가 키나 개인정보를 넣을 수 없다. reason·snapshot은 한 번 정하면 유지하고, 같은 미확정 시도의 key만 발급 시각 기준 3시간 안에 재생한다. 확정 실패 뒤 사용자 환불의 새 시도는 새 key·발급 시각으로 원자적으로 교체한다. 기존 key가 있는 행의 E migration은 `created_at`을 보수적 시각으로 사용하고 불명확한 건은 자동 POST하지 않는다. `cancelled_amount`는 NULL이거나 `0 < cancelled_amount <= provider_total_amount`여야 하고 후자는 provider 총액도 필수다.
+> - `cancel_dispatch_token`·`cancel_dispatch_started_at`은 함께 NULL 또는 존재하며 token이 있으면 취소 묶음도 필수다. 발송 선점은 `cancel_pending`에서만 허용한다. token은 외부 발송 소유권이므로 상태와 별도로 보존하며, 종결·격리 상태에서도 유실 token을 지우기 위해 상태를 되돌리지 않는다. 현재 상태·key와, 사용자 환불이면 현재 시도 번호까지 다시 확인한 worker만 token NULL→UUID CAS로 발송권을 얻는다. HTTP 호출이 응답·예외·로컬 timeout으로 끝난 뒤 같은 token·key와 사용자 환불 시도 번호로만 응답 반영과 token 해제를 commit한다. timeout은 외부 실패 확정이 아니다. 발송권이 있는 동안 실패 복원·새 시도·다른 POST를 금지한다. task 취소·프로세스 중단·응답 반영 commit 실패로 token이 남으면 TTL 자동 회수 없이 권한을 잠그고, 발송 프로세스 종료와 외부 자금 상태를 확인한 통제된 복구만 허용한다.
 > - environment는 계정 이메일이 아니라 서버 설정과 검증된 PortOne channel에서 정한다. 생성 뒤 바꾸지 않고 개발자 테스트 Store를 작가 실판매 Store로 교체해도 기존 test 행을 live로 갱신하지 않는다.
 > - 구매 권한이 참조하는 주문 provenance는 `(id, user_id, kind, episode_id, environment, expected_amount, paid_at)` UNIQUE로 고정한다. `status`는 취소 상태 전이를 허용해야 하므로 이 묶음에 넣지 않는다.
 

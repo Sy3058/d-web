@@ -109,6 +109,24 @@ def _cancellation_state(provider_status: str | None) -> PortOneCancellationState
 
 
 @dataclass(frozen=True, slots=True)
+class PortOnePaymentCancellation:
+    """결제 GET에서 현재 취소 시도를 식별하는 최소 allowlist."""
+
+    cancellation_id: str | None
+    state: PortOneCancellationState
+    total_amount: int | None
+
+    @classmethod
+    def from_payload(cls, payload: Any) -> "PortOnePaymentCancellation":
+        data = _mapping(payload)
+        return cls(
+            cancellation_id=_string(data.get("id"), limit=255),
+            state=_cancellation_state(_string(data.get("status"), limit=40)),
+            total_amount=_integer(data.get("totalAmount")),
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class PortOnePaymentSnapshot:
     money_state: PortOneMoneyState
     provider_status: str | None
@@ -126,6 +144,14 @@ class PortOnePaymentSnapshot:
     receipt_url: str | None
     paid_at: datetime | None
     cancelled_at: datetime | None
+    cancellations: tuple[PortOnePaymentCancellation, ...] | None = None
+
+    def match_cancellation(self, cancellation_id: str | None) -> PortOnePaymentCancellation | None:
+        """현재 ID가 정확히 한 번 나타날 때만 해당 조회 결과를 반환한다."""
+        if not cancellation_id or self.cancellations is None:
+            return None
+        matches = [item for item in self.cancellations if item.cancellation_id == cancellation_id]
+        return matches[0] if len(matches) == 1 else None
 
     @classmethod
     def from_payload(cls, payload: Any) -> "PortOnePaymentSnapshot":
@@ -134,6 +160,7 @@ class PortOnePaymentSnapshot:
         amount = _mapping(data.get("amount"))
         method = _mapping(data.get("method"))
         provider_status = _string(data.get("status"), limit=40)
+        cancellations = data.get("cancellations")
         return cls(
             money_state=_money_state(provider_status),
             provider_status=provider_status,
@@ -151,6 +178,15 @@ class PortOnePaymentSnapshot:
             receipt_url=_string(data.get("receiptUrl"), limit=2048),
             paid_at=_datetime(data.get("paidAt")),
             cancelled_at=_datetime(data.get("cancelledAt")),
+            cancellations=(
+                tuple(PortOnePaymentCancellation.from_payload(item) for item in cancellations)
+                if isinstance(cancellations, list)
+                else (
+                    None
+                    if cancellations is None
+                    else (PortOnePaymentCancellation.from_payload(None),)
+                )
+            ),
         )
 
 
