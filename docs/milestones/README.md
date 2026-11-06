@@ -202,7 +202,7 @@ M4 (커뮤니티 - 후원 제외)
   - 2026-10-04 단건 조회 Store ID 필수 지정과 빈 값 거부 보강. focused 45개(DB 통합 23개 + adapter·webhook 22개), Backend 전체 gate 580개 통과. 모델·migration 변경과 실제 PortOne 조회 재실행은 없음.
 - [x] 서버 가격·Store·`test|live`·channel snapshot, 환경별 열린 주문·구매 UNIQUE, pre-register, 30분 주문 만료 *(그룹 C schema 2026-09-01, 그룹 D intent 2026-10-26 완료. D focused 143·Backend 678, 실제 외부 write는 P0 gate에 유지)*
 - [ ] browser·webhook receipt worker·대사·owner 공통 단조 sync, out-of-order 방어와 이중 `PAID` 보상 취소
-- [ ] E 선행: GET `payment.cancellations` typed allowlist와 현재 취소 ID 매칭(누락·빈 목록·불일치는 실패 확정 아님), key 발급 시각과 DB 발송 token CAS
+- [x] E1 선행 기반: GET `payment.cancellations` typed allowlist와 현재 취소 ID 매칭(누락·빈 목록·불일치는 실패 확정 아님), key 발급 시각과 DB 발송 token CAS *(2026-11-07, 시스템 보상 내부 서비스·migration 검증. 공개 sync·webhook·대사 연결과 G 사용자 환불은 후속. [IMPLEMENTATION_PAYMENT_CANCELLATION.md](../MODULES/BE/Payment/IMPLEMENTATION_PAYMENT_CANCELLATION.md))*
 - [ ] expired를 자금 종결로 오인하지 않는 대사, bounded batch·최대 1시간 backoff와 늦은 `PAID` 선택 검증
 - [x] intent 금액·주문 expected_amount 일치와 호환 재사용, 변경 시 `checkout_changed` 재확인 흐름 *(2026-10-26, [IMPLEMENTATION_PAYMENT_INTENTS.md](../MODULES/BE/Payment/IMPLEMENTATION_PAYMENT_INTENTS.md))*
 - [ ] 결제·비공개·soft delete race 단일 승자, 일반 비공개 뒤 기존 구매 full 유지, 먼저 비공개된 주문의 늦은 `PAID` 전액 보상

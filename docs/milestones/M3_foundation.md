@@ -2,7 +2,7 @@
 
 | 항목 | 내용 |
 |------|------|
-| 문서 버전 | v0.9 (2026-10-26, 그룹 D 에피소드 결제 intent 완료 증거 반영) |
+| 문서 버전 | v0.10 (2026-11-07, 그룹 E1 시스템 보상 취소 기반 완료 증거 반영) |
 | 상위 마일스톤 | [M3](./README.md#m3-결제--유료-콘텐츠-잠금--후원) |
 | 예상 기간 | 약 6~8주 + 외부 채널·법무 일정 |
 | P0 완료 기준 | `결제 전 고지·동의 → 서버 주문 → 검증된 결제 → 구매 권한 1건 → 전문 자동 발급 → 환불·장애 복구 → 기본 매출 확인`이 PortOne 테스트 채널에서 끝까지 작동한다. |
@@ -86,7 +86,7 @@ Day 0 증거에는 개발자 소유 테스트 고객사·Store·channel 식별�
 
 - 프론트는 `@portone/browser-sdk/v2`의 `requestPayment`를 사용한다. 2026-08-30 npm registry 확인 버전은 `0.1.9`이며 구현 직전에 공식 최신 릴리스를 다시 확인하고 정확 버전을 pin한다.
 - 백엔드의 pre-register·단건 조회·취소는 `httpx.AsyncClient` 기반 V2 REST adapter로 구현한다. timeout은 `connect=5초`, `read=65초`, `write=10초`, `pool=5초`로 명시한다. PortOne이 권고하는 최소 read timeout 60초보다 짧게 두지 않고, 존재하지 않는 `total` 옵션으로 설정됐다고 오인하지 않는다.
-- 단건 GET은 connect·pool·일시적 429/5xx에 한해 jitter를 둔 1회 inline 재시도 뒤 대사로 넘긴다. 취소 같은 write는 adapter가 임의 재시도하지 않고, 호출자가 DB에 저장한 같은 미확정 시도의 멱등 키·동일 request snapshot으로만 재시도한다. 응답은 typed allowlist로 검증하되 새 필드·enum·oneOf가 추가돼도 crash하지 않고 알 수 없는 자금 상태로 격리한다. E에서 `PortOnePaymentSnapshot`의 GET `cancellations`를 optional typed allowlist로 확장해 cancellation `id`, `status`, 존재할 때의 `totalAmount`만 읽는다. 목록 생략·빈 목록·현재 `cancellation_id` 미매칭·알 수 없는 status는 실패 확정으로 추측하지 않는다. 이 조회 확장은 C 완료 범위가 아니라 E 미구현 범위다.
+- 단건 GET은 connect·pool·일시적 429/5xx에 한해 jitter를 둔 1회 inline 재시도 뒤 대사로 넘긴다. 취소 같은 write는 adapter가 임의 재시도하지 않고, 호출자가 DB에 저장한 같은 미확정 시도의 멱등 키·동일 request snapshot으로만 재시도한다. 응답은 typed allowlist로 검증하되 새 필드·enum·oneOf가 추가돼도 crash하지 않고 알 수 없는 자금 상태로 격리한다. E1에서 `PortOnePaymentSnapshot`의 GET `cancellations`를 optional typed allowlist로 확장해 cancellation `id`, `status`, 존재할 때의 `totalAmount`만 읽는다. 목록 생략·빈 목록·현재 `cancellation_id` 미매칭·알 수 없는 status는 실패 확정으로 추측하지 않는다. 이 조회 확장은 C 이후 E1에서 구현됐다.
 - `portone-server-sdk`는 raw webhook 서명 검증에만 사용한다. 이 검증은 raw body와 헤더를 입력으로 하는 짧은 로컬 연산이다. SDK의 동기 네트워크 client를 async FastAPI event loop에서 직접 호출하지 않는다.
 - `payment_id`는 서버가 `pay_<uuidhex>`로 만든다. 브라우저는 새 ID를 만들거나 금액을 덮어쓰지 않는다.
 - 결제창 전 서버는 V2 pre-register에 `payment_id`, Store ID, KRW 금액을 등록한다. 결제 뒤 단건 조회 검증은 반드시 별도로 수행한다.
@@ -129,7 +129,8 @@ cancel_pending 실패 확정 ─→ paid (사용자 환불) | review_required (�
 | `preparing|ready` | `not found|READY|PENDING|PAY_PENDING|FAILED` | 만료 전에는 현재 상태 유지·재대사한다. `FAILED`는 로그만 남긴다. `expires_at <= now`이면 같은 조회가 비승인을 확인한 때만 `expired`로 닫는다. |
 | `expired` | `not found|READY|PENDING|PAY_PENDING|FAILED` | `expired` 유지, `next_reconcile_at`을 다시 예약한다. 새 주문과 합치지 않으며 시간·횟수만으로 자금 추적을 끝내지 않는다. |
 | `preparing|ready|expired` | snapshot 일치 `PAID` + commit 시점 판매 가능 | 구매는 작품·회차·주문을 공통 lock 순서로 선점해 `paid` + 결과 1건을 같은 transaction에 commit한다. donation은 대상 공개성을 같은 transaction에서 재확인한다. |
-| `preparing|ready|expired` | `PAID`지만 snapshot 불일치·비공개·판매 중지·삭제 | 결과를 만들지 않고 `cancel_pending(system_verification|system_unavailable)`으로 전환해 전액 보상 취소한다. 이 상태를 결제 성공 UI로 표시하지 않는다. |
+| `preparing|ready|expired` | KRW `PAID`지만 snapshot 불일치·비공개·판매 중지·삭제 | 결과를 만들지 않고 `cancel_pending(system_verification|system_unavailable)`으로 전환해 전액 보상 취소한다. 이 상태를 결제 성공 UI로 표시하지 않는다. |
+| `preparing|ready|expired` | 동일 payment ID·Store의 `PAID`지만 비KRW 또는 통화 누락 | 지원 통화 예외로 `review_required/unsupported_payment_currency`에 격리한다. 외화 총액을 KRW 금액으로 저장하거나 구매·자동 취소를 만들지 않는다. |
 | `preparing|ready|expired` | `CANCELLED` | `cancelled`, 구매·후원 결과 0건. |
 | `paid` | `not found|READY|PENDING|PAY_PENDING|FAILED|PAID` | `paid` 유지. stale 응답으로 `ready|expired`로 회귀하거나 결과를 재삽입하지 않는다. 반복 불일치는 새 조회를 예약한다. |
 | `paid` | `CANCELLED` | `cancelled`로 전환하고 존재하는 purchase를 `refunded`로 만든다. donation 행은 승인 감사 기록으로 남기고 order 취소가 refund 집계 사실이 된다. 환불 요청이 없어도 권한을 회수한다. |
@@ -148,6 +149,7 @@ cancel_pending 실패 확정 ─→ paid (사용자 환불) | review_required (�
 
 ### 결정 3: 가격·수단·환경은 서버 주문 snapshot으로 고정한다
 
+- 현재 판매 통화는 KRW로 고정하며 intent에는 클라이언트 통화 선택을 받지 않는다. 동일 payment ID·Store의 `PAID`에서 비KRW 또는 통화 누락이 확인되면 `review_required/unsupported_payment_currency`로 격리하고 구매·자동 취소를 만들지 않는다. 외화 총액을 KRW 금액으로 기록하지 않는다. KRW 금액 불일치는 전액 보상하며, USD 등 다중 통화는 별도 후속 범위다.
 - intent는 공개·미삭제·판매 중인 회차와 작품을 조회해 `episodes.price ?? works.episode_base_price`를 계산한다. paywall이 없는 회차는 주문을 만들지 않는다.
 - 결제 확인 UI는 회차와 표시 금액, 즉시 제공·단순 변심 청약철회 제한·계약 불일치 예외를 보여준다. 동의 항목은 기본 미선택이며, 선택 뒤 `결제하고 바로 보기`를 눌러야 구매 intent를 만든다. 테스트 문구는 "결제 완료 후 전체 내용이 즉시 제공됩니다. 전체 내용 제공이 시작되면 단순 변심에 따른 청약철회가 제한됩니다. 콘텐츠가 표시·광고와 다르거나 계약 내용대로 제공되지 않은 경우는 제외됩니다."로 둔다.
 - intent 결제 config는 요청 확인 금액, 서버가 다시 계산한 현재 가격, 서버가 선택한 주문의 `expected_amount`가 모두 같을 때만 반환한다. 클라이언트 금액을 결제 금액의 원천으로 쓰지 않는다. 구매 주문에는 서버가 선택한 `checkout_notice_version`과 `immediate_supply_consented_at`을 기록한다. M3 테스트 고지 버전은 `episode-immediate-v1`로 시작하고 문구가 바뀌면 새 버전을 쓰며 기존 주문 snapshot은 갱신하지 않는다. 후원 주문에는 두 값을 두지 않는다.
@@ -274,7 +276,7 @@ cancel_pending 실패 확정 ─→ paid (사용자 환불) | review_required (�
 | `pg_provider`, `payment_method`, `easy_pay_provider` | 검증된 결제수단 breakdown snapshot |
 | `receipt_url` | 검증된 URL만 저장 |
 | `cancel_reason`, `cancel_idempotency_key`, `cancel_request_snapshot`, `cancelled_amount` | 보상·환불 수렴 정보. reason·exact JSONB는 시도 간 고정하고 key는 확인된 사용자 환불 최종 실패 뒤 새 attempt에서만 교체 |
-| `cancel_key_issued_at`, `cancel_dispatch_token`, `cancel_dispatch_started_at` | E 계획 컬럼. 키 시각은 재생 3시간 상한의 보수적 기준; token·started_at은 둘 다 NULL 또는 둘 다 존재, token 존재 중 상태 복원·새 시도·다른 발송 금지 |
+| `cancel_key_issued_at`, `cancel_dispatch_token`, `cancel_dispatch_started_at` | E1 구현 컬럼. 키 시각은 재생 3시간 상한의 보수적 기준; token·started_at은 둘 다 NULL 또는 둘 다 존재, token 존재 중 상태 복원·새 시도·다른 발송 금지 |
 | `expires_at`, `next_reconcile_at`, `reconcile_attempts`, `last_synced_at` | 생명주기·대사 |
 | `needs_action_reason` | nullable 제한 enum/code, 원시 응답 금지 |
 | `prepared_at`, `paid_at`, `cancelled_at`, `created_at`, `updated_at` | UTC timestamptz |
@@ -283,7 +285,7 @@ cancel_pending 실패 확정 ─→ paid (사용자 환불) | review_required (�
 
 - 구매는 `episode_id NOT NULL AND donation_message IS NULL`, 후원은 `episode_id`와 message가 각각 nullable인 kind CHECK
 - 구매는 `checkout_notice_version`과 `immediate_supply_consented_at`이 NOT NULL이고 후원은 둘 다 NULL인 kind CHECK
-- 취소 사유는 `system_verification|system_unavailable|system_duplicate|customer_refund`만 허용한다. 사유·멱등 키·snapshot·E 계획의 키 시각은 모두 NULL이거나 모두 존재하고 `cancel_pending`에서는 필수다. 발송 token·시각은 함께 NULL 또는 존재하고 token이 있으면 `cancel_pending`이어야 한다. 취소 묶음은 양수 `provider_total_amount`를 요구하며 snapshot은 Store·사유·해당 총액 기준 `amount`·`currentCancellableAmount`·사유별 requester의 정확한 5-key JSONB
+- 취소 사유는 `system_verification|system_unavailable|system_duplicate|customer_refund`만 허용한다. 사유·멱등 키·snapshot·키 시각은 모두 NULL이거나 모두 존재하고 `cancel_pending`에서는 필수다. 발송 token·시각은 함께 NULL 또는 존재하며 취소 묶음이 필수다. 발송 선점은 `cancel_pending`에서만 허용하지만 종결·격리 상태에서도 유실 token은 보존할 수 있다. 취소 묶음은 양수 `provider_total_amount`를 요구하며 snapshot은 Store·사유·해당 총액 기준 `amount`·`currentCancellableAmount`·사유별 requester의 정확한 5-key JSONB
 - `cancelled_amount`는 NULL이거나 provider 총액이 존재하면서 `0 < cancelled_amount <= provider_total_amount`. 과다 승인 보상도 원래 `expected_amount`를 바꾸지 않고 전액 취소를 기록
 - 구매 권한의 composite FK 대상인 `(id, user_id, kind, episode_id, environment, expected_amount, paid_at)` UNIQUE
 - `(user_id, episode_id, environment) WHERE kind='episode_purchase' AND status IN ('preparing','ready')` partial unique
@@ -419,6 +421,9 @@ cancel_pending 실패 확정 ─→ paid (사용자 환불) | review_required (�
 ### E. 공통 sync·webhook·대사
 
 - 브라우저·webhook receipt worker·scheduler 대사·owner 공통 sync와 보상 취소를 구현한다. `PortOnePaymentSnapshot.cancellations`의 typed allowlist, 시스템 취소 key·snapshot·key 발급 시각 최초 저장 CAS와 취소 발송 token CAS를 E에서 제공하고 G가 재사용한다.
+- **E1 완료 (2026-11-07)**: optional 취소 내역의 현재 ID 단일 매칭, key 발급 시각·발송 token/시각과 CHECK, revision `e1f6a7b8c9d0`, 시스템 취소 준비·발송·응답 반영 CAS를 구현했다. 서로 다른 worker의 동시 POST 1건, 오래된 GET·token·key 응답 차단, timeout·outstanding 복구, 3시간 경계 재확인, task 취소·결과 commit 실패 뒤 token 보존과 외부 I/O 중 현재 task의 DB connection 0을 검증했다. E1 내부 서비스는 공개 API·worker에 아직 연결하지 않는다. 상세와 전체 gate 증거는 [IMPLEMENTATION_PAYMENT_CANCELLATION.md](../MODULES/BE/Payment/IMPLEMENTATION_PAYMENT_CANCELLATION.md)를 따른다.
+- **남은 E 범위**: E2는 공통 `sync_payment`와 구매 단일 승자·중복 승인 보상, E3는 complete·webhook durable inbox·worker, E4는 expired 포함 bounded 대사·owner 재조회다. G 사용자 환불의 attempt 번호와 권한 복원도 미구현이다. E1만으로 그룹 E 전체를 완료 처리하지 않는다.
+- **KRW 전용 보강 (2026-11-07)**: 동일 payment ID·Store의 비KRW/통화 누락 `PAID`는 최초 취소 준비에서 운영 확인 대상으로 격리한다. 반환 enum으로 취소 준비·격리·미변경을 구분하며 금액·통화·기존 취소 묶음을 보존한다. 취소·intent focused 125개, Backend 전체 769개와 Ruff gate가 통과했다. USD 등 다중 통화는 별도 후속 범위다.
 - 완료 증거: 같은 payment_id 4경로 1결과, 서로 다른 payment_id 동시 PAID는 1구매+1취소, webhook receipt commit 전 2xx 0·commit 뒤 crash 재처리, stale 외부 응답 상태 회귀 0, `expired` selector·전용 bounded 예산·최대 1시간 backoff와 `not found|FAILED` 뒤 재예약, browser·webhook 없이 늦은 `PAID`가 권한 또는 보상으로 수렴, 앱 재시작 뒤 cancel_pending 수렴. cancellation typed 매핑은 현재 ID의 `FAILED`를 구분하고 목록 absent·empty·UNKNOWN·미매칭을 실패 확정으로 추측하지 않고 권한 잠금·격리를 유지한다. 같은 주문의 동시 취소 worker는 발송 token CAS 승자만 POST해 호출 1건이고, token이 있는 동안 실패 복원·새 시도·두 번째 POST는 0건이다. timeout은 3시간 안에서만 같은 key·body로 복구하고, 유실 token은 TTL로 자동 회수하지 않으며, 시스템 보상의 현재 cancellation `FAILED`는 격리하고 stale 과거 `FAILED`를 현재 시도에 연결하지 않고 raw reason·PII 노출 0이다.
 
 ### F. 구매 권한·전문·최소 UI

@@ -3,7 +3,7 @@ import hashlib
 import hmac
 import json
 import time
-from dataclasses import FrozenInstanceError
+from dataclasses import FrozenInstanceError, asdict
 
 import httpx
 import pytest
@@ -16,6 +16,7 @@ from src.services.portone_rest import (
     PortOneCancellationState,
     PortOneCancelRequest,
     PortOneMoneyState,
+    PortOnePaymentSnapshot,
     PortOneRestAdapter,
     PortOneTransportError,
     quote_idempotency_key,
@@ -27,6 +28,99 @@ API_SECRET = "portone-api-secret-for-tests"
 
 def _secret() -> SecretStr:
     return SecretStr(API_SECRET)
+
+
+def test_get_cancellations_retains_only_minimal_allowlist():
+    snapshot = PortOnePaymentSnapshot.from_payload(
+        {
+            "status": "PAID",
+            "cancellations": [
+                {
+                    "id": "cancel-current",
+                    "status": "FAILED",
+                    "totalAmount": 700,
+                    "reason": "buyer@example.com",
+                    "receiptUrl": "https://private.example/receipt",
+                    "customer": {"phoneNumber": "01012345678"},
+                }
+            ],
+        }
+    )
+
+    cancellation = snapshot.match_cancellation("cancel-current")
+    assert cancellation is not None
+    assert asdict(cancellation) == {
+        "cancellation_id": "cancel-current",
+        "state": PortOneCancellationState.FAILED,
+        "total_amount": 700,
+    }
+    assert snapshot.cancellations == (cancellation,)
+    assert "buyer@example.com" not in repr(snapshot)
+    assert "private.example" not in repr(snapshot)
+    assert "01012345678" not in repr(snapshot)
+    with pytest.raises(FrozenInstanceError):
+        cancellation.total_amount = 1
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {},
+        {"cancellations": None},
+        {"cancellations": []},
+        {"cancellations": {}},
+        {"cancellations": [{"id": "past", "status": "FAILED"}]},
+        {"cancellations": [{"id": "current", "status": "FAILED"}] * 2},
+        {
+            "cancellations": [
+                {"id": "current", "status": "FAILED"},
+                {"id": "current", "status": "REQUESTED"},
+            ]
+        },
+    ],
+)
+def test_ambiguous_cancellations_do_not_identify_current_failure(payload):
+    snapshot = PortOnePaymentSnapshot.from_payload(payload)
+    assert snapshot.match_cancellation("current") is None
+    assert snapshot.match_cancellation(None) is None
+    assert snapshot.match_cancellation("") is None
+
+
+@pytest.mark.parametrize("status", [None, "FUTURE_STATE", True, {}])
+def test_unknown_current_cancellation_is_not_failure(status):
+    snapshot = PortOnePaymentSnapshot.from_payload(
+        {"cancellations": [{"id": "current", "status": status}]}
+    )
+    cancellation = snapshot.match_cancellation("current")
+    assert cancellation is not None
+    assert cancellation.state is PortOneCancellationState.UNKNOWN
+    assert cancellation.total_amount is None
+
+
+@pytest.mark.parametrize("amount", [True, "700", {}, None])
+def test_invalid_get_cancellation_amount_is_not_coerced(amount):
+    snapshot = PortOnePaymentSnapshot.from_payload(
+        {"cancellations": [None, {"id": "current", "status": "SUCCEEDED", "totalAmount": amount}]}
+    )
+    cancellation = snapshot.match_cancellation("current")
+    assert cancellation is not None
+    assert cancellation.state is PortOneCancellationState.SUCCEEDED
+    assert cancellation.total_amount is None
+
+
+def test_get_cancellations_preserves_absent_and_empty_distinction():
+    assert PortOnePaymentSnapshot.from_payload({}).cancellations is None
+    assert PortOnePaymentSnapshot.from_payload({"cancellations": []}).cancellations == ()
+
+
+@pytest.mark.parametrize("value", [{}, "invalid", 0, False])
+def test_malformed_cancellation_list_preserves_nonempty_uncertainty(value):
+    snapshot = PortOnePaymentSnapshot.from_payload({"cancellations": value})
+    assert snapshot.cancellations is not None
+    assert len(snapshot.cancellations) == 1
+    assert snapshot.cancellations[0].state is PortOneCancellationState.UNKNOWN
+    assert snapshot.cancellations[0].cancellation_id is None
+    assert snapshot.match_cancellation("current") is None
 
 
 def test_portone_config_masks_secrets(monkeypatch):
