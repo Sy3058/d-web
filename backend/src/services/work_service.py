@@ -8,14 +8,17 @@ import uuid
 from collections.abc import Sequence
 from datetime import UTC, datetime
 
-from sqlalchemy import func
+from sqlalchemy import func, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
+from sqlalchemy.sql import Select
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.config import settings
-from src.models.work import Tag, Work
+from src.lib.exceptions import WorkConflictError
+from src.models.payment import PaymentOrder, Purchase
+from src.models.work import Episode, Tag, Work
 from src.schemas.work import WorkCreate, WorkUpdate
 from src.services import r2_service
 
@@ -111,12 +114,63 @@ async def get_work(
     return result.first()
 
 
+async def lock_catalog_work(session: AsyncSession, work_id: uuid.UUID) -> Work:
+    """구매 sync와 같은 부모 잠금으로 판매 변경을 직렬화한다."""
+    work = (
+        await session.exec(
+            select(Work)
+            .where(Work.id == work_id)
+            .with_for_update()
+            .options(selectinload(Work.tags))
+            .execution_options(populate_existing=True)
+        )
+    ).one_or_none()
+    if work is None or work.deleted_at is not None:
+        raise WorkConflictError("작품이 삭제되었거나 변경되었습니다")
+    return work
+
+
+async def expire_catalog_orders(
+    session: AsyncSession, episode_ids: list[uuid.UUID] | Select
+) -> None:
+    await session.exec(
+        update(PaymentOrder)
+        .where(
+            PaymentOrder.episode_id.in_(episode_ids),
+            PaymentOrder.status.in_(["preparing", "ready"]),
+        )
+        .values(
+            status="expired",
+            needs_action_reason="content_unavailable",
+            next_reconcile_at=datetime.now(UTC),
+        )
+    )
+
+
+async def ensure_catalog_deletable(
+    session: AsyncSession, episode_ids: list[uuid.UUID] | Select
+) -> None:
+    purchase = (
+        await session.exec(
+            select(Purchase.id)
+            .where(
+                Purchase.episode_id.in_(episode_ids),
+                Purchase.status.in_(["active", "refund_pending", "review_required"]),
+            )
+            .limit(1)
+        )
+    ).first()
+    if purchase is not None:
+        raise WorkConflictError("구매 권한이 남아 있어 삭제할 수 없습니다")
+
+
 async def update_work(work: Work, data: WorkUpdate, session: AsyncSession) -> Work:
     """부분 수정(exclude_unset). tag_names 미제공=유지, []=전부 해제, 리스트=전체 교체.
 
     commit 후 refresh는 불필요 - updated_at 등 서버 계산 컬럼은 UPDATE RETURNING
     (eager_defaults)으로 즉시 채워지고, tags는 로드/대입된 상태 그대로다.
     """
+    work = await lock_catalog_work(session, work.id)
     new_tags = None
     if data.tag_names is not None:
         new_tags = await _get_or_create_tags(data.tag_names, session)
@@ -130,6 +184,8 @@ async def update_work(work: Work, data: WorkUpdate, session: AsyncSession) -> Wo
         # (2026-07-09 리뷰) - DB 시계로 명시 갱신해 태그 변경도 최종 수정 시각에 반영.
         work.updated_at = func.now()  # type: ignore[assignment]
 
+    if changes.get("is_published") is False:
+        await expire_catalog_orders(session, select(Episode.id).where(Episode.work_id == work.id))
     session.add(work)
     await session.commit()
     await _load_episode_count(work, session)
@@ -138,6 +194,10 @@ async def update_work(work: Work, data: WorkUpdate, session: AsyncSession) -> Wo
 
 async def soft_delete_work(work: Work, session: AsyncSession) -> None:
     """deleted_at 세팅만(하드 삭제·CASCADE 금지 - A1 결정). 에피소드는 그대로 남는다."""
+    work = await lock_catalog_work(session, work.id)
+    episode_ids = select(Episode.id).where(Episode.work_id == work.id)
+    await ensure_catalog_deletable(session, episode_ids)
+    await expire_catalog_orders(session, episode_ids)
     work.deleted_at = datetime.now(UTC)
     session.add(work)
     await session.commit()

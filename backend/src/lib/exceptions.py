@@ -83,3 +83,7 @@ class CommissionValidationError(ValueError):
     sample_image_keys 재배열에 이 카드의 키가 아닌 값/중복 키 등
     DB 상태 의존 검증(EpisodeValidationError와 같은 성질).
     """
+
+
+class WorkConflictError(Exception):
+    """작품 판매 상태 충돌 또는 남은 구매 권한 (router → 409)."""

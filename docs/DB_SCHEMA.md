@@ -283,6 +283,8 @@ payment_orders
 ├── currency               VARCHAR(3) NOT NULL DEFAULT 'KRW' CHECK (currency = 'KRW')
 ├── store_id               VARCHAR(255) NOT NULL
 ├── requested_channel_key  VARCHAR(255) NOT NULL
+├── requested_payment_method VARCHAR(40)           -- 주문 생성 당시 수단, legacy NULL
+├── requested_easy_pay_provider VARCHAR(40)        -- 주문 생성 당시 간편결제 provider
 ├── environment            VARCHAR(8) NOT NULL
 │                          CHECK (environment IN ('test', 'live'))
 ├── order_name             VARCHAR(255) NOT NULL  -- PG 제한에 맞춘 안전 표시명
@@ -652,3 +654,7 @@ CREATE INDEX idx_viewer_progress_episode_id ON viewer_progress(episode_id);
 | 환불 시간 제한 | M3 테스트는 결제 후 168시간 미만·전문 미발급. 실결제 기간·문구는 법무 검토 후 확정 | M7 출시 gate |
 | 휴면 계정 분리 | 현재 스키마에 반영 안 함, 안정화 후 추가 | 6개월 후 |
 | push 토큰 저장 | 웹 푸시 도입 시 `push_tokens` 테이블 별도 추가 필요 | P1 작업 시 |
+
+### E2 주문 수단 snapshot 보강 (2026-11-07)
+
+revision `f2a7b8c9d0e1`은 요청 수단·provider nullable 컬럼과 `ck_payment_orders_requested_method`를 추가한다. 허용 조합은 legacy NULL/NULL, PaymentMethodCard/NULL, PaymentMethodEasyPay/KAKAOPAY 또는 TOSSPAY다. 신규 intent는 snapshot을 저장하며 기존 데이터는 현재 channel 설정으로 추측해 backfill하지 않는다. 정보 없는 기존 승인 주문은 자동 구매·환불 대신 운영 확인으로 격리한다. 조회 결과용 payment_method·easy_pay_provider와 요청 snapshot은 구분한다.
