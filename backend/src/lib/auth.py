@@ -418,6 +418,19 @@ async def get_current_user(
     return user
 
 
+async def get_optional_user(
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> User | None:
+    """공개 콘텐츠의 access 인증. 만료·무효 인증만 익명으로 취급한다."""
+    try:
+        return await get_current_user(request, session)
+    except HTTPException as exc:
+        if exc.status_code != status.HTTP_401_UNAUTHORIZED:
+            raise
+        return None
+
+
 _FORBIDDEN_UNVERIFIED = HTTPException(
     status_code=status.HTTP_403_FORBIDDEN, detail="이메일 인증이 필요합니다"
 )

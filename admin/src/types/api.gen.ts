@@ -687,7 +687,7 @@ export interface paths {
         };
         /**
          * Get Episode Content
-         * @description 무료 구간 본문(유료 경계 이전)을 presigned URL로 치환해 반환한다.
+         * @description 현재 사용자가 열람 가능한 범위만 presigned URL로 치환해 반환한다.
          */
         get: operations["get_episode_content_episodes__episode_id__content_get"];
         put?: never;
@@ -1003,7 +1003,7 @@ export interface components {
         };
         /**
          * EpisodeContent
-         * @description 무료 구간 본문 응답 (M2 B2). 회차 메타·네비는 GET /works/{id}(A2)가 담당한다.
+         * @description 인가된 본문 응답. 회차 메타·네비는 GET /works/{id}가 담당한다.
          */
         EpisodeContent: {
             /**
@@ -1011,6 +1011,11 @@ export interface components {
              * Format: uuid
              */
             episode_id: string;
+            /**
+             * Access Scope
+             * @enum {string}
+             */
+            access_scope: "preview" | "full";
             /** Content */
             content: {
                 [key: string]: unknown;
