@@ -204,6 +204,7 @@ M4 (커뮤니티 - 후원 제외)
 - [ ] browser·webhook receipt worker·대사·owner 공통 단조 sync, out-of-order 방어와 이중 `PAID` 보상 취소
 - [x] E1 선행 기반: GET `payment.cancellations` typed allowlist와 현재 취소 ID 매칭(누락·빈 목록·불일치는 실패 확정 아님), key 발급 시각과 DB 발송 token CAS *(2026-11-07, 시스템 보상 내부 서비스·migration 검증. 공개 sync·webhook·대사 연결과 G 사용자 환불은 후속. [IMPLEMENTATION_PAYMENT_CANCELLATION.md](../MODULES/BE/Payment/IMPLEMENTATION_PAYMENT_CANCELLATION.md))*
 - [x] E2 내부 공통 sync: snapshot 검증·원자적 구매·중복 승인 E1 보상·catalog 삭제 보호 ([구현·검증](../MODULES/BE/Payment/IMPLEMENTATION_PAYMENT_SYNC.md), Backend 전체 827개·Ruff 통과). E3 endpoint/webhook과 E4 대사는 별도다.
+- [x] E3 complete·webhook durable inbox·bounded receipt worker ([구현·검증](../MODULES/BE/Payment/IMPLEMENTATION_PAYMENT_ENTRYPOINTS.md)). 서명·소유권·원자 commit·중복·재시도·worker 경합을 검증하며 E4 주문 대사·owner API는 별도다.
 - [ ] expired를 자금 종결로 오인하지 않는 대사, bounded batch·최대 1시간 backoff와 늦은 `PAID` 선택 검증
 - [x] intent 금액·주문 expected_amount 일치와 호환 재사용, 변경 시 `checkout_changed` 재확인 흐름 *(2026-10-26, [IMPLEMENTATION_PAYMENT_INTENTS.md](../MODULES/BE/Payment/IMPLEMENTATION_PAYMENT_INTENTS.md))*
 - [ ] 결제·비공개·soft delete race 단일 승자, 일반 비공개 뒤 기존 구매 full 유지, 먼저 비공개된 주문의 늦은 `PAID` 전액 보상

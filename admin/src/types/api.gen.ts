@@ -698,6 +698,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/payments/webhooks/portone": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Portone Webhook */
+        post: operations["portone_webhook_payments_webhooks_portone_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/payments/{payment_id}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Payment Complete */
+        post: operations["payment_complete_payments__payment_id__complete_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/episodes/{episode_id}/progress": {
         parameters: {
             query?: never;
@@ -1191,6 +1225,17 @@ export interface components {
             /** Message */
             message: string;
         };
+        /** PaymentCompleteRead */
+        PaymentCompleteRead: {
+            /** Payment Id */
+            payment_id: string;
+            status: components["schemas"]["PaymentOrderStatus"];
+        };
+        /**
+         * PaymentOrderStatus
+         * @enum {string}
+         */
+        PaymentOrderStatus: "preparing" | "ready" | "expired" | "paid" | "cancel_pending" | "cancelled" | "review_required";
         /** ProgressRead */
         ProgressRead: {
             /**
@@ -2896,6 +2941,55 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EpisodePaymentIntentRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    portone_webhook_payments_webhooks_portone_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    payment_complete_payments__payment_id__complete_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                payment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaymentCompleteRead"];
                 };
             };
             /** @description Validation Error */

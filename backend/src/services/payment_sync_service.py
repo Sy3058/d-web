@@ -1,6 +1,7 @@
 """공통 결제 조회와 원자적 구매 확정. 외부 I/O에는 DB 연결을 보유하지 않는다."""
 
 import logging
+import uuid
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.ext.asyncio import async_sessionmaker
@@ -13,6 +14,7 @@ from src.models.payment import (
     PaymentLog,
     PaymentLogSource,
     PaymentOrder,
+    PaymentWebhookReceipt,
     Purchase,
 )
 from src.models.work import Episode, Work
@@ -29,6 +31,10 @@ from src.services.portone_rest import (
 _logger = logging.getLogger(__name__)
 
 _OPEN = {"preparing", "ready", "expired"}
+
+
+class PaymentSyncUnavailable(RuntimeError):
+    """현재 provider 상태를 확인하지 못했다. 민감한 원인은 노출하지 않는다."""
 
 
 def _matches(order: PaymentOrder, payment: PortOnePaymentSnapshot) -> bool:
@@ -54,10 +60,17 @@ async def sync_payment(
     source: PaymentLogSource,
     *,
     now: datetime | None = None,
+    receipt_id: uuid.UUID | None = None,
+    receipt_attempt: int | None = None,
+    raise_on_unavailable: bool = False,
 ) -> str:
     """요청 인증은 호출자 책임이다. E3/E4는 이 내부 함수를 재사용한다."""
     fixed_now = now
     source = PaymentLogSource(source)
+    if (receipt_id is None) != (receipt_attempt is None) or (
+        receipt_id is not None and (source != PaymentLogSource.WEBHOOK or receipt_attempt < 1)
+    ):
+        raise ValueError("webhook receipt and positive claim attempt must be supplied together")
     async with session_factory() as session:
         original = (
             await session.exec(select(PaymentOrder).where(PaymentOrder.payment_id == payment_id))
@@ -73,6 +86,23 @@ async def sync_payment(
     now = now or datetime.now(UTC)
     dispatch = False
     async with session_factory() as session, session.begin():
+        receipt = None
+        if receipt_id is not None:
+            receipt = (
+                await session.exec(
+                    select(PaymentWebhookReceipt)
+                    .where(PaymentWebhookReceipt.id == receipt_id)
+                    .with_for_update()
+                )
+            ).one_or_none()
+            if (
+                receipt is None
+                or receipt.payment_id != payment_id
+                or receipt.attempts != receipt_attempt
+                or receipt.processed_at is not None
+                or receipt.ignored_at is not None
+            ):
+                return "stale"
         # 판매 변경과 동일한 Work→Episode→Order→Purchase 순서를 지킨다.
         work, episode = None, None
         if original.episode_id is not None:
@@ -233,6 +263,7 @@ async def sync_payment(
         session.add(
             PaymentLog(
                 payment_order_id=order.id,
+                webhook_receipt_id=receipt_id,
                 source=source,
                 event_type="sync",
                 from_status=before,
@@ -244,9 +275,14 @@ async def sync_payment(
         result = order.status
         alert_reason = alert_reason or reason
         alert = (str(order.id), before, result, alert_reason)
+        if receipt is not None and not failed and payment is not None:
+            receipt.processed_at = now
+            session.add(receipt)
     # DB rollback을 운영 이상으로 오인하지 않도록 commit 뒤에만 발행한다.
     if alert_reason and (before != result or previous_reason != alert_reason):
         _report_anomaly(*alert)
+    if raise_on_unavailable and (failed or payment is None):
+        raise PaymentSyncUnavailable("Payment provider state is unavailable")
     if dispatch:
         if fixed_now is None:
             dispatch_outcome = await dispatch_system_cancellation(

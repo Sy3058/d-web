@@ -4,6 +4,8 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from src.models.payment import PaymentOrderStatus
+
 
 class EpisodePaymentMethod(StrEnum):
     CARD = "card"
@@ -41,3 +43,8 @@ class CheckoutChangedDetail(BaseModel):
     total_amount: int
     currency: str = "KRW"
     notice_version: str
+
+
+class PaymentCompleteRead(BaseModel):
+    payment_id: str
+    status: PaymentOrderStatus

@@ -225,3 +225,52 @@ async def test_cleanup_covers_trusted_devices_and_email_verifications(
 
     assert deleted["trusted_devices"] == 1
     assert deleted["email_verifications"] == 1
+
+
+def test_webhook_worker_is_registered_without_starting_scheduler():
+    from src.lib import scheduler as jobs
+
+    scheduler = jobs.create_scheduler()
+    job = scheduler.get_job("payment_webhook_receipts")
+    assert job is not None
+    assert job.func is jobs._run_payment_webhook_job
+    assert job.trigger.interval == timedelta(seconds=15)
+    assert job.next_run_time is not None
+    assert scheduler.running is False
+    assert scheduler._job_defaults["max_instances"] == 1
+    assert scheduler._job_defaults["coalesce"] is True
+
+
+async def test_webhook_worker_skips_unconfigured_provider(monkeypatch):
+    from pydantic import SecretStr
+
+    from src.lib import scheduler as jobs
+
+    monkeypatch.setattr(jobs.settings, "portone_v2_api_secret", SecretStr(""))
+
+    def unexpected(*args):
+        raise AssertionError("설정이 없으면 provider나 DB에 접근하지 않는다")
+
+    monkeypatch.setattr(jobs, "PortOneRestAdapter", unexpected)
+    monkeypatch.setattr(jobs, "async_session_maker", unexpected)
+    await jobs._run_payment_webhook_job()
+
+
+async def test_webhook_worker_uses_factory_and_closes_provider(monkeypatch):
+    from unittest.mock import AsyncMock
+
+    from pydantic import SecretStr
+
+    from src.lib import scheduler as jobs
+
+    factory = object()
+    adapter = AsyncMock()
+    adapter.__aenter__.return_value = adapter
+    process = AsyncMock()
+    monkeypatch.setattr(jobs.settings, "portone_v2_api_secret", SecretStr("scheduler-test"))
+    monkeypatch.setattr(jobs, "async_session_maker", factory)
+    monkeypatch.setattr(jobs, "PortOneRestAdapter", lambda secret: adapter)
+    monkeypatch.setattr(jobs, "process_webhook_receipts", process)
+    await jobs._run_payment_webhook_job()
+    process.assert_awaited_once_with(factory, adapter)
+    adapter.__aexit__.assert_awaited_once()
