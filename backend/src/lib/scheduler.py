@@ -25,6 +25,7 @@ from src.config import settings
 from src.lib.db import async_session_maker
 from src.models.user import EmailVerification, RefreshToken, TrustedDevice
 from src.models.work import Episode
+from src.services.payment_reconciliation_service import reconcile_payments
 from src.services.payment_webhook_service import process_webhook_receipts
 from src.services.portone_rest import PortOneRestAdapter
 
@@ -115,6 +116,13 @@ async def _run_payment_webhook_job() -> None:
         await process_webhook_receipts(async_session_maker, adapter)
 
 
+async def _run_payment_reconciliation_job() -> None:
+    if not settings.portone_v2_api_secret.get_secret_value():
+        return
+    async with PortOneRestAdapter(settings.portone_v2_api_secret) as adapter:
+        await reconcile_payments(async_session_maker, adapter)
+
+
 def _on_job_error(event: JobExecutionEvent) -> None:
     # APScheduler는 잡 예외를 삼키고 다음 틱에 재시도한다(스케줄러는 안 죽음).
     # 자체 로거(ERROR)로만 남으면 반복 실패를 못 알아채므로 Sentry로 승격.
@@ -153,6 +161,13 @@ def create_scheduler() -> AsyncIOScheduler:
         "interval",
         seconds=15,
         id="payment_webhook_receipts",
+        next_run_time=datetime.now(UTC),
+    )
+    scheduler.add_job(
+        _run_payment_reconciliation_job,
+        "interval",
+        seconds=30,
+        id="payment_reconciliation",
         next_run_time=datetime.now(UTC),
     )
     scheduler.add_listener(_on_job_error, EVENT_JOB_ERROR)

@@ -41,7 +41,7 @@
 
 불일치 응답은 409 `checkout_changed`이며 현재 `episode_id`, 제목, 금액, 통화, 고지 버전만 포함한다. `payment_id`, Store, channel 같은 결제 config는 포함하지 않는다. 비공개·삭제 대상은 존재를 숨긴 404, 이미 구매·무료·0원·paywall 없음은 409로 닫는다. provider 원문, secret, DB 오류 문자열은 일반 응답으로 전달하지 않는다.
 
-`PAYMENTS_ACCEPT_NEW=false`는 신규 intent만 503으로 막는다. 이 서비스 밖의 webhook, 대사, 기존 구매 열람과 환불 경로에는 이 조건을 두지 않는다. 활성화 시 Store, API·webhook secret, 세 channel, 공개 HTTPS URL이 모두 필요하고 channel key 중복도 기동 단계에서 거부한다.
+`PAYMENTS_ACCEPT_NEW=false`는 신규 intent만 503으로 막는다. 이 서비스 밖의 webhook, 결제 상태 재확인, 기존 구매 열람과 환불 경로에는 이 조건을 두지 않는다. 활성화 시 Store, API·webhook secret, 세 channel, 공개 HTTPS URL이 모두 필요하고 channel key 중복도 기동 단계에서 거부한다.
 
 ---
 
@@ -50,7 +50,7 @@
 잠금 순서는 `Work -> Episode -> open PaymentOrder -> Purchase`다.
 
 1. 서버 상태와 기존 열린 주문을 잠가 검증한다.
-2. 신규 주문은 `preparing`과 30분 `expires_at`, 즉시 대사 가능한 `next_reconcile_at`을 먼저 commit한다.
+2. 신규 주문은 `preparing`과 30분 `expires_at`, 즉시 결제 상태 재확인 가능한 `next_reconcile_at`을 먼저 commit한다.
 3. DB transaction이 없는 상태에서 기존 `payment_id` GET 또는 pre-register를 호출한다.
 4. 외부 결과 뒤 새 transaction에서 작품, 회차, 주문과 구매를 다시 잠근다.
 5. 상태와 snapshot이 그대로 유효할 때만 `ready`로 바꾸고 `next_reconcile_at=expires_at`을 기록한다.
@@ -94,7 +94,7 @@ Provider `READY`는 결제수단 선택 전이라 channel type, channel key와 m
 | 항목 | 이동처 |
 |------|--------|
 | browser complete, webhook, scheduler, owner가 공유하는 단조 `sync_payment` | 그룹 E |
-| `FAILED` 로그, expired 포함 지속 대사와 늦은 `PAID` 권한·보상 수렴 | 그룹 E |
+| `FAILED` 로그, expired 포함 지속 결제 상태 재확인과 늦은 `PAID` 권한·보상 수렴 | 그룹 E |
 | 결제 고지 UI, `checkout_changed` 재확인, PortOne browser SDK와 redirect | 그룹 F |
 | 활성 구매 전문과 비공개 구매 내역 direct link | 그룹 F |
 | 실제 세 테스트 channel과 공개 HTTPS 스모크 | M3 외부 P0 gate |

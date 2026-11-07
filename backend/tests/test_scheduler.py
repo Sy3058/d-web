@@ -274,3 +274,38 @@ async def test_webhook_worker_uses_factory_and_closes_provider(monkeypatch):
     await jobs._run_payment_webhook_job()
     process.assert_awaited_once_with(factory, adapter)
     adapter.__aexit__.assert_awaited_once()
+
+
+def test_reconciliation_worker_registered_with_immediate_startup():
+    from src.lib import scheduler as jobs
+
+    scheduler = jobs.create_scheduler()
+    job = scheduler.get_job("payment_reconciliation")
+    assert job.func is jobs._run_payment_reconciliation_job
+    assert job.trigger.interval == timedelta(seconds=30)
+    assert job.next_run_time is not None
+    assert scheduler.running is False
+
+
+async def test_reconciliation_worker_provider_guard_and_kill_switch(monkeypatch):
+    from unittest.mock import AsyncMock
+
+    from pydantic import SecretStr
+
+    from src.lib import scheduler as jobs
+
+    factory = object()
+    adapter = AsyncMock()
+    adapter.__aenter__.return_value = adapter
+    process = AsyncMock()
+    monkeypatch.setattr(jobs.settings, "portone_v2_api_secret", SecretStr(""))
+    monkeypatch.setattr(jobs.settings, "payments_accept_new", False)
+    monkeypatch.setattr(jobs, "async_session_maker", factory)
+    monkeypatch.setattr(jobs, "PortOneRestAdapter", lambda secret: adapter)
+    monkeypatch.setattr(jobs, "reconcile_payments", process)
+    await jobs._run_payment_reconciliation_job()
+    process.assert_not_awaited()
+    monkeypatch.setattr(jobs.settings, "portone_v2_api_secret", SecretStr("configured"))
+    await jobs._run_payment_reconciliation_job()
+    process.assert_awaited_once_with(factory, adapter)
+    adapter.__aexit__.assert_awaited_once()

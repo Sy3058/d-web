@@ -45,7 +45,7 @@ FK는 결제·계약 기록을 5년 보존하도록 `RESTRICT`다. 기존 사용
 
 ### 상태와 대상 CHECK
 
-`kind`, 주문·구매 `status`, `environment`, `currency`는 앱 enum만 믿지 않고 DB CHECK로도 제한한다. 구매 주문은 회차, 결제 고지 버전, 즉시 제공 동의 시각이 필수다. 후원 주문은 작가 후원이면 회차가 없고 에피소드 후원이면 회차가 있으며, 결제 고지 버전과 즉시 제공 동의 시각은 두 경우 모두 없어야 한다. 금액과 대사 횟수도 음수 상태를 허용하지 않는다.
+`kind`, 주문·구매 `status`, `environment`, `currency`는 앱 enum만 믿지 않고 DB CHECK로도 제한한다. 구매 주문은 회차, 결제 고지 버전, 즉시 제공 동의 시각이 필수다. 후원 주문은 작가 후원이면 회차가 없고 에피소드 후원이면 회차가 있으며, 결제 고지 버전과 즉시 제공 동의 시각은 두 경우 모두 없어야 한다. 금액과 결제 상태 재확인 횟수도 음수 상태를 허용하지 않는다.
 
 같은 사용자·회차의 열린 구매 주문과 활성 구매는 `environment`를 포함한 partial unique로 제한한다. 따라서 test 구매가 있어도 같은 사용자·회차의 live 주문과 live 구매를 막지 않는다.
 
@@ -68,7 +68,7 @@ FK는 결제·계약 기록을 5년 보존하도록 `RESTRICT`다. 기존 사용
 재시도 정책은 메서드의 멱등성에 따라 분리한다.
 
 - 단건 GET: connect·pool 오류와 일시적 429·5xx만 jitter 뒤 1회 재시도
-- read timeout: 같은 조회를 inline 재시도하지 않고 후속 대사로 넘김
+- read timeout: 같은 조회를 inline 재시도하지 않고 후속 결제 상태 재확인 작업으로 넘김
 - pre-register·cancel: adapter 자동 재시도 0회
 - 단건 GET 404: 오류 JSON의 `type`이 정확히 `PAYMENT_NOT_FOUND`일 때만 미존재 `None`; HTML이나 다른 404는 API 오류
 - cancel 재시도: 호출자가 DB에서 읽은 같은 16~256자 ASCII key와 같은 exact snapshot으로만 명시 호출

@@ -24,6 +24,7 @@ from src.services.payment_cancellation_service import (
 )
 from src.services.portone_rest import (
     PortOneAdapterError,
+    PortOneCancellationState,
     PortOnePaymentSnapshot,
     PortOneRestAdapter,
 )
@@ -35,6 +36,11 @@ _OPEN = {"preparing", "ready", "expired"}
 
 class PaymentSyncUnavailable(RuntimeError):
     """현재 provider 상태를 확인하지 못했다. 민감한 원인은 노출하지 않는다."""
+
+
+def reconcile_delay(attempts: int) -> timedelta:
+    """추적은 종료하지 않고 결제 상태 재확인 간격만 최대 1시간으로 제한한다."""
+    return timedelta(seconds=min(3600, 60 * 2 ** min(max(attempts - 1, 0), 6)))
 
 
 def _matches(order: PaymentOrder, payment: PortOnePaymentSnapshot) -> bool:
@@ -63,10 +69,15 @@ async def sync_payment(
     receipt_id: uuid.UUID | None = None,
     receipt_attempt: int | None = None,
     raise_on_unavailable: bool = False,
+    reconcile_attempt: int | None = None,
 ) -> str:
     """요청 인증은 호출자 책임이다. E3/E4는 이 내부 함수를 재사용한다."""
     fixed_now = now
     source = PaymentLogSource(source)
+    if reconcile_attempt is not None and (
+        source != PaymentLogSource.RECONCILE or reconcile_attempt < 1
+    ):
+        raise ValueError("positive reconciliation claim requires reconcile source")
     if (receipt_id is None) != (receipt_attempt is None) or (
         receipt_id is not None and (source != PaymentLogSource.WEBHOOK or receipt_attempt < 1)
     ):
@@ -77,6 +88,8 @@ async def sync_payment(
         ).one_or_none()
         if original is None:
             return "not_found"
+        if reconcile_attempt is not None and original.reconcile_attempts != reconcile_attempt:
+            return "stale"
         version = (original.status, original.updated_at)
     try:
         payment = await adapter.get_payment(payment_id, store_id=original.store_id)
@@ -124,7 +137,9 @@ async def sync_payment(
                 select(PaymentOrder).where(PaymentOrder.id == original.id).with_for_update()
             )
         ).one()
-        if (order.status, order.updated_at) != version:
+        if (order.status, order.updated_at) != version or (
+            reconcile_attempt is not None and order.reconcile_attempts != reconcile_attempt
+        ):
             return "stale"
         before = order.status
         previous_reason = order.needs_action_reason
@@ -135,15 +150,37 @@ async def sync_payment(
             )
         ).one_or_none()
         order.last_synced_at = now
-        order.reconcile_attempts += 1
-        order.next_reconcile_at = now + timedelta(minutes=1)
+        if reconcile_attempt is None:
+            order.reconcile_attempts += 1
+        order.next_reconcile_at = now + reconcile_delay(order.reconcile_attempts)
         reason = None
         identity = payment is not None and (
             payment.payment_id == order.payment_id and payment.store_id == order.store_id
         )
+        cancellation = payment.match_cancellation(order.cancellation_id) if payment else None
+        confirmed_system_cancellation = (
+            order.status in {"cancel_pending", "cancelled"}
+            and order.cancel_reason
+            in {
+                PaymentCancelReason.SYSTEM_VERIFICATION,
+                PaymentCancelReason.SYSTEM_UNAVAILABLE,
+                PaymentCancelReason.SYSTEM_DUPLICATE,
+            }
+            and identity
+            and payment.currency == order.currency == "KRW"
+            and payment.money_state == "PAID"
+            and type(order.provider_total_amount) is int
+            and order.provider_total_amount > 0
+            and type(payment.total_amount) is int
+            and payment.total_amount == order.provider_total_amount
+            and cancellation is not None
+            and cancellation.state == PortOneCancellationState.SUCCEEDED
+            and type(cancellation.total_amount) is int
+            and cancellation.total_amount == order.provider_total_amount
+        )
         if order.status == "cancelled":
             order.next_reconcile_at = None
-            if payment and payment.money_state == "PAID":
+            if payment and payment.money_state == "PAID" and not confirmed_system_cancellation:
                 reason = "cancelled_payment_paid"
         elif failed or payment is None:
             if not failed and order.status in _OPEN and order.expires_at <= now:
@@ -152,7 +189,7 @@ async def sync_payment(
             reason = "payment_identity_mismatch"
         elif payment.currency != "KRW":
             reason = "unsupported_payment_currency"
-        elif payment.money_state == "CANCELLED":
+        elif payment.money_state == "CANCELLED" or confirmed_system_cancellation:
             total = payment.total_amount
             if (
                 type(total) is int
@@ -259,6 +296,31 @@ async def sync_payment(
                 if purchase:
                     purchase.status = "review_required"
                     session.add(purchase)
+        # 전체 취소의 확정 증거가 있으면 재발송 없이 종결한다. 과거 발송자는
+        # token CAS에서 탈락한다. PAID만으로나 경과 시간으로는 해제하지 않는다.
+        if (
+            order.status == "cancelled"
+            and order.cancel_dispatch_token is not None
+            and order.cancel_reason != PaymentCancelReason.CUSTOMER_REFUND
+            and identity
+            and payment.currency == "KRW"
+            and (payment.money_state == "CANCELLED" or confirmed_system_cancellation)
+            and type(payment.total_amount) is int
+            and payment.total_amount == order.provider_total_amount
+            and payment.total_amount > 0
+        ):
+            order.cancel_dispatch_token = None
+            order.cancel_dispatch_started_at = None
+            session.add(
+                PaymentLog(
+                    payment_order_id=order.id,
+                    source=source,
+                    event_type="cancel_dispatch_recovered",
+                    from_status=before,
+                    to_status="cancelled",
+                    provider_status=payment.money_state.value,
+                )
+            )
         session.add(order)
         session.add(
             PaymentLog(

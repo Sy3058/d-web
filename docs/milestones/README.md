@@ -191,7 +191,7 @@ M4 (커뮤니티 - 후원 제외)
 
 ## M3. 결제 + 유료 콘텐츠 잠금 + 후원
 
-> **목적**: PortOne V2 서버 주문·검증, 구매 권한, 유료 전문, 환불·대사, 후원을 복구 가능한 한 경계로 만든다.
+> **목적**: PortOne V2 서버 주문·검증, 구매 권한, 유료 전문, 환불·결제 상태 재확인, 후원을 복구 가능한 한 경계로 만든다.
 > **선행**: M2. 2026-08-26 결정으로 M2 다음에 즉시 진행한다.
 > **P0 DoD**: 결제 전 고지·동의 → 서버 주문 → 검증된 결제 → 구매 권한 1건 → 전문 자동 발급 → 환불·장애 복구 → 기본 매출 확인이 테스트 채널에서 끝까지 작동한다.
 > **세부 설계**: [M3 foundation](./M3_foundation.md)이 상태 머신, schema, API, PR 순서와 검증의 정본이다.
@@ -201,17 +201,17 @@ M4 (커뮤니티 - 후원 제외)
 - [x] `payment_orders` + `purchases` + durable `payment_webhook_receipts` + `payment_logs`와 PortOne V2 async REST adapter *(그룹 C 완료 2026-09-01, 리뷰 보강 2026-09-03·09-05, 2026-09-11 금액 불일치 수정: `provider_total_amount` 금액 분리·취소 금액 CHECK. 2026-09-12 최종 자동검증 pytest 578·focused 43, scratch migration 왕복·취소 3건/거부 4건. 실제 API 읽기 전용 GET은 2026-09-01 기록이며 이번에는 재실행하지 않음. IMPLEMENTATION_PAYMENT_FOUNDATION.md)*
   - 2026-10-04 단건 조회 Store ID 필수 지정과 빈 값 거부 보강. focused 45개(DB 통합 23개 + adapter·webhook 22개), Backend 전체 gate 580개 통과. 모델·migration 변경과 실제 PortOne 조회 재실행은 없음.
 - [x] 서버 가격·Store·`test|live`·channel snapshot, 환경별 열린 주문·구매 UNIQUE, pre-register, 30분 주문 만료 *(그룹 C schema 2026-09-01, 그룹 D intent 2026-10-26 완료. D focused 143·Backend 678, 실제 외부 write는 P0 gate에 유지)*
-- [ ] browser·webhook receipt worker·대사·owner 공통 단조 sync, out-of-order 방어와 이중 `PAID` 보상 취소
-- [x] E1 선행 기반: GET `payment.cancellations` typed allowlist와 현재 취소 ID 매칭(누락·빈 목록·불일치는 실패 확정 아님), key 발급 시각과 DB 발송 token CAS *(2026-11-07, 시스템 보상 내부 서비스·migration 검증. 공개 sync·webhook·대사 연결과 G 사용자 환불은 후속. [IMPLEMENTATION_PAYMENT_CANCELLATION.md](../MODULES/BE/Payment/IMPLEMENTATION_PAYMENT_CANCELLATION.md))*
-- [x] E2 내부 공통 sync: snapshot 검증·원자적 구매·중복 승인 E1 보상·catalog 삭제 보호 ([구현·검증](../MODULES/BE/Payment/IMPLEMENTATION_PAYMENT_SYNC.md), Backend 전체 827개·Ruff 통과). E3 endpoint/webhook과 E4 대사는 별도다.
-- [x] E3 complete·webhook durable inbox·bounded receipt worker ([구현·검증](../MODULES/BE/Payment/IMPLEMENTATION_PAYMENT_ENTRYPOINTS.md)). 서명·소유권·원자 commit·중복·재시도·worker 경합을 검증하며 E4 주문 대사·owner API는 별도다.
-- [ ] expired를 자금 종결로 오인하지 않는 대사, bounded batch·최대 1시간 backoff와 늦은 `PAID` 선택 검증
+- [ ] browser·webhook receipt worker·결제 상태 재확인·owner 공통 단조 sync, out-of-order 방어와 이중 `PAID` 보상 취소
+- [x] E1 선행 기반: GET `payment.cancellations` typed allowlist와 현재 취소 ID 매칭(누락·빈 목록·불일치는 실패 확정 아님), key 발급 시각과 DB 발송 token CAS *(2026-11-07, 시스템 보상 내부 서비스·migration 검증. 공개 sync·webhook·결제 상태 재확인 연결과 G 사용자 환불은 후속. [IMPLEMENTATION_PAYMENT_CANCELLATION.md](../MODULES/BE/Payment/IMPLEMENTATION_PAYMENT_CANCELLATION.md))*
+- [x] E2 내부 공통 sync: snapshot 검증·원자적 구매·중복 승인 E1 보상·catalog 삭제 보호 ([구현·검증](../MODULES/BE/Payment/IMPLEMENTATION_PAYMENT_SYNC.md), Backend 전체 827개·Ruff 통과). E3 endpoint/webhook과 E4 결제 상태 재확인은 별도다.
+- [x] E3 complete·webhook durable inbox·bounded receipt worker ([구현·검증](../MODULES/BE/Payment/IMPLEMENTATION_PAYMENT_ENTRYPOINTS.md)). 서명·소유권·원자 commit·중복·재시도·worker 경합을 검증하며 E4 결제 상태 재확인·owner API는 별도다.
+- [x] E4 expired 포함 처리량·시간을 제한한 결제 상태 재확인·owner 재조회: 독립 예산·최대 1시간 backoff·선점 세대·재시작과 늦은 `PAID`의 구매/보상 수렴, 유실 token의 검증된 전체 취소 종결 ([구현·검증](../MODULES/BE/Payment/IMPLEMENTATION_PAYMENT_RECONCILIATION.md), 2026-11-07). 외부 P0 스모크는 별도다.
 - [x] intent 금액·주문 expected_amount 일치와 호환 재사용, 변경 시 `checkout_changed` 재확인 흐름 *(2026-10-26, [IMPLEMENTATION_PAYMENT_INTENTS.md](../MODULES/BE/Payment/IMPLEMENTATION_PAYMENT_INTENTS.md))*
 - [ ] 결제·비공개·soft delete race 단일 승자, 일반 비공개 뒤 기존 구매 full 유지, 먼저 비공개된 주문의 늦은 `PAID` 전액 보상
 - [ ] 결제 전 즉시 제공 고지·동의 snapshot, 미구매 paywall 절단, `useEffect` login_hint 판별·access 자동 refresh, 활성 구매 full 자동 반환, 첫 전문 발급·환불 승인 race 단일 승자
 - [ ] 구매 내역·영수증, 잠정 168시간 전문 미발급 환불, owner 승인·거부·취소·결과 메일 복구
 - [ ] 환불 확정 실패 복원·재선점 race, `cancel_attempt_no`·시도별 새 key·발송 token CAS와 자격 상실 거부 계약
-- [ ] 구매 gross/refund/net과 대사 필요 화면, test 결제 기본 제외
+- [ ] 구매 gross/refund/net과 결제 상태 재확인이 필요한 화면, test 결제 기본 제외
 - [ ] 개발자 test Store에서 작가 live Store로 DB 이관 없이 배포 설정 교체
 
 ### M3 P1 확장
@@ -342,7 +342,7 @@ M4 (커뮤니티 - 후원 제외)
 - [ ] **통신판매업 신고 또는 면제 여부 확인** (사업자 등록과 별도 절차. 면제 여부는 작가 사업 조건·관할 지자체 기준으로 확인하고, 면제돼도 전자상거래 소비자보호 의무는 별도 검토. [공정위 안내](https://www.ftc.go.kr/www/selectExmplView.do?dscsnExmplSn=898&key=330&pageIndex=2&pageUnit=10&searchCnd=all))
 - [ ] **작가 소유 PortOne Owner 계정·Store 생성**: 개발자를 Dev로 초대하고 개발자 테스트 고객사의 사업자 전환·거래 이관은 하지 않음
 - [ ] **작가 Store 실 키 설정**: 전자결제 신청 + 심사 통과 후 production Store·channel·API/webhook secret 교체, 카카오페이·토스페이 계약 MID 스모크
-- [ ] **개발자 테스트 계정 retire 또는 삭제**: 작가 계정 전환 뒤 신규 intent를 닫고 nonterminal·최근 대사 0을 확인한 다음 webhook·scheduler 중단과 테스트 secret 폐기 후 수행
+- [ ] **개발자 테스트 계정 retire 또는 삭제**: 작가 계정 전환 뒤 신규 intent를 닫고 nonterminal·최근 재확인 대상 주문 0을 확인한 다음 webhook·scheduler 중단과 테스트 secret 폐기 후 수행
 - [ ] **카카오 OAuth 비즈앱 전환** (사업자 서류 완료 후 활성화, Q20)
 - [ ] SMTP 발신 도메인 정식 검증 (스팸 분류 회피)
 

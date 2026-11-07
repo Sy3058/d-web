@@ -421,3 +421,285 @@ async def test_dispatch_quarantine_is_reported(orders, session_factory, test_eng
     codes = [r.failure_code for r in caplog.records if r.msg == "payment_sync_anomaly"]
     assert codes == ["payment_snapshot_mismatch", "cancel_money_state_unknown"]
     assert adapter.posts == []
+
+
+async def test_reconcile_claim_is_counted_once_and_fenced(orders, session_factory, test_engine):
+    async with session_factory() as session, session.begin():
+        row = await session.get(PaymentOrder, orders[0].id)
+        row.reconcile_attempts = 8
+        session.add(row)
+    adapter = Adapter(test_engine, {"status": "FAILED"})
+    assert (
+        await sync_payment(
+            session_factory, adapter, "sync-0", "reconcile", now=NOW, reconcile_attempt=8
+        )
+        == "expired"
+    )
+    row = next(r for r in await read_all(session_factory, PaymentOrder) if r.id == orders[0].id)
+    assert row.reconcile_attempts == 8
+    assert row.next_reconcile_at == NOW + timedelta(hours=1)
+    adapter.hook = lambda: pytest.fail("stale claim must not reach provider")
+    assert (
+        await sync_payment(
+            session_factory, adapter, "sync-0", "reconcile", now=NOW, reconcile_attempt=7
+        )
+        == "stale"
+    )
+
+
+async def test_reconcile_new_claim_during_get_rejects_old_snapshot(
+    orders, session_factory, test_engine
+):
+    async with session_factory() as session, session.begin():
+        row = await session.get(PaymentOrder, orders[0].id)
+        row.reconcile_attempts = 1
+        session.add(row)
+    adapter = Adapter(test_engine)
+
+    async def reclaim():
+        async with session_factory() as session, session.begin():
+            row = await session.get(PaymentOrder, orders[0].id)
+            row.reconcile_attempts = 2
+            session.add(row)
+
+    adapter.hook = reclaim
+    assert (
+        await sync_payment(
+            session_factory, adapter, "sync-0", "reconcile", now=NOW, reconcile_attempt=1
+        )
+        == "stale"
+    )
+    assert await read_all(session_factory, Purchase) == []
+    assert await read_all(session_factory, PaymentLog) == []
+
+
+@pytest.mark.parametrize(
+    "changes,recovered",
+    [
+        ({"status": "CANCELLED"}, True),
+        ({"status": "CANCELLED", "storeId": "wrong"}, False),
+        ({"status": "CANCELLED", "currency": "USD"}, False),
+        ({"status": "CANCELLED", "amount": {"total": 400}}, False),
+        ({"status": "PAID"}, False),
+        ({"status": "FAILED"}, False),
+        ({"status": "UNKNOWN"}, False),
+    ],
+)
+async def test_lost_dispatch_token_requires_verified_full_cancellation(
+    orders, session_factory, test_engine, changes, recovered
+):
+    from src.models.payment import PaymentCancelReason
+    from src.services.payment_cancellation_service import prepare_system_cancellation
+
+    token = uuid.uuid4()
+    async with session_factory() as session, session.begin():
+        await prepare_system_cancellation(
+            session,
+            orders[0].id,
+            PaymentCancelReason.SYSTEM_DUPLICATE,
+            snapshot("sync-0"),
+            NOW - timedelta(days=1),
+        )
+        row = await session.get(PaymentOrder, orders[0].id, populate_existing=True)
+        row.cancel_dispatch_token = token
+        row.cancel_dispatch_started_at = NOW - timedelta(days=1)
+        session.add(row)
+    adapter = Adapter(test_engine, changes)
+    await sync_payment(session_factory, adapter, "sync-0", "admin", now=NOW)
+    row = next(r for r in await read_all(session_factory, PaymentOrder) if r.id == orders[0].id)
+    assert (row.cancel_dispatch_token is None) == recovered
+    if recovered:
+        assert row.status == "cancelled" and row.next_reconcile_at is None
+        assert row.cancel_dispatch_started_at is None and row.cancelled_amount == 500
+    else:
+        assert row.cancel_dispatch_token == token
+        assert row.status in {"cancel_pending", "review_required"}
+    assert adapter.posts == []
+    assert await read_all(session_factory, Purchase) == []
+    logs = await read_all(session_factory, PaymentLog)
+    assert len([r for r in logs if r.event_type == "cancel_dispatch_recovered"]) == int(recovered)
+
+
+@pytest.mark.parametrize("succeeded", [False, True])
+async def test_terminal_recovery_fences_inflight_cancellation_response(
+    orders, session_factory, test_engine, succeeded
+):
+    from src.models.payment import PaymentCancelReason
+    from src.services.payment_cancellation_service import (
+        dispatch_system_cancellation,
+        prepare_system_cancellation,
+    )
+    from src.services.portone_rest import PortOneCancellationSnapshot
+
+    async with session_factory() as session, session.begin():
+        await prepare_system_cancellation(
+            session, orders[0].id, PaymentCancelReason.SYSTEM_DUPLICATE, snapshot("sync-0"), NOW
+        )
+    entered, release = asyncio.Event(), asyncio.Event()
+
+    class BlockingAdapter(Adapter):
+        async def cancel_payment(self, **kwargs):
+            self.posts.append(kwargs)
+            entered.set()
+            await release.wait()
+            return PortOneCancellationSnapshot.from_payload(
+                {"id": "old-cancel", "status": "FAILED", "totalAmount": 500}
+            )
+
+    posting = BlockingAdapter(test_engine)
+    task = asyncio.create_task(
+        dispatch_system_cancellation(session_factory, posting, orders[0].id, clock=lambda: NOW)
+    )
+    try:
+        await asyncio.wait_for(entered.wait(), timeout=5)
+        async with session_factory() as session, session.begin():
+            pending = await session.get(PaymentOrder, orders[0].id)
+            pending.cancellation_id = "current" if succeeded else None
+            session.add(pending)
+        changes = (
+            {
+                "status": "PAID",
+                "cancellations": [{"id": "current", "status": "SUCCEEDED", "totalAmount": 500}],
+            }
+            if succeeded
+            else {"status": "CANCELLED"}
+        )
+        checking = Adapter(test_engine, changes)
+        assert (
+            await sync_payment(session_factory, checking, "sync-0", "admin", now=NOW) == "cancelled"
+        )
+    finally:
+        release.set()
+        await asyncio.wait_for(task, timeout=5)
+    assert task.result() == "stale"
+    row = next(r for r in await read_all(session_factory, PaymentOrder) if r.id == orders[0].id)
+    assert row.status == "cancelled" and row.cancel_dispatch_token is None
+    assert row.cancellation_id == ("current" if succeeded else None)
+    assert len(posting.posts) == 1 and checking.posts == []
+
+
+@pytest.mark.parametrize("source", ["admin", "reconcile", "webhook", "browser"])
+@pytest.mark.parametrize("lost_token", [False, True])
+async def test_paid_current_full_succeeded_is_terminal(
+    orders, session_factory, test_engine, source, lost_token
+):
+    from src.models.payment import PaymentCancelReason
+    from src.services.payment_cancellation_service import prepare_system_cancellation
+
+    async with session_factory() as session, session.begin():
+        await prepare_system_cancellation(
+            session, orders[0].id, PaymentCancelReason.SYSTEM_DUPLICATE, snapshot("sync-0"), NOW
+        )
+        row = await session.get(PaymentOrder, orders[0].id, populate_existing=True)
+        row.cancellation_id = "current"
+        if lost_token:
+            row.cancel_dispatch_token = uuid.uuid4()
+            row.cancel_dispatch_started_at = NOW
+        key, body = row.cancel_idempotency_key, row.cancel_request_snapshot
+        session.add(row)
+    adapter = Adapter(
+        test_engine,
+        {
+            "cancellations": [
+                {"id": "old", "status": "FAILED", "totalAmount": 500},
+                {"id": "current", "status": "SUCCEEDED", "totalAmount": 500},
+            ]
+        },
+    )
+    for when in (NOW, NOW + timedelta(hours=1)):
+        assert (
+            await sync_payment(session_factory, adapter, "sync-0", source, now=when) == "cancelled"
+        )
+    row = next(r for r in await read_all(session_factory, PaymentOrder) if r.id == orders[0].id)
+    assert row.cancel_dispatch_token is None and row.cancel_dispatch_started_at is None
+    assert row.cancelled_amount == 500 and row.next_reconcile_at is None
+    assert row.cancelled_at == NOW
+    assert row.cancel_idempotency_key == key and row.cancel_request_snapshot == body
+    assert row.needs_action_reason != "cancelled_payment_paid"
+    assert adapter.posts == []
+    logs = await read_all(session_factory, PaymentLog)
+    recovered = [r for r in logs if r.event_type == "cancel_dispatch_recovered"]
+    assert len(recovered) == int(lost_token)
+    assert all(r.provider_status == "PAID" for r in logs)
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        "missing_id",
+        "old_id",
+        "duplicate",
+        "failed",
+        "requested",
+        "unknown",
+        "missing_amount",
+        "partial_amount",
+        "identity",
+        "currency",
+        "customer",
+        "review",
+    ],
+)
+async def test_paid_cancellation_without_full_current_proof_keeps_token(
+    orders, session_factory, test_engine, case
+):
+    from src.models.payment import PaymentCancelReason
+    from src.services.payment_cancellation_service import prepare_system_cancellation
+
+    token = uuid.uuid4()
+    async with session_factory() as session, session.begin():
+        await prepare_system_cancellation(
+            session, orders[0].id, PaymentCancelReason.SYSTEM_DUPLICATE, snapshot("sync-0"), NOW
+        )
+        row = await session.get(PaymentOrder, orders[0].id, populate_existing=True)
+        row.cancellation_id = None if case == "missing_id" else "current"
+        row.cancel_dispatch_token, row.cancel_dispatch_started_at = token, NOW
+        if case == "customer":
+            row.cancel_reason = PaymentCancelReason.CUSTOMER_REFUND
+            row.cancel_request_snapshot = {
+                **row.cancel_request_snapshot,
+                "reason": "customer_refund",
+                "requester": "CUSTOMER",
+            }
+        if case == "review":
+            row.status = "review_required"
+        key, body = row.cancel_idempotency_key, row.cancel_request_snapshot
+        session.add(row)
+    cancellation = {"id": "current", "status": "SUCCEEDED", "totalAmount": 500}
+    if case == "old_id":
+        cancellation["id"] = "old"
+    if case in {"failed", "requested", "unknown"}:
+        cancellation["status"] = case.upper()
+    if case == "missing_amount":
+        cancellation.pop("totalAmount")
+    if case == "partial_amount":
+        cancellation["totalAmount"] = 400
+    changes = {"cancellations": [cancellation] * (2 if case == "duplicate" else 1)}
+    if case == "identity":
+        changes["id"] = "wrong"
+    if case == "currency":
+        changes["currency"] = "USD"
+    adapter = Adapter(test_engine, changes)
+    await sync_payment(session_factory, adapter, "sync-0", "admin", now=NOW)
+    row = next(r for r in await read_all(session_factory, PaymentOrder) if r.id == orders[0].id)
+    assert row.cancel_dispatch_token == token and row.status != "cancelled"
+    assert row.cancel_idempotency_key == key and row.cancel_request_snapshot == body
+    assert adapter.posts == []
+    assert not any(
+        r.event_type == "cancel_dispatch_recovered"
+        for r in await read_all(session_factory, PaymentLog)
+    )
+
+
+async def test_payment_currency_guard_rejects_non_krw_order(orders, session_factory):
+    from sqlalchemy.exc import IntegrityError
+
+    # 비KRW 로컬 주문은 sync 입력이 될 수 없다. provider 통화 불일치는 위에서 검증한다.
+    with pytest.raises(IntegrityError, match="ck_payment_orders_currency"):
+        async with session_factory() as session, session.begin():
+            row = await session.get(PaymentOrder, orders[0].id)
+            row.currency = "USD"
+            session.add(row)
+            await session.flush()
+    row = next(r for r in await read_all(session_factory, PaymentOrder) if r.id == orders[0].id)
+    assert row.currency == "KRW"
