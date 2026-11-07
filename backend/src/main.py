@@ -15,6 +15,7 @@ from src.routers import (
     admin_auth,
     admin_commission,
     admin_episodes,
+    admin_payments,
     admin_works,
     auth,
     commission,
@@ -78,6 +79,7 @@ app.include_router(oauth.router)
 app.include_router(admin_auth.router)
 app.include_router(admin_works.router)
 app.include_router(admin_episodes.router)
+app.include_router(admin_payments.router)
 app.include_router(admin_commission.router)
 app.include_router(commission.router)
 app.include_router(works.router)

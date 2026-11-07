@@ -2,7 +2,7 @@
 
 ## 범위
 
-E1은 공통 sync가 사용할 취소 조회·최초 취소 준비·발송 선점 서비스다. 공개 API, webhook worker, 대사 scheduler와 연결하지 않는다. 구매 생성·권한 복원, G 사용자 환불은 후속 범위다.
+E1은 공통 sync가 사용할 취소 조회·최초 취소 준비·발송 선점 서비스다. 공개 API, webhook worker, 결제 상태 재확인 scheduler와 연결하지 않는다. 구매 생성·권한 복원, G 사용자 환불은 후속 범위다.
 
 - `portone_rest.py`: GET payment의 optional `cancellations`와 현재 ID 매칭.
 - `payment.py`, revision `e1f6a7b8c9d0`: key 발급 시각과 발송 token·시각, DB CHECK.

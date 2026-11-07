@@ -324,7 +324,7 @@ payment_orders
 ```
 > - 구매 주문은 `episode_id NOT NULL AND donation_message IS NULL`, 후원 주문은 `episode_id`와 message가 각각 nullable인 kind CHECK를 둔다.
 > - 구매 주문은 `checkout_notice_version`과 `immediate_supply_consented_at`이 NOT NULL이고 후원 주문은 둘 다 NULL이다. 서버가 현재 고지 버전과 동의 시각을 기록하며 클라이언트의 확인 금액을 현재 서버 가격과 실제 선택 주문의 `expected_amount`에 모두 대조한다. M3 테스트는 `episode-immediate-v1`로 시작하고 문구 변경 시 새 버전을 쓰며 기존 주문 snapshot은 갱신하지 않는다.
-> - 같은 사용자·회차·환경의 `preparing|ready` 주문은 하나만 허용한다. ready 재사용은 금액·channel·현재 고지 버전이 호환될 때만 30분 허용하며 만료 전 PortOne을 다시 조회한다. `expired`는 checkout 재사용 종료이지 자금 종결이 아니므로 대사 대상에서 제외하지 않는다.
+> - 같은 사용자·회차·환경의 `preparing|ready` 주문은 하나만 허용한다. ready 재사용은 금액·channel·현재 고지 버전이 호환될 때만 30분 허용하며 만료 전 PortOne을 다시 조회한다. `expired`는 checkout 재사용 종료이지 자금 종결이 아니므로 결제 상태 재확인 대상에서 제외하지 않는다.
 > - 결제 시도 `FAILED`는 주문 terminal 상태로 두지 않고 `payment_logs`에 남긴다. 늦은 `PAID`는 expired 주문에서도 정상 sync한다.
 > - `PARTIAL_CANCELLED`와 알 수 없는 자금 상태는 `review_required`로 격리하고 권한을 닫는다.
 > - 외부 응답 뒤 transaction에서 현재 상태를 다시 읽고 허용 from-status CAS만 수행한다. `paid`·`cancelled`·`cancel_pending`은 늦은 `READY|PAID` 응답으로 회귀하지 않는다.
@@ -415,7 +415,7 @@ refund_requests
 ├── resolved_at  TIMESTAMPTZ
 └── updated_at   TIMESTAMPTZ DEFAULT now()
 ```
-> - 한 구매의 `pending|processing|action_required` 요청은 하나만 허용한다. 최초 승인 또는 최종 실패 뒤 재선점 때 `cancel_attempt_no`를 증가시키고 `refund_<request UUID hex>_<attempt no>` key를 생성한다. 같은 `processing` 시도의 timeout 재생에는 번호·key·body를 유지하며 168시간이 지나도 기존 권한 잠금을 유지한다. 동일 key 재생은 `cancel_key_issued_at + 3시간` 안에만 허용하고 이후 불명확한 건은 GET 대사·격리한다.
+> - 한 구매의 `pending|processing|action_required` 요청은 하나만 허용한다. 최초 승인 또는 최종 실패 뒤 재선점 때 `cancel_attempt_no`를 증가시키고 `refund_<request UUID hex>_<attempt no>` key를 생성한다. 같은 `processing` 시도의 timeout 재생에는 번호·key·body를 유지하며 168시간이 지나도 기존 권한 잠금을 유지한다. 동일 key 재생은 `cancel_key_issued_at + 3시간` 안에만 허용하고 이후 불명확한 건은 GET으로 결제 상태 재확인·격리한다.
 > - token owner가 최종 실패를 받으면 같은 token·시도 번호·key로 현재 cancellation ID와 실패 증거를 기록하고 token만 먼저 해제한다. 별도 짧은 transaction이 현재 cancellation의 `FAILED`·payment `PAID`·token NULL을 다시 확인한 뒤에만 order `paid`·purchase `active`·request `action_required`를 함께 확정한다. `action_required` 재시작은 이 상태와 `now < paid_at + 168 hours`, `first_viewed_at IS NULL`, purchase `active`를 다시 확인해 request `processing`·purchase `refund_pending`·order `cancel_pending`, 시도 번호 증가, 새 key·발급 시각, `cancellation_id=NULL`을 한 transaction에서 CAS한다. exact body는 유지한다. 외부 POST는 별도 발송 token CAS 선점 뒤에만 가능하고 응답 반영은 같은 token·시도 번호·key를 요구한다. 이전 시도 응답은 새 시도를 덮지 못한다.
 > - reject는 취소 시도 전 `pending`, 또는 이전 취소의 최종 실패·order `paid`·purchase `active`와 첫 발급/168시간 경과에 따른 자격 상실이 모두 확인된 `action_required`에서만 허용한다. 자격이 남으면 같은 요청을 retry하고 `processing`은 거부하지 않는다. 자격을 잃은 retry는 요청 `rejected`·사유·메일 `pending`을 함께 commit한 뒤 409를 반환하며 취소 호출은 하지 않는다. CAS loser는 상대 시도를 덮지 않고 재조회한다.
 > - 실결제 자격 정책은 M7 법무 gate에서 확정한다. 승인·거부 확정은 결과 메일을 `pending`으로 함께 예약하며 발송 실패는 환불 transaction을 되돌리지 않고 scheduler가 재시도한다.

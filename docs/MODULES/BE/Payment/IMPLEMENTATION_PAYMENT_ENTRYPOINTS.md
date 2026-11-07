@@ -16,11 +16,11 @@ worker는 짧은 transaction에서 due receipt 하나를 `FOR UPDATE SKIP LOCKED
 
 sync 반영 transaction은 receipt를 잠그고 ID·payment ID·세대·미완료 조건을 확인한다. 주문 상태, 구매 권한, receipt FK를 포함한 감사 로그와 `processed_at`을 함께 commit한다. 조회 실패·not found·stale 응답·transaction 실패면 receipt는 미처리로 남는다. 프로세스 재시작 뒤 예약 시간이 지나면 다시 처리할 수 있다.
 
-시스템 보상은 `cancel_pending`과 receipt 완료를 함께 commit한 다음 기존 E1 dispatch를 호출한다. 이 사이 중단되거나 발송 token이 남는 경우의 주문 대사·통제된 복구는 E4 계약을 따른다. receipt 완료가 실제 자금 종결을 뜻하지는 않는다.
+시스템 보상은 `cancel_pending`과 receipt 완료를 함께 commit한 다음 기존 E1 dispatch를 호출한다. 이 사이 중단되거나 발송 token이 남는 경우의 결제 상태 재확인·통제된 복구는 E4 계약을 따른다. receipt 완료가 실제 자금 종결을 뜻하지는 않는다.
 
 worker는 기본 한 틱에 25건·180초, 설정 상한 100건·300초를 적용한다. 전체 시간 제한이나 종료 취소가 외부 POST 도중 발생하면 기존 발송 token 보존 규칙을 유지한다.
 
-기존 APScheduler에 15초 interval, 기동 직후 실행, `max_instances=1`인 receipt 잡을 연결했다. 주문 대사 selector와 owner API는 E4 범위다. 새 dependency·schema·migration은 없다.
+기존 APScheduler에 15초 interval, 기동 직후 실행, `max_instances=1`인 receipt 잡을 연결했다. 결제 상태 재확인 selector와 owner API는 E4 범위다. 새 dependency·schema·migration은 없다.
 
 ## 검증
 
@@ -37,7 +37,7 @@ worker는 기본 한 틱에 25건·180초, 설정 상한 100건·300초를 적�
 
 첫 DB 실행은 로컬 PostgreSQL이 중지돼 setup에 실패했다. 기존 컨테이너 시작 후 PID별 격리 DB로 재실행했다. 초기 전체 gate는 875 passed였고 SQLModel execute 경고를 수정하고 commit 실패·잠금 테스트를 보강한 뒤 위 최종 gate를 통과했다. 개발 DB schema와 데이터는 변경하지 않았다.
 
-실제 PortOne write·공개 HTTPS webhook·브라우저 스모크는 사용자 검증 대상이다. 새 migration은 없으나 서버 실행 전 기존 E1/E2 migration 적용 상태는 확인해야 한다. E4 주문 대사·owner API 및 자금 종결 검증은 이번 완료 판정에 포함하지 않는다.
+실제 PortOne write·공개 HTTPS webhook·브라우저 스모크는 사용자 검증 대상이다. 새 migration은 없으나 서버 실행 전 기존 E1/E2 migration 적용 상태는 확인해야 한다. E4 결제 상태 재확인·owner API 및 자금 종결 검증은 이번 완료 판정에 포함하지 않는다.
 
 ## 공식 근거
 
