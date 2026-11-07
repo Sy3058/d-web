@@ -87,3 +87,7 @@ class CommissionValidationError(ValueError):
 
 class WorkConflictError(Exception):
     """작품 판매 상태 충돌 또는 남은 구매 권한 (router → 409)."""
+
+
+class EpisodeAccessConflictError(Exception):
+    """전문 준비 중 구매 권한이 바뀌었거나 첫 발급 CAS에서 패배 (router → 409)."""

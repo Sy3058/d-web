@@ -2,7 +2,7 @@
 
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -38,9 +38,10 @@ class WorkProgressRead(BaseModel):
 
 
 class EpisodeContent(BaseModel):
-    """무료 구간 본문 응답 (M2 B2). 회차 메타·네비는 GET /works/{id}(A2)가 담당한다."""
+    """인가된 본문 응답. 회차 메타·네비는 GET /works/{id}가 담당한다."""
 
     episode_id: uuid.UUID
+    access_scope: Literal["preview", "full"]
     # ⚠️ 저장 문서의 image 노드는 attrs={"key": R2키}지만 여기서는 attrs={"src": presigned
     # URL}이다. 저장 스키마는 "무엇을 받아들일까"(입력 검증·XSS 방어선, lib/content_doc),
     # 이 응답은 "무엇을 보여줄까"의 계약이라 원래 다르다 - R2 키는 내보낼 수 없고 뷰어는

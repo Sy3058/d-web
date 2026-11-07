@@ -15,7 +15,7 @@ from httpx import AsyncClient
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.models.user import User
-from src.services import episode_read_service, r2_service
+from src.services import episode_access_service, episode_read_service, r2_service
 from tests.factories import PAYWALL as _PAYWALL
 from tests.factories import doc as _doc
 from tests.factories import img as _img
@@ -177,17 +177,22 @@ async def test_invalid_document_root_fails_closed_without_500_or_secret_log(
     poisoned = {"type": "doc", "content": False, "backup_key": PAID_KEY}
     warnings: list[tuple] = []
 
-    async def _fake_fetch(_episode_id, _session):
-        return episode_id, poisoned
+    async def _fake_access(_user_id, _episode_id, _session):
+        return episode_access_service.EpisodeAccessSnapshot(
+            episode_access_service.EpisodeAccessResult(
+                episode_access_service.EpisodeAccessScope.PREVIEW
+            ),
+            poisoned,
+        )
 
-    monkeypatch.setattr(episode_read_service, "_fetch_public_episode", _fake_fetch)
+    monkeypatch.setattr(episode_access_service, "load_episode_access", _fake_access)
     monkeypatch.setattr(
         episode_read_service.logger,
         "warning",
         lambda event, **kw: warnings.append((event, kw)),
     )
 
-    content = await episode_read_service.get_free_content(episode_id, None)
+    content = await episode_read_service.get_content(episode_id, None)
 
     assert content is not None
     assert content.content == _doc()

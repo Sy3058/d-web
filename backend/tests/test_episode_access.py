@@ -1,14 +1,12 @@
 import uuid
 from dataclasses import FrozenInstanceError
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy import update
 
 from src.config import settings
 from src.models.payment import (
-    PaymentOrder,
-    PaymentOrderKind,
     PaymentOrderStatus,
     Purchase,
     PurchaseStatus,
@@ -21,41 +19,7 @@ from src.services.episode_access_service import (
     resolve_episode_access,
 )
 from tests.factories import PAYWALL, doc, make_episode, make_work, para
-
-
-async def _purchase(session, user, episode, *, environment="test", status=PurchaseStatus.ACTIVE):
-    now = datetime.now(UTC)
-    order = PaymentOrder(
-        payment_id=f"access-{uuid.uuid4()}",
-        user_id=user.id,
-        kind=PaymentOrderKind.EPISODE_PURCHASE,
-        episode_id=episode.id,
-        expected_amount=500,
-        store_id="store-test",
-        requested_channel_key="channel-test",
-        environment=environment,
-        order_name="열람 테스트",
-        item_title=episode.title,
-        checkout_notice_version="episode-immediate-v1",
-        immediate_supply_consented_at=now,
-        status=PaymentOrderStatus.PAID,
-        expires_at=now + timedelta(minutes=30),
-        paid_at=now,
-    )
-    session.add(order)
-    await session.flush()
-    purchase = Purchase(
-        payment_order_id=order.id,
-        user_id=user.id,
-        episode_id=episode.id,
-        environment=environment,
-        status=status,
-        amount=500,
-        paid_at=now,
-    )
-    session.add(purchase)
-    await session.commit()
-    return purchase, order
+from tests.factories import make_purchase as _purchase
 
 
 def test_result_is_immutable():

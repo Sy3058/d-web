@@ -431,7 +431,8 @@ cancel_pending 실패 확정 ─→ paid (사용자 환불) | review_required (�
 
 ### F. 구매 권한·전문·최소 UI
 
-- **F1 내부 권한 서비스 (2026-11-08)**: 중앙 `resolve_episode_access`의 `unavailable|preview|full` 판정을 구현했다. 현재 환경의 active 구매와 일반 비공개, 삭제·환불 대기·다른 사용자/환경·손상 문서 차단을 검증한다. content API 연결·첫 전문 발급 CAS·viewer bootstrap·최소 결제 UI는 후속 범위이며 F 전체는 미완료다. [구현·검증](../MODULES/BE/Payment/IMPLEMENTATION_EPISODE_ACCESS.md)을 따른다.
+- **F1 내부 권한 서비스 (2026-11-08)**: 중앙 `resolve_episode_access`의 `unavailable|preview|full` 판정을 구현했다. 현재 환경의 active 구매와 일반 비공개, 삭제·환불 대기·다른 사용자/환경·손상 문서 차단을 검증한다. content API 연결·첫 전문 발급 CAS는 아래 F2에서 완료했고 viewer bootstrap·최소 결제 UI는 후속 범위이며 F 전체는 미완료다. [구현·검증](../MODULES/BE/Payment/IMPLEMENTATION_EPISODE_ACCESS.md)을 따른다.
+- **F2 콘텐츠 권한·첫 전문 발급 (2026-11-08)**: optional auth content를 중앙 resolver의 동일 문서 snapshot에 연결했다. presign 뒤 첫 발급 CAS·commit으로 환불 경합을 보호하고 재열람의 active 상태를 재확인한다. 신규 통합 테스트 25건이 인증·환경·서명 실패·commit 실패·동시 첫 발급·환불 CAS 양방향 승패를 검증한다. viewer-bootstrap·프론트 세션 복구·최소 결제 UI는 후속이다. [구현·검증](../MODULES/BE/Payment/IMPLEMENTATION_EPISODE_CONTENT.md)을 따른다.
 - 결제 전 즉시 제공 고지·동의 snapshot과 `checkout_changed` 재확인 UI, 중앙 access resolver, private-purchase viewer bootstrap, optional auth content, `useEffect` 세션 복구, 자동 첫 전문 발급 CAS, 결제 redirect·구매 내역을 구현한다.
 - 완료 증거: 미동의 intent 422, 표시 금액 stale 시 결제창 0, `checkout_changed` 현재 정보 표시 뒤 명시적 재확인·동의 전 SDK 호출 0, 미구매 paid key presign 0, 환불 winner일 때 full 문서·URL 응답 0, 구매 복귀 뒤 추가 클릭 없는 자동 전문 발급, access 만료 + refresh 유효면 full·쿠키 clear 0, stale hint + refresh 만료면 세 쿠키 clear·preview·full 0, 일반 비공개 뒤 구매 내역 direct link full·비구매 HTML/API 메타 0, 개인 SSR no-store.
 

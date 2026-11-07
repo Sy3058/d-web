@@ -1,21 +1,20 @@
-"""무료 구간 회차 본문 조회 서비스 (M2 그룹 B2 - 보안 그룹).
-
-독자에게 회차 본문을 내보내는 유일한 경로. 유료 구간(글·이미지)·미공개 회차·숨긴
-작품의 회차·원본 R2 키가 응답에 실리지 않게 막는 방어선이 전부 이 모듈에 있다.
-"""
+"""인가된 범위의 본문만 안전하게 투영·서명하고 전문 발급을 확정한다."""
 
 import uuid
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from typing import Any
 
 import structlog
-from sqlmodel import select
+from sqlalchemy import update
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.lib import content_doc
-from src.models.work import Episode, Work
+from src.lib.exceptions import EpisodeAccessConflictError
+from src.models.payment import Purchase, PurchaseStatus
 from src.schemas.viewer import EpisodeContent
-from src.services import catalog_service, r2_service
+from src.services import episode_access_service, r2_service
+from src.services.episode_access_service import EpisodeAccessScope, EpisodeAccessSnapshot
 
 logger = structlog.get_logger(__name__)
 
@@ -41,35 +40,6 @@ class _ProjectionStats:
         self.seen_nodes = 0
         self.stripped_fields = 0
         self.text_chars = 0
-
-
-async def _fetch_public_episode(
-    episode_id: uuid.UUID, session: AsyncSession
-) -> tuple[uuid.UUID, dict[str, Any]] | None:
-    """독자에게 노출 가능한 회차의 (id, content) (회차 공개 + 소속 작품이 공개·미삭제).
-
-    엔티티가 아니라 두 컬럼만 읽는다. Episode를 통째로 로딩하면 읽기 경로에서 쓰지 않는
-    image_keys(회차당 수십 개 키가 담긴 JSONB)가 뷰어 진입마다 실려오고, defer로 지연시키면
-    나중에 누가 그 인스턴스의 image_keys를 건드렸을 때 async 밖 lazy load가 걸려
-    MissingGreenlet으로 죽는다(models/work.py가 Work.episode_count에 대해 경고하는 함정).
-    """
-    result = await session.exec(
-        select(Episode.id, Episode.content)
-        .join(Work, Work.id == Episode.work_id)
-        .where(
-            Episode.id == episode_id,
-            # 회차 자신의 공개·미삭제(#85). 회차만 보는 것으로는 부족하다 - 아래 작품
-            # 필터가 같이 있어야 한다.
-            *catalog_service.public_episode_filters(),
-            # ⚠️ 작품을 숨기거나(is_published=false) soft delete해도 **회차 행은 그대로
-            # 남으므로**, 회차 ID를 아는 사람이 직접 접근하면 내려간 작품이 계속 읽힌다.
-            # admin episode_service.get_episode가 작품의 deleted_at만 보고 is_published는
-            # 안 보는 건 관리자가 비공개 작품도 봐야 해서고, 그 패턴을 독자 경로로
-            # 복사하면 안 된다(public_work_filters docstring 경고).
-            *catalog_service.public_work_filters(),
-        )
-    )
-    return result.first()
 
 
 def _project_safe_marks(marks: Any, stats: _ProjectionStats) -> list[dict[str, Any]]:
@@ -241,7 +211,7 @@ def _project_public_nodes(
 async def _substitute_image_urls(
     doc: dict[str, Any],
 ) -> tuple[dict[str, Any], _ProjectionStats]:
-    """무료 문서를 안전하게 투영하고 image key를 presigned URL로 치환한다."""
+    """인가된 문서를 안전하게 투영하고 image key를 presigned URL로 치환한다."""
     stats = _ProjectionStats()
     raw_nodes = doc.get("content") or []
     nodes = _project_safe_nodes(raw_nodes, stats)
@@ -256,12 +226,50 @@ async def _substitute_image_urls(
     return {"type": "doc", "content": public_nodes}, stats
 
 
-async def get_free_content(episode_id: uuid.UUID, session: AsyncSession) -> EpisodeContent | None:
-    """무료 구간 본문. 노출 불가한 회차면 None(라우터가 404로 매핑)."""
-    row = await _fetch_public_episode(episode_id, session)
-    if row is None:
+async def _confirm_full_issue(
+    episode_id: uuid.UUID,
+    user_id: uuid.UUID,
+    snapshot: EpisodeAccessSnapshot,
+    session: AsyncSession,
+) -> None:
+    """presign 성공 후 동일 구매 행에서 환불과 첫 발급의 단일 승자를 정한다."""
+    eligible = episode_access_service.active_purchase_query(user_id).where(
+        Purchase.id == snapshot.access.purchase_id,
+        Purchase.episode_id == episode_id,
+    )
+    if snapshot.first_viewed_at is not None:
+        if (await session.exec(eligible)).first() is None:
+            raise EpisodeAccessConflictError
+        return
+
+    issued_id = (
+        await session.exec(
+            update(Purchase)
+            .where(
+                Purchase.id.in_(eligible),
+                Purchase.status == PurchaseStatus.ACTIVE,
+                Purchase.first_viewed_at.is_(None),
+            )
+            .values(first_viewed_at=datetime.now(UTC))
+            .returning(Purchase.id)
+            .execution_options(synchronize_session=False)
+        )
+    ).first()
+    if issued_id is None:
+        # 다른 첫 발급이 먼저 끝났더라도 재열람으로 우회하지 않는다.
+        raise EpisodeAccessConflictError
+    await session.commit()
+
+
+async def get_content(
+    episode_id: uuid.UUID, session: AsyncSession, *, user_id: uuid.UUID | None = None
+) -> EpisodeContent | None:
+    """resolver와 동일한 문서 스냅샷을 투영한다. 노출 불가면 None(404)."""
+    snapshot = await episode_access_service.load_episode_access(user_id, episode_id, session)
+    scope = snapshot.access.scope
+    if scope == EpisodeAccessScope.UNAVAILABLE:
         return None
-    found_id, content = row
+    content = snapshot.content
 
     if (
         not isinstance(content, dict)
@@ -270,11 +278,12 @@ async def get_free_content(episode_id: uuid.UUID, session: AsyncSession) -> Epis
     ):
         logger.warning(
             "episode_content_document_dropped",
-            episode_id=str(found_id),
+            episode_id=str(episode_id),
             dropped_count=1,
         )
         return EpisodeContent(
-            episode_id=found_id,
+            episode_id=episode_id,
+            access_scope="preview",
             content=content_doc.empty_doc(),
             # 문서 의미를 해석할 수 없을 때 "전부 무료"로 열지 않는다.
             has_paid_part=True,
@@ -284,15 +293,22 @@ async def get_free_content(episode_id: uuid.UUID, session: AsyncSession) -> Epis
     # 훑어 **유료 구간 키에도 서명이 발급**된다. 그 뒤에 잘라내면 최종 응답은 멀쩡해 보여서
     # 응답 검사로는 잡히지 않는다 - tests/test_episode_content.py의
     # test_paid_section_keys_are_never_signed(presign 호출 인자 검사)가 유일한 방어선이다.
-    free_doc, has_paid_part = content_doc.split_at_paywall(content)
-    free_doc, stats = await _substitute_image_urls(free_doc)
+    if scope == EpisodeAccessScope.FULL:
+        allowed_doc = {
+            "type": "doc",
+            "content": [node for node in content.get("content", []) if node["type"] != "paywall"],
+        }
+        has_paid_part = False
+    else:
+        allowed_doc, has_paid_part = content_doc.split_at_paywall(content)
+    public_doc, stats = await _substitute_image_urls(allowed_doc)
 
     if stats.dropped_images:
         # 독자에겐 200이 나가지만 이미지가 빠진 본문이다. 로그가 없으면 "그림이 안 나온다"는
         # 신고가 들어올 때까지 아무도 모른다(키는 개인정보가 아니나 개수만 남긴다).
         logger.warning(
             "episode_content_image_dropped",
-            episode_id=str(found_id),
+            episode_id=str(episode_id),
             dropped_count=stats.dropped_images,
         )
     if stats.dropped_nodes or stats.dropped_marks or stats.stripped_fields:
@@ -300,14 +316,18 @@ async def get_free_content(episode_id: uuid.UUID, session: AsyncSession) -> Epis
         # 개수만으로 관측하고, 공개 응답은 정상 형제 노드를 유지한 채 fail-closed한다.
         logger.warning(
             "episode_content_invalid_part_sanitized",
-            episode_id=str(found_id),
+            episode_id=str(episode_id),
             dropped_node_count=stats.dropped_nodes,
             dropped_mark_count=stats.dropped_marks,
             stripped_field_count=stats.stripped_fields,
         )
 
+    if snapshot.access.purchase_id is not None:
+        await _confirm_full_issue(episode_id, user_id, snapshot, session)
+
     return EpisodeContent(
-        episode_id=found_id,
-        content=free_doc,
+        episode_id=episode_id,
+        access_scope=scope.value,
+        content=public_doc,
         has_paid_part=has_paid_part,
     )

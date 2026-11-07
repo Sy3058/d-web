@@ -9,8 +9,18 @@ admin API를 거치지 않고 ORM으로 직접 생성한다 - 공개 read 경로
 생성 경로와 원인을 분리한다.
 """
 
+import uuid
+from datetime import UTC, datetime, timedelta
+
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from src.models.payment import (
+    PaymentOrder,
+    PaymentOrderKind,
+    PaymentOrderStatus,
+    Purchase,
+    PurchaseStatus,
+)
 from src.models.user import User
 from src.models.work import Episode, Work
 
@@ -89,3 +99,45 @@ async def make_episode(db_session: AsyncSession, work: Work, **overrides) -> Epi
     await db_session.commit()
     await db_session.refresh(ep)
     return ep
+
+
+async def make_purchase(
+    session: AsyncSession,
+    user: User,
+    episode: Episode,
+    *,
+    environment="test",
+    status=PurchaseStatus.ACTIVE,
+) -> tuple[Purchase, PaymentOrder]:
+    now = datetime.now(UTC)
+    order = PaymentOrder(
+        payment_id=f"access-{uuid.uuid4()}",
+        user_id=user.id,
+        kind=PaymentOrderKind.EPISODE_PURCHASE,
+        episode_id=episode.id,
+        expected_amount=500,
+        store_id="store-test",
+        requested_channel_key="channel-test",
+        environment=environment,
+        order_name="열람 테스트",
+        item_title=episode.title,
+        checkout_notice_version="episode-immediate-v1",
+        immediate_supply_consented_at=now,
+        status=PaymentOrderStatus.PAID,
+        expires_at=now + timedelta(minutes=30),
+        paid_at=now,
+    )
+    session.add(order)
+    await session.flush()
+    purchase = Purchase(
+        payment_order_id=order.id,
+        user_id=user.id,
+        episode_id=episode.id,
+        environment=environment,
+        status=status,
+        amount=500,
+        paid_at=now,
+    )
+    session.add(purchase)
+    await session.commit()
+    return purchase, order

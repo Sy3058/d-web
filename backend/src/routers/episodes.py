@@ -1,8 +1,4 @@
-"""공개 회차 본문 라우터 (M2 그룹 B2). 인증 불요 - 무료 구간은 비로그인 열람이다.
-
-routers/progress.py도 prefix가 /episodes지만 그쪽은 인증 필수라 파일을 나눈다 - 인증
-유무가 정반대인 라우트를 한 파일에 섞으면 Depends 누락이 눈에 띄지 않는다.
-"""
+"""회차 본문 라우터. 선택적 인증으로 미리보기 또는 구매 전문을 반환한다."""
 
 import uuid
 from typing import Annotated
@@ -10,13 +6,17 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from src.lib.auth import get_optional_user
 from src.lib.db import get_session
+from src.lib.exceptions import EpisodeAccessConflictError
+from src.models.user import User
 from src.schemas.viewer import EpisodeContent
 from src.services import episode_read_service
 
 router = APIRouter(prefix="/episodes", tags=["episodes"])
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
+OptionalUserDep = Annotated[User | None, Depends(get_optional_user)]
 
 # 미공개·숨긴 작품의 회차도 403이 아니라 404다. 403은 "있긴 한데 못 준다"는 뜻이라
 # 회차 ID를 대입해보는 것만으로 아직 공개하지 않은 회차·숨긴 작품의 존재가 확인된다.
@@ -34,10 +34,19 @@ _NOT_FOUND = HTTPException(
 
 @router.get("/{episode_id}/content", response_model=EpisodeContent)
 async def get_episode_content(
-    episode_id: uuid.UUID, session: SessionDep, response: Response
+    episode_id: uuid.UUID, session: SessionDep, response: Response, user: OptionalUserDep
 ) -> EpisodeContent:
-    """무료 구간 본문(유료 경계 이전)을 presigned URL로 치환해 반환한다."""
-    content = await episode_read_service.get_free_content(episode_id, session)
+    """현재 사용자가 열람 가능한 범위만 presigned URL로 치환해 반환한다."""
+    try:
+        content = await episode_read_service.get_content(
+            episode_id, session, user_id=user.id if user else None
+        )
+    except EpisodeAccessConflictError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="열람 권한이 변경되었습니다. 다시 요청해 주세요",
+            headers={"Cache-Control": "no-store"},
+        ) from exc
     if content is None:
         raise _NOT_FOUND
     # 본문 image src가 presigned URL이라 중간 캐시·브라우저에 남으면 만료(600초) 전까지
