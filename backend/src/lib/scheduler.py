@@ -21,9 +21,12 @@ from sqlalchemy import delete, update
 from sqlalchemy.sql import func
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from src.config import settings
 from src.lib.db import async_session_maker
 from src.models.user import EmailVerification, RefreshToken, TrustedDevice
 from src.models.work import Episode
+from src.services.payment_webhook_service import process_webhook_receipts
+from src.services.portone_rest import PortOneRestAdapter
 
 log = structlog.get_logger(__name__)
 
@@ -105,6 +108,13 @@ async def _run_cleanup_job() -> None:
         await cleanup_expired_tokens(session)
 
 
+async def _run_payment_webhook_job() -> None:
+    if not settings.portone_v2_api_secret.get_secret_value():
+        return
+    async with PortOneRestAdapter(settings.portone_v2_api_secret) as adapter:
+        await process_webhook_receipts(async_session_maker, adapter)
+
+
 def _on_job_error(event: JobExecutionEvent) -> None:
     # APScheduler는 잡 예외를 삼키고 다음 틱에 재시도한다(스케줄러는 안 죽음).
     # 자체 로거(ERROR)로만 남으면 반복 실패를 못 알아채므로 Sentry로 승격.
@@ -136,6 +146,13 @@ def create_scheduler() -> AsyncIOScheduler:
         hours=CLEANUP_INTERVAL_HOURS,
         id="cleanup_expired_tokens",
         # 첫 발화가 기동+24h면 잦은 재배포에서 영영 안 돈다 - 기동 직후 1회 실행
+        next_run_time=datetime.now(UTC),
+    )
+    scheduler.add_job(
+        _run_payment_webhook_job,
+        "interval",
+        seconds=15,
+        id="payment_webhook_receipts",
         next_run_time=datetime.now(UTC),
     )
     scheduler.add_listener(_on_job_error, EVENT_JOB_ERROR)
