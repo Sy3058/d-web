@@ -38,7 +38,7 @@ class WorkProgressRead(BaseModel):
 
 
 class EpisodeContent(BaseModel):
-    """인가된 본문 응답. 회차 메타·네비는 GET /works/{id}가 담당한다."""
+    """인가된 본문 응답. 뷰어 초기 메타·네비는 viewer-bootstrap이 담당한다."""
 
     episode_id: uuid.UUID
     access_scope: Literal["preview", "full"]
@@ -51,3 +51,21 @@ class EpisodeContent(BaseModel):
     # 응답만으로는 "원래 여기서 끝난 회차"와 "유료라 잘린 회차"가 구분되지 않는다. 절단은
     # 서버가 하고 잠금 placeholder를 띄울지는 이 플래그가 알려준다.
     has_paid_part: bool
+
+
+class ViewerEpisodeLink(BaseModel):
+    public_id: int
+    title: str
+
+
+class ViewerBootstrap(BaseModel):
+    """인가된 회차의 뷰어 초기 메타. 본문·구매 정보는 포함하지 않는다."""
+
+    work_id: uuid.UUID
+    work_title: str
+    episode_id: uuid.UUID
+    public_id: int
+    episode_title: str
+    episode_subtitle: str | None
+    previous_episode: ViewerEpisodeLink | None
+    next_episode: ViewerEpisodeLink | None

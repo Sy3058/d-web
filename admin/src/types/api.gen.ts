@@ -661,6 +661,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/works/{work_id}/episodes/{public_id}/viewer-bootstrap": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Viewer Bootstrap */
+        get: operations["get_viewer_bootstrap_works__work_id__episodes__public_id__viewer_bootstrap_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/tags": {
         parameters: {
             query?: never;
@@ -1442,6 +1459,39 @@ export interface components {
         VerifyEmailRequest: {
             /** Token */
             token: string;
+        };
+        /**
+         * ViewerBootstrap
+         * @description 인가된 회차의 뷰어 초기 메타. 본문·구매 정보는 포함하지 않는다.
+         */
+        ViewerBootstrap: {
+            /**
+             * Work Id
+             * Format: uuid
+             */
+            work_id: string;
+            /** Work Title */
+            work_title: string;
+            /**
+             * Episode Id
+             * Format: uuid
+             */
+            episode_id: string;
+            /** Public Id */
+            public_id: number;
+            /** Episode Title */
+            episode_title: string;
+            /** Episode Subtitle */
+            episode_subtitle: string | null;
+            previous_episode: components["schemas"]["ViewerEpisodeLink"] | null;
+            next_episode: components["schemas"]["ViewerEpisodeLink"] | null;
+        };
+        /** ViewerEpisodeLink */
+        ViewerEpisodeLink: {
+            /** Public Id */
+            public_id: number;
+            /** Title */
+            title: string;
         };
         /** WorkCreate */
         WorkCreate: {
@@ -2910,6 +2960,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EpisodeSummary"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_viewer_bootstrap_works__work_id__episodes__public_id__viewer_bootstrap_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                work_id: string;
+                public_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ViewerBootstrap"];
                 };
             };
             /** @description Validation Error */
