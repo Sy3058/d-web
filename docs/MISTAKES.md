@@ -442,6 +442,9 @@ docs/MISTAKES.md 참고해서 FastAPI 라우터 작성해줘
 
 ## SQLAlchemy / AsyncSession
 
+- **Read Committed의 같은 트랜잭션도 SELECT마다 snapshot이 다르다** (2026-11-08)
+  → 현재 회차 위치를 먼저 읽고 이전·다음 회차를 따로 조회하면 관리자 재정렬이 사이에 커밋되어 자기 자신이나 다른 순서의 이웃을 반환할 수 있다. 메타와 권한 SELECT를 나누면 제목을 바꾸며 공개한 뒤 새 권한으로 이전 비공개 제목을 반환할 수도 있다. 함께 일관돼야 하는 메타·이웃·권한 입력을 한 SELECT에서 읽고 중앙 정책으로 판정한다. 독립 세션의 실제 재정렬·공개 전환 commit을 끼워 넣어 양쪽 이웃과 비공개 메타 비노출을 검증한다.
+
 - `session.rollback()`은 `expire_on_commit=False`여도 **세션의 모든 객체를 만료**시킨다 (그 설정은 이름대로 commit 전용)
   → 만료 객체의 속성 접근·관계 대입은 AsyncSession에서 동기 lazy load를 트리거해 `MissingGreenlet` 500
   → 부분 실패 복구(get-or-create UNIQUE 충돌 등)는 전체 rollback 말고 `async with session.begin_nested()`(SAVEPOINT)로 격리할 것 - **되돌리는 범위 = 만료시키는 범위**

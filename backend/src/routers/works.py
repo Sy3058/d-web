@@ -7,17 +7,24 @@ DTO만 사용한다(admin 스키마 재사용 금지 - services/catalog_service.
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, Response, status
+from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
+from fastapi.routing import APIRoute
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from src.lib.auth import get_optional_user
 from src.lib.db import get_session
 from src.lib.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
+from src.models.user import User
 from src.schemas.catalog import EpisodeSummary, WorkDetail, WorkListResponse
-from src.services import catalog_service
+from src.schemas.viewer import ViewerBootstrap
+from src.services import catalog_service, viewer_bootstrap_service
 
 router = APIRouter(prefix="/works", tags=["works"])
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
+OptionalUserDep = Annotated[User | None, Depends(get_optional_user)]
 
 # 404에 no-store를 싣는 이유: 404는 명세상 기본 캐시 가능 상태 코드라(RFC 9111) 명시가
 # 없으면 heuristic 캐싱 대상이 된다. 작가가 작품 공개 토글을 켜기 전에 독자가 열어본
@@ -58,3 +65,47 @@ async def list_work_episodes(work_id: uuid.UUID, session: SessionDep) -> list[Ep
     if episodes is None:
         raise _NOT_FOUND
     return episodes
+
+
+class _BootstrapRoute(APIRoute):
+    def get_route_handler(self):
+        original_handler = super().get_route_handler()
+
+        async def handler(request: Request) -> Response:
+            try:
+                return await original_handler(request)
+            except RequestValidationError as exc:
+                response = await request_validation_exception_handler(request, exc)
+                response.headers["Cache-Control"] = "no-store"
+                return response
+
+        return handler
+
+
+_bootstrap_router = APIRouter(route_class=_BootstrapRoute)
+
+
+@_bootstrap_router.get(
+    "/{work_id}/episodes/{public_id}/viewer-bootstrap", response_model=ViewerBootstrap
+)
+async def get_viewer_bootstrap(
+    work_id: uuid.UUID,
+    public_id: Annotated[int, Path(ge=10_000_000, le=99_999_999)],
+    session: SessionDep,
+    response: Response,
+    user: OptionalUserDep,
+) -> ViewerBootstrap:
+    bootstrap = await viewer_bootstrap_service.get_viewer_bootstrap(
+        work_id, public_id, session, user_id=user.id if user else None
+    )
+    if bootstrap is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="회차를 찾을 수 없습니다",
+            headers={"Cache-Control": "no-store"},
+        )
+    response.headers["Cache-Control"] = "no-store"
+    return bootstrap
+
+
+router.include_router(_bootstrap_router)

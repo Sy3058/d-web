@@ -19,6 +19,8 @@ F1은 내부 `resolve_episode_access`를 제공한다. content API, viewer boots
 
 공개 API와 schema는 변경하지 않는다. 기존 무료 구간 content 경로는 그대로 유지되며 F1만으로 유료 전문이 외부에 제공되지 않는다.
 
+F3 통합 보강(2026-11-08)에서는 `episode_access_columns`와 순수 `evaluate_episode_access`로 조회 입력과 정책을 분리했다. 기존 `load_episode_access`·`resolve_episode_access` 계약을 유지하면서 bootstrap도 메타·네비·권한을 같은 SELECT snapshot에서 판정한다. 공개 전환 뒤 새 권한으로 이전 비공개 메타를 승인하지 않으며 상세 검증은 [viewer-bootstrap 구현 문서](./IMPLEMENTATION_VIEWER_BOOTSTRAP.md)를 따른다.
+
 ## 검증
 
 2026-11-08 최종 검증:

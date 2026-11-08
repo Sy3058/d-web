@@ -56,12 +56,8 @@ def active_purchase_query(user_id: uuid.UUID | None):
     )
 
 
-async def load_episode_access(
-    user_id: uuid.UUID | None,
-    episode_id: uuid.UUID,
-    session: AsyncSession,
-) -> EpisodeAccessSnapshot:
-    """최신 컬럼을 한 SELECT로 읽고 그 문서에 대한 열람 범위를 판정한다."""
+def episode_access_columns(user_id: uuid.UUID | None):
+    """메타·본문 조회가 같은 statement에서 읽을 중앙 권한 입력 컬럼."""
     purchase_id = (
         active_purchase_query(user_id)
         .where(Purchase.episode_id == Episode.id)
@@ -75,28 +71,26 @@ async def load_episode_access(
         .correlate(Episode)
         .scalar_subquery()
     )
-    row = (
-        await session.exec(
-            select(
-                Episode.is_published,
-                Work.is_published,
-                Episode.content,
-                Episode.image_keys,
-                purchase_id,
-                first_viewed_at,
-            )
-            .join(Work, Work.id == Episode.work_id)
-            .where(
-                Episode.id == episode_id,
-                Episode.deleted_at.is_(None),
-                Work.deleted_at.is_(None),
-            )
-        )
-    ).first()
-    if row is None:
-        return EpisodeAccessSnapshot(EpisodeAccessResult(EpisodeAccessScope.UNAVAILABLE))
+    return (
+        Episode.is_published.label("episode_public"),
+        Work.is_published.label("work_public"),
+        Episode.content.label("content"),
+        Episode.image_keys.label("image_keys"),
+        purchase_id.label("active_purchase_id"),
+        first_viewed_at.label("viewed_at"),
+    )
 
-    episode_public, work_public, content, image_keys, active_purchase_id, viewed_at = row
+
+def evaluate_episode_access(
+    *,
+    episode_public: bool,
+    work_public: bool,
+    content: Any,
+    image_keys: Any,
+    active_purchase_id: uuid.UUID | None,
+    viewed_at: datetime | None,
+) -> EpisodeAccessSnapshot:
+    """조회된 한 스냅샷만 평가한다. DB 조회나 발급 부작용은 없다."""
     fallback = (
         EpisodeAccessScope.PREVIEW
         if episode_public and work_public
@@ -115,6 +109,28 @@ async def load_episode_access(
     if episode_public and work_public and derive_is_free(content):
         return EpisodeAccessSnapshot(EpisodeAccessResult(EpisodeAccessScope.FULL), content)
     return EpisodeAccessSnapshot(EpisodeAccessResult(fallback), content)
+
+
+async def load_episode_access(
+    user_id: uuid.UUID | None,
+    episode_id: uuid.UUID,
+    session: AsyncSession,
+) -> EpisodeAccessSnapshot:
+    """최신 컬럼을 한 SELECT로 읽고 그 문서에 대한 열람 범위를 판정한다."""
+    row = (
+        await session.exec(
+            select(*episode_access_columns(user_id))
+            .join(Work, Work.id == Episode.work_id)
+            .where(
+                Episode.id == episode_id,
+                Episode.deleted_at.is_(None),
+                Work.deleted_at.is_(None),
+            )
+        )
+    ).first()
+    if row is None:
+        return EpisodeAccessSnapshot(EpisodeAccessResult(EpisodeAccessScope.UNAVAILABLE))
+    return evaluate_episode_access(**row._mapping)
 
 
 async def resolve_episode_access(
