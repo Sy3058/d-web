@@ -34,6 +34,13 @@ docs/MISTAKES.md 참고해서 FastAPI 라우터 작성해줘
 
 ## FastAPI
 
+- **refresh 401 쿠키 정리는 정상 회전 경쟁의 실패까지 포함하면 안 된다** (2026-11-10 BE 리뷰)
+  → SELECT 때 유효했던 토큰의 회전 선점 실패와 토큰 무효·만료를 같은 예외로 처리하면 늦은 401 삭제 헤더가 성공 응답의 새 쿠키까지 지운다. 정상 경쟁은 별도 예외로 구분하고 기존 401 응답에 Set-Cookie를 보내지 않는다.
+  → 서비스의 활성 DB 토큰 개수만 검사하면 브라우저 쿠키 유실은 놓친다. 두 독립 세션의 실제 ASGI 응답을 쿠키 저장소에 성공→실패와 실패→성공 두 순서로 적용해 세 쿠키가 유지되는지 확인한다.
+
+- **주입된 Response를 수정한 뒤 HTTPException을 던지면 그 쿠키·헤더가 실제 오류 응답에 전달되지 않는다** (2026-11-09)
+  → refresh 재사용 오류에서 삭제 쿠키가 사라졌다. 쿠키를 지워야 하는 최종 401은 실제 반환할 JSONResponse에 `clear_auth_cookies`를 적용하고 반환한다. 테스트는 helper 호출 여부 대신 ASGI 응답의 Set-Cookie·Path·Max-Age를 검증한다.
+
 - **JSON attrs만 화이트리스트해도 객체 전체가 닫히는 것은 아니다** (#115, 2026-08-17)
   → `content_doc`가 image/link의 attrs 키는 제한했지만 doc·node·mark 객체의 최상위 키는 제한하지 않아, 무료 image의 `backup_key` 같은 임의 필드에 유료 R2 키를 넣을 수 있었다. 공개 읽기 서비스가 `dict(node)`로 저장 노드를 복사하면서 그 필드가 그대로 응답에 남았다
   → 쓰기 경계는 객체 타입별 최상위 허용 키까지 검사하고, `content`·`attrs`·`marks`는 truthy가 아니라 **필드 존재 여부**로 검증한다. 그렇지 않으면 `content=[]`, `attrs={}`, `marks=None` 같은 falsy 값이 검사를 건너뛴다
