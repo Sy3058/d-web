@@ -11,7 +11,8 @@
     "lint": "eslint \"src/**/*.{astro,js,jsx,ts,tsx}\" \"*.{js,mjs,ts}\"",
     "preview": "astro preview",
     "astro": "astro",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:ssr": "node --test tests/viewer-ssr.check.mjs"
   },
   "dependencies": {
     "@astrojs/node": "^11.1.4",

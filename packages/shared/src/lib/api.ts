@@ -95,9 +95,11 @@ export function createApi(baseUrl: string) {
     )
       .then(
         () => true,
-        // refresh 실패(리프레시 토큰 만료/무효)는 여기서 삼키고 false만 알린다 -
-        // 호출자는 원요청의 401을 던져 각 앱의 인증 가드가 로그인 화면으로 보내게 한다.
-        () => false,
+        (error: unknown) => {
+          // 토큰 만료/무효만 원요청의 401로 돌려보낸다. 장애는 인증 실패와 구분한다.
+          if (error instanceof ApiError && error.status === 401) return false;
+          throw error;
+        },
       )
       .finally(() => {
         refreshPromise = null;

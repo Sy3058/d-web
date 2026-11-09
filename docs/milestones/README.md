@@ -209,10 +209,13 @@ M4 (커뮤니티 - 후원 제외)
 - [x] F1 내부 중앙 회차 권한 resolver: 현재 환경 active 구매·일반 비공개 열람, 삭제·잠긴 구매·다른 사용자/환경 차단 ([구현·검증](../MODULES/BE/Payment/IMPLEMENTATION_EPISODE_ACCESS.md), 2026-11-08). content API·첫 전문 발급 CAS는 아래 F2에서 연결했고 viewer·결제 UI는 후속이다.
 - [x] F2 콘텐츠 API 권한·첫 전문 발급 CAS: optional auth·동일 문서 snapshot·presign 뒤 발급 commit·환불 경합 409·재열람 active 재확인 ([구현·검증](../MODULES/BE/Payment/IMPLEMENTATION_EPISODE_CONTENT.md), 2026-11-08). viewer-bootstrap·프론트 세션 복구·결제 UI와 실제 환불 서비스는 후속이다.
 - [x] F3 BE viewer-bootstrap API: 중앙 권한 정책·일반 비공개 구매 메타·공개 이웃·메타 없는 404·no-store·서명/첫 발급 부작용 없음 ([구현·검증](../MODULES/BE/Payment/IMPLEMENTATION_VIEWER_BOOTSTRAP.md), 2026-11-08). 재정렬 자기 자신 네비 P2와 공개 전환 비공개 메타 P1을 메타·네비·권한 입력의 단일 SELECT snapshot으로 수정했다. 경합 회귀 포함 신규 33개·관련 집중 118개·Backend 전체 1,032개와 Admin 115개 테스트·관련 gate 통과. FE 진입·세션 복구·Viewer 연결은 BE 머지 뒤 별도 진행하며 F 전체는 미완료다.
+- [x] F3 FE 구매자 뷰어 진입: 공개 SSR 유지·메타 없는 fallback·effect 세션 복구·bootstrap·full Viewer 연결, 비구매 404와 content 요청 0, 장애 503·late 응답 격리 ([구현·검증](../MODULES/FE/Viewer/IMPLEMENTATION_VIEWER_ENTRY.md), 2026-11-08). Frontend 전체 gate 162개·SSR HTTP 6개 통과. 브라우저 확인과 별도 BE 보완의 머지는 후속이다.
+- [ ] BE 별도 보완: refresh 401의 access·refresh·login_hint 삭제 헤더와 정상 세션·장애 보존. FE 완료 뒤 별도 worktree에서 구현·검증(Backend 1,045개)했으며 미머지 상태다.
 - [x] intent 금액·주문 expected_amount 일치와 호환 재사용, 변경 시 `checkout_changed` 재확인 흐름 *(2026-10-26, [IMPLEMENTATION_PAYMENT_INTENTS.md](../MODULES/BE/Payment/IMPLEMENTATION_PAYMENT_INTENTS.md))*
 - [ ] 결제·비공개·soft delete race 단일 승자, 일반 비공개 뒤 기존 구매 full 유지, 먼저 비공개된 주문의 늦은 `PAID` 전액 보상
 - [ ] 결제 전 즉시 제공 고지·동의 snapshot, 미구매 paywall 절단, `useEffect` login_hint 판별·access 자동 refresh, 활성 구매 full 자동 반환, 첫 전문 발급·환불 승인 race 단일 승자
 - [ ] 구매 내역·영수증, 잠정 168시간 전문 미발급 환불, owner 승인·거부·취소·결과 메일 복구
+- [ ] 구매 내역 FE: 공개 목록에서 숨겨진 일반 비공개 구매 회차도 내역에 유지하고, 활성 구매자는 회차 직접 링크로 전체 본문 열람. 공개 catalog 결과로 구매 내역을 필터링하지 않는다. *(2026-11-10 사용자 확인, [후속 범위](M3_foundation.md#f-구매-권한전문최소-ui))*
 - [ ] 환불 확정 실패 복원·재선점 race, `cancel_attempt_no`·시도별 새 key·발송 token CAS와 자격 상실 거부 계약
 - [ ] 구매 gross/refund/net과 결제 상태 재확인이 필요한 화면, test 결제 기본 제외
 - [ ] 개발자 test Store에서 작가 live Store로 DB 이관 없이 배포 설정 교체

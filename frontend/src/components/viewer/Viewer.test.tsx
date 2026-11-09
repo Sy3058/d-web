@@ -24,6 +24,10 @@ vi.mock('../../lib/guestProgress', () => ({
   putBrowserGuestProgress,
 }));
 
+vi.mock('../../lib/viewerSession', () => ({
+  restoreViewerSession: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock('../../lib/viewer', async (importOriginal) => {
   const original = await importOriginal<typeof import('../../lib/viewer')>();
   return {

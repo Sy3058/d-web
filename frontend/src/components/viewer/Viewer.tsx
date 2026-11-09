@@ -3,6 +3,7 @@ import { generateHTML, type Extensions } from '@tiptap/core';
 import { buildViewerExtensions } from './extensions';
 import ViewerControls, { type ViewerEpisodeLink } from './ViewerControls';
 import { getBrowserGuestProgress, putBrowserGuestProgress } from '../../lib/guestProgress';
+import { restoreViewerSession } from '../../lib/viewerSession';
 import {
   createViewerControlsScrollState,
   syncViewerControlsScrollState,
@@ -23,6 +24,7 @@ import {
 
 interface Props {
   episodeId: string;
+  initialSessionReady?: boolean;
   navigation?: {
     workId: string;
     workTitle: string;
@@ -96,7 +98,7 @@ function renderNodeHtml(node: ContentDocNode, extensions: Extensions): string {
   }
 }
 
-export default function Viewer({ episodeId, navigation }: Props) {
+export default function Viewer({ episodeId, navigation, initialSessionReady = false }: Props) {
   const extensions = useMemo(() => buildViewerExtensions(), []);
   const [contentState, setContentState] = useState<ContentRequestState>({
     status: 'loading',
@@ -124,6 +126,7 @@ export default function Viewer({ episodeId, navigation }: Props) {
   const programmaticScrollRef = useRef(false);
   const progressTargetRef = useRef<'server' | 'guest' | null>(null);
   const requestedEpisodeRef = useRef(episodeId);
+  const initialSessionEpisodeRef = useRef<string | null>(episodeId);
   const imageRefreshPendingRef = useRef(false);
   const controlsScrollStateRef = useRef(createViewerControlsScrollState(0));
 
@@ -132,6 +135,7 @@ export default function Viewer({ episodeId, navigation }: Props) {
     requestedEpisodeRef.current = episodeId;
 
     if (episodeChanged) {
+      initialSessionEpisodeRef.current = null;
       retriedRef.current = false;
       imageRefreshPendingRef.current = false;
       setFailedImageBlocks(new Set());
@@ -154,9 +158,20 @@ export default function Viewer({ episodeId, navigation }: Props) {
     }
 
     let cancelled = false;
-    getEpisodeContent(episodeId)
+    const loadContent = async () => {
+      // 비공개 진입의 bootstrap 직후 첫 요청만 이미 완료된 복구를 재사용한다.
+      // 회차 전환, 수동 재시도, 이미지 URL 재발급은 현재 쿠키로 다시 복구한다.
+      const sessionReady =
+        initialSessionReady &&
+        initialSessionEpisodeRef.current === episodeId &&
+        contentRequest.attempt === 0;
+      if (!sessionReady) await restoreViewerSession(document.cookie);
+      if (cancelled) return;
+      return getEpisodeContent(episodeId);
+    };
+    loadContent()
       .then((content) => {
-        if (cancelled) return;
+        if (cancelled || content === undefined) return;
         if (content === null) {
           imageRefreshPendingRef.current = false;
           setContentState({ status: 'notFound', episodeId });
@@ -180,7 +195,7 @@ export default function Viewer({ episodeId, navigation }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [contentRequest, episodeId]);
+  }, [contentRequest, episodeId, initialSessionReady]);
 
   useEffect(() => {
     const onUserScroll = () => {

@@ -124,6 +124,9 @@ jobs:
       - name: Vitest
         run: pnpm --filter frontend test
 
+      - name: Viewer SSR HTTP checks
+        run: pnpm --filter frontend test:ssr
+
   admin:
     runs-on: ubuntu-latest
     timeout-minutes: 15      # 설치·빌드 행(hang) 시 무한 점유 방지
