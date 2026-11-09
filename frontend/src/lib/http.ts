@@ -10,7 +10,8 @@ export function applyCatalogCache(
   outcome: { error?: boolean; notFound?: boolean },
 ): void {
   if (outcome.error || outcome.notFound) {
-    if (outcome.notFound) response.status = 404;
+    // 조회 실패로 값이 비어 있는 경우를 존재하지 않는 리소스로 확정하지 않는다.
+    response.status = outcome.error ? 503 : 404;
     response.headers.set('Cache-Control', 'no-store');
   } else {
     response.headers.set('Cache-Control', 'public, max-age=60');

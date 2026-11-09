@@ -80,6 +80,10 @@ docs/MISTAKES.md 참고해서 FastAPI 라우터 작성해줘
 
 ## Astro / React
 
+- **refresh의 모든 실패를 원요청 401로 바꾸면 서버 장애도 익명 상태로 오인한다** (2026-11-09 M3 F3 리뷰)
+  → `me 401 → refresh 503/네트워크 실패`를 삼키면 optional bootstrap은 비구매 404, 공개 content는 preview로 진행해 유효한 구매자를 막는다. refresh의 최종 401만 세션 종료로 처리하고 그 외 오류는 전파한다.
+  → 최초 me 요청 실패뿐 아니라 refresh 단계 실패도 raw fetch로 재현한다. 장애 중 bootstrap·content 요청 0과 오류 UI, 실패 뒤 in-flight 해제 및 명시적 재시도 성공을 함께 확인한다.
+
 - **Promise 성공 경로만 렌더 상태를 바꾸면 rejection이 영구 로딩으로 굳는다** (#116, 2026-08-17)
   → 실제 사고: 회차 콘텐츠 초기 요청과 이미지 URL 재발급 요청이 `then`만 사용했다. `getEpisodeContent`가 의도대로 네트워크 오류와 5xx를 throw하자 rejection은 처리되지 않았고, `content=undefined`가 계속 loading을 뜻해 오류 안내 없이 무한 로딩됐다
   → 요청 상태를 `loading / success / notFound / error`로 명시하고, 404 `null`과 그 외 rejection이 각각 종료 상태에 도달하게 한다. 수동 재시도와 `onError` 재요청도 같은 요청 effect를 통과시켜 별도 fire-and-forget Promise를 남기지 않는다
