@@ -8,7 +8,16 @@ import uuid
 from typing import Annotated
 
 import structlog
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    HTTPException,
+    Request,
+    Response,
+    status,
+)
+from fastapi.responses import JSONResponse
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.lib.auth import (
@@ -26,6 +35,7 @@ from src.lib.exceptions import (
     InvalidCredentialsError,
     InvalidTokenError,
     PwnedPasswordError,
+    RefreshRotationConflictError,
     TokenReuseError,
 )
 from src.lib.rate_limit import RateLimit
@@ -125,26 +135,42 @@ async def logout(
     return MessageResponse(message="로그아웃되었습니다")
 
 
+def _refresh_unauthorized(detail: str) -> JSONResponse:
+    # HTTPException은 새 응답을 만들므로 주입된 Response에 지운 쿠키가 유실된다.
+    # 최종 401 응답 자체에 삭제 헤더를 붙인다.
+    response = JSONResponse(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        content={"detail": detail},
+        headers={"Cache-Control": "no-store"},
+    )
+    clear_auth_cookies(response)
+    return response
+
+
 @router.post("/refresh", response_model=MessageResponse)
 async def refresh(
     request: Request,
     response: Response,
     session: SessionDep,
-) -> MessageResponse:
+) -> MessageResponse | JSONResponse:
     raw = request.cookies.get(REFRESH_COOKIE_NAME)
     if not raw:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=_UNAUTHORIZED)
+        return _refresh_unauthorized(_UNAUTHORIZED)
     try:
         user, access, new_refresh = await auth_service.rotate_refresh(raw, session)
-    except TokenReuseError as exc:
-        # 탈취 신호: 세션은 service에서 전체 revoke됨. 쿠키도 제거.
-        clear_auth_cookies(response)
-        raise HTTPException(
+    except RefreshRotationConflictError:
+        # 동시 회전 승자의 새 쿠키를 늦은 실패 응답으로 지우지 않는다.
+        return JSONResponse(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="세션이 만료되었습니다. 다시 로그인하세요",
-        ) from exc
-    except InvalidTokenError as exc:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=_UNAUTHORIZED) from exc
+            content={"detail": _UNAUTHORIZED},
+            headers={"Cache-Control": "no-store"},
+        )
+    except TokenReuseError:
+        # 탈취 신호: 세션은 service에서 전체 revoke됨. 쿠키도 제거.
+        return _refresh_unauthorized("세션이 만료되었습니다. 다시 로그인하세요")
+    except InvalidTokenError:
+        return _refresh_unauthorized(_UNAUTHORIZED)
+    response.headers["Cache-Control"] = "no-store"
     set_auth_cookies(response, access, new_refresh, user.nickname)
     return MessageResponse(message="토큰이 갱신되었습니다")
 

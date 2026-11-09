@@ -96,6 +96,8 @@ C 그룹에서 쿠키를 **읽을 때도 이 함수로 이름을 맞춰야** dev
 
 ## 6. 제약 / 후속
 
+M3 세션 복구 보강(2026-11-09): refresh 최종 401은 삭제 헤더가 실제 응답에 전달되도록 직접 반환할 JSONResponse에 `clear_auth_cookies`를 적용한다. 정상 회전과 일시 장애의 세션 보존, 실제 Set-Cookie 검증은 [refresh 쿠키 정리 구현 문서](./IMPLEMENTATION_REFRESH_COOKIE_CLEANUP.md)를 따른다.
+
 - **same-site 전제 (Critical)**: SameSite=Lax/Strict라 FE/Admin/API가 한 eTLD+1(Caddy 단일 도메인) 아래 묶여야 쿠키가 전송된다. API를 별도 도메인으로 분리하면 로그인이 붕괴 → M0 Caddy 단일 도메인 구조 유지 필수. (로컬 `localhost:8000` 직접 호출도 same-site라 OK. 포트 차이는 무관.)
 - **유니코드/NFC, 백업코드 등은 범위 밖**. 쿠키 운반만.
 - **후속**: C2(로그인 시 `set_auth_cookies` + refresh insert), C3(로그아웃 `clear_auth_cookies` + revoke), C4(`/auth/refresh` 회전 후 재set), C5(`/auth/me`가 `access_cookie_name()`으로 쿠키 읽기), D1(OAuth 콜백 set). `M1_foundation.md` 참조.

@@ -15,7 +15,7 @@ from sqlmodel import select
 
 from src.config import settings
 from src.lib.auth import TokenError, create_access_token, decode_token
-from src.lib.exceptions import InvalidTokenError
+from src.lib.exceptions import InvalidTokenError, RefreshRotationConflictError
 from src.models.user import RefreshToken
 from src.services import auth_service
 from src.services.auth_service import (
@@ -183,13 +183,19 @@ async def test_refresh_token_hash_unique(db_session, user):
     issued = datetime.now(UTC)
     db_session.add(
         RefreshToken(
-            user_id=user.id, token_hash="dup-hash", expires_at=expires, original_issued_at=issued
+            user_id=user.id,
+            token_hash="dup-hash",
+            expires_at=expires,
+            original_issued_at=issued,
         )
     )
     await db_session.flush()
     db_session.add(
         RefreshToken(
-            user_id=user.id, token_hash="dup-hash", expires_at=expires, original_issued_at=issued
+            user_id=user.id,
+            token_hash="dup-hash",
+            expires_at=expires,
+            original_issued_at=issued,
         )
     )
     with pytest.raises(IntegrityError):
@@ -204,7 +210,7 @@ async def test_concurrent_rotation_single_winner(db_session, user, session_facto
 
     asyncio.Barrier로 두 코루틴이 SELECT를 마친 시점에 _claim UPDATE를 동시 발사하도록 강제해
     직렬화를 막는다(둘 다 revoked_at IS NULL을 본 진짜 race). 따라서 패자는 stale-reuse가
-    아니라 _claim 패배 → 세션 유지하는 InvalidTokenError(TokenReuseError 서브클래스 아님)다.
+    아니라 _claim 패배 → 세션 유지하는 RefreshRotationConflictError다.
     """
     raw = await create_refresh_token(user.id, db_session)
     await db_session.commit()  # 다른 커넥션이 보도록 커밋
@@ -229,8 +235,8 @@ async def test_concurrent_rotation_single_winner(db_session, user, session_facto
     failures = [r for r in results if isinstance(r, BaseException)]
     assert len(successes) == 1
     assert len(failures) == 1
-    # 패자는 동시 회전 정상 케이스(탈취 아님) → 세션 유지 InvalidTokenError(stale-reuse 아님)
-    assert type(failures[0]) is InvalidTokenError
+    # 패자는 정상 회전 경쟁 전용 예외로 라우터에서도 쿠키 삭제와 구분한다.
+    assert type(failures[0]) is RefreshRotationConflictError
 
     # 한 옛 토큰에서 새 토큰이 정확히 1개만 발급(이중 발급 없음) + 세션 유지 확인
     async with session_factory() as verify:

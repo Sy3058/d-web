@@ -21,6 +21,10 @@ class InvalidTokenError(AuthError):
     """refresh 토큰 무효/만료/미존재 (router → 401)."""
 
 
+class RefreshRotationConflictError(InvalidTokenError):
+    """정상 동시 회전의 선점 실패. 401을 반환하되 성공 세션 쿠키는 유지한다."""
+
+
 class TokenReuseError(InvalidTokenError):
     """revoke된 refresh 재제출 = 탈취 신호. 세션 전체 무효화 후 401."""
 

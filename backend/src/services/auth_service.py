@@ -41,6 +41,7 @@ from src.lib.exceptions import (
     InvalidCredentialsError,
     InvalidTokenError,
     PwnedPasswordError,
+    RefreshRotationConflictError,
     TokenReuseError,
 )
 from src.models.user import EmailVerification, RefreshToken, RoleEnum, User
@@ -441,7 +442,7 @@ async def rotate_refresh(raw: str, session: AsyncSession) -> tuple[User, str, st
       revoke + commit → TokenReuseError
     - 유효 → revoke를 원자적으로 선점(_claim)한 단 하나의 요청만 신규 refresh/access를
       한 트랜잭션으로 발급. 선점 실패(패자)는 SELECT 직후 동시 회전/로그아웃이 끼어든
-      정상 케이스라 탈취가 아님 → 세션 유지하고 단순 거부(InvalidTokenError → 401).
+      정상 케이스라 탈취가 아님 → 세션·쿠키 유지(RefreshRotationConflictError → 401).
     """
     record = await get_refresh_token(raw, session)
     if record is None:
@@ -475,7 +476,7 @@ async def rotate_refresh(raw: str, session: AsyncSession) -> tuple[User, str, st
     # 정상 케이스(탈취 아님) → 세션 유지하고 단순 401. 진짜 stale 재사용은 위 분기가 잡는다.
     if not await _claim_refresh_token(record, session):
         await session.rollback()
-        raise InvalidTokenError
+        raise RefreshRotationConflictError
 
     # 새 토큰은 부모의 original_issued_at을 승계 - 회전해도 절대 수명 기준점이 갱신되지 않는다.
     new_refresh = await create_refresh_token(
