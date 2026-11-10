@@ -1,22 +1,32 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import EpisodeRow from './EpisodeRow';
+import { orderEpisodes, type EpisodeSummary, type EpisodeOrder } from '../../lib/catalog';
 import { getBrowserGuestWorkProgress } from '../../lib/guestProgress';
 import { isLoggedIn } from '../../lib/viewer';
 import {
   getWorkProgress,
   selectReadingCta,
   summarizeWorkProgress,
-  type ProgressEpisode,
   type WorkProgressRead,
 } from '../../lib/workProgress';
 
 interface Props {
   workId: string;
-  episodes: ProgressEpisode[];
+  episodes: EpisodeSummary[];
+  order: EpisodeOrder;
+  pathname: string;
 }
 
 type DisplayProgress = WorkProgressRead & { source: 'server' | 'guest' };
 
-export default function WorkProgress({ workId, episodes }: Props) {
+export default function WorkExperience(props: Props) {
+  return <WorkExperienceContent key={props.workId} {...props} />;
+}
+
+function WorkExperienceContent({ workId, episodes: catalogEpisodes, order, pathname }: Props) {
+  const episodes = useMemo(() => catalogEpisodes.map((episode) => ({
+    id: episode.id, publicId: episode.public_id, title: episode.title,
+  })), [catalogEpisodes]);
   // undefined는 hydration 전/로딩 중, null은 stale login_hint의 401이나 서버 오류로 공개
   // 첫 화 CTA만 유지하는 상태다. 비로그인은 hydration 뒤 로컬 진행도 객체로 전환한다.
   const [progress, setProgress] = useState<DisplayProgress | null | undefined>(undefined);
@@ -29,6 +39,7 @@ export default function WorkProgress({ workId, episodes }: Props) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setProgress({
         source: 'guest',
+        purchased_episode_ids: [],
         read_episode_ids: local.readEpisodeIds,
         last_episode: lastEpisode
           ? {
@@ -72,6 +83,9 @@ export default function WorkProgress({ workId, episodes }: Props) {
     ? summarizeWorkProgress(progress.read_episode_ids, episodes.length)
     : null;
 
+  const purchasedIds = new Set(progress?.source === 'server' ? progress.purchased_episode_ids ?? [] : []);
+  const freeCount = catalogEpisodes.filter((episode) => episode.is_free).length;
+
   return (
     <>
       {summary && (
@@ -100,6 +114,17 @@ export default function WorkProgress({ workId, episodes }: Props) {
           </div>
         </section>
       )}
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <span className="text-sm text-muted">총 {episodes.length}화 · 무료 {freeCount}화</span>
+        <div className="flex items-center gap-2 text-sm">
+          <a href={pathname} className={order === 'desc' ? 'text-ink font-medium' : 'text-muted'}>최신순</a>
+          <span className="text-muted">·</span>
+          <a href={`${pathname}?order=asc`} className={order === 'asc' ? 'text-ink font-medium' : 'text-muted'}>오래된순</a>
+        </div>
+      </div>
+      {orderEpisodes(catalogEpisodes, order).map((episode, index) => (
+        <EpisodeRow key={episode.id} workId={workId} episode={episode} first={index === 0} purchased={purchasedIds.has(episode.id)} />
+      ))}
       <div
         className="pointer-events-none fixed inset-x-0 bottom-0 z-40 px-4 pt-3"
         style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))' }}

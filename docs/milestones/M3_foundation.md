@@ -440,6 +440,8 @@ cancel_pending 실패 확정 ─→ paid (사용자 환불) | review_required (�
 - **구매 내역 FE 후속 (2026-11-10 사용자 확인)**: 일반 비공개 회차가 공개 작품·회차 목록에서 사라지는 동작은 유지한다. 대신 `/my/purchases`에는 해당 사용자의 기존 구매를 공개 여부와 무관하게 표시하고, 활성 구매의 회차 URL을 직접 열 수 있게 한다. 공개 catalog에 없는 회차를 구매 내역에서도 누락시키지 않는다. 로컬 `abcd` 비공개 전환에서 비구매 bootstrap·content 404와 구매자 full은 확인했으며, 구매 내역 화면·링크 연결은 아직 미구현이다.
 - 완료 증거: 미동의 intent 422, 표시 금액 stale 시 결제창 0, `checkout_changed` 현재 정보 표시 뒤 명시적 재확인·동의 전 SDK 호출 0, 미구매 paid key presign 0, 환불 winner일 때 full 문서·URL 응답 0, 구매 복귀 뒤 추가 클릭 없는 자동 전문 발급, access 만료 + refresh 유효면 full·쿠키 clear 0, stale hint + refresh 만료면 세 쿠키 clear·preview·full 0, 일반 비공개 뒤 구매 내역 direct link full·비구매 HTML/API 메타 0, 개인 SSR no-store.
 
+**구매 배지 선행 보완 (2026-11-10)**: 사용자 확인에서 구매자도 잠금으로 보이는 문제를 발견해 P1의 개인 구매 표시를 앞당겼다. 기존 no-store progress의 `purchased_episode_ids`와 WorkExperience가 공개 SSR 목록·개인 구매 배지·기존 진행도·CTA를 연결한다. 중앙 access 정책을 공유하며 읽기 이력이 없어도 활성 구매는 `구매완료`로 표시하고 잠금·가격을 숨긴다. 완독·진행률·CTA 의미 변경과 공개 placeholder 필드 제거는 후속이다. [구현·검증](../MODULES/FE/Catalog/IMPLEMENTATION_PURCHASE_BADGES.md).
+
 ### G. 환불·기본 매출
 
 - `refund_requests.cancel_attempt_no`, 사용자 요청, owner CAS 승인·제한된 거부·두 종류 retry·취소 복구·지속 가능한 결과 메일, 구매 gross/refund/net·결제 상태 재확인 목록을 구현한다.
