@@ -55,6 +55,13 @@ class PurchaseStatus(StrEnum):
     REVIEW_REQUIRED = "review_required"
 
 
+PROTECTED_PURCHASE_STATUSES = (
+    PurchaseStatus.ACTIVE,
+    PurchaseStatus.REFUND_PENDING,
+    PurchaseStatus.REVIEW_REQUIRED,
+)
+
+
 class PaymentCancelReason(StrEnum):
     SYSTEM_VERIFICATION = "system_verification"
     SYSTEM_UNAVAILABLE = "system_unavailable"

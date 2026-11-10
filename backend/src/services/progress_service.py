@@ -17,6 +17,7 @@ from src.services.episode_access_service import (
     active_purchase_query,
     episode_access_columns,
     evaluate_episode_access,
+    resolve_episode_access,
 )
 
 
@@ -43,18 +44,16 @@ async def upsert_progress(
 ) -> ViewerProgress | None:
     """진행도 upsert. 없으면 insert, 있으면 블록·내부 위치·updated_at 갱신.
 
-    회차가 독자에게 노출 가능한 상태가 아니면 저장하지 않고 None을 반환한다(라우터가
-    404로 매핑 - catalog_service.get_work_detail과 같은 패턴). 이 검사를 호출자(라우터)에
-    두지 않는 이유: 저장 가능 여부는 HTTP 포장이 아니라 도메인 불변식이라 트랜잭션 경계를
-    소유한 서비스가 지켜야 한다(backend/CLAUDE.md 레이어 규칙). 라우터에만 두면 두 번째
-    호출부가 생길 때 조용히 우회된다 - public_work_filters() docstring이 경고하는 것과
-    같은 계열의 사고.
+    중앙 권한 판정에서 UNAVAILABLE이면 저장하지 않고 None을 반환한다(라우터가
+    404로 매핑). 공개 미리보기와 구매자의 비공개 회차 진행도를 허용하되, 삭제되거나
+    손상된 비공개 회차는 거부한다. 이 판정은 최초 열람 시각을 변경하지 않는다.
 
     onupdate=func.now()(models/viewer.py)는 일반 UPDATE 문에서만 발동하고 ON CONFLICT
     DO UPDATE의 SET절에는 적용되지 않아 updated_at을 여기서 명시한다(study
     postgres-upsert-onupdate-trap).
     """
-    if not await catalog_service.public_episode_exists(episode_id, session):
+    access = await resolve_episode_access(user_id, episode_id, session)
+    if access.scope == EpisodeAccessScope.UNAVAILABLE:
         return None
 
     insert_offset = 0 if block_offset_bp is None else block_offset_bp

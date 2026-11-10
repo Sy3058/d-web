@@ -17,7 +17,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.config import settings
 from src.lib.exceptions import WorkConflictError
-from src.models.payment import PaymentOrder, Purchase
+from src.models.payment import PROTECTED_PURCHASE_STATUSES, PaymentOrder, Purchase
 from src.models.work import Episode, Tag, Work
 from src.schemas.work import WorkCreate, WorkUpdate
 from src.services import r2_service
@@ -155,7 +155,7 @@ async def ensure_catalog_deletable(
             select(Purchase.id)
             .where(
                 Purchase.episode_id.in_(episode_ids),
-                Purchase.status.in_(["active", "refund_pending", "review_required"]),
+                Purchase.status.in_(PROTECTED_PURCHASE_STATUSES),
             )
             .limit(1)
         )

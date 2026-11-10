@@ -14,7 +14,7 @@ from src.models.work import Episode, Work
 from src.schemas.payment import EpisodePaymentIntentCreate
 from src.services import payment_intent_service as intents
 from src.services.portone_rest import PortOnePaymentSnapshot, PortOneTransportError
-from tests.factories import PAYWALL, doc, make_episode, make_work, para
+from tests.factories import PAYWALL, doc, make_episode, make_purchase, make_work, para
 
 pytestmark = pytest.mark.asyncio
 
@@ -462,6 +462,35 @@ async def test_unpurchasable_content_never_calls_provider(
     expected_status = 404 if invalid == "private" else 409
     assert exc.value.status_code == expected_status
     assert not adapter.registered and not adapter.gets
+
+
+@pytest.mark.parametrize("status", ["active", "refund_pending", "review_required", "refunded"])
+@pytest.mark.parametrize("environment", ["test", "live"])
+async def test_existing_purchase_blocks_checkout_only_when_protected_in_current_environment(
+    db_session, session_factory, checkout, status, environment
+):
+    user_id, _, episode_id = checkout
+    user = await db_session.get(User, user_id)
+    episode = await db_session.get(Episode, episode_id)
+    purchase, _ = await make_purchase(
+        db_session, user, episode, status=status, environment=environment
+    )
+    adapter = FakePortOne(db_session, session_factory)
+    if environment == "test" and status != "refunded":
+        with pytest.raises(intents.IntentError) as exc:
+            await intents.create_episode_intent(
+                body(episode_id), user_id, db_session, adapter=adapter
+            )
+        assert exc.value.status_code == 409
+        assert adapter.gets == adapter.registered == []
+    else:
+        result = await intents.create_episode_intent(
+            body(episode_id), user_id, db_session, adapter=adapter
+        )
+        assert result.payment_id
+        assert len(adapter.registered) == 1
+    await db_session.refresh(purchase)
+    assert purchase.status == status
 
 
 async def test_http_auth_validation_kill_switch_and_rate_limit(

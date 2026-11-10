@@ -1182,8 +1182,6 @@ export interface components {
             is_free: boolean;
             /** Is Locked */
             is_locked: boolean;
-            /** Is Purchased */
-            is_purchased: boolean;
             /** Price */
             price: number | null;
             /** First Published At */

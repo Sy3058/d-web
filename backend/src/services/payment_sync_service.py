@@ -10,6 +10,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.lib.content_doc import derive_is_free
 from src.models.payment import (
+    PROTECTED_PURCHASE_STATUSES,
     PaymentCancelReason,
     PaymentLog,
     PaymentLogSource,
@@ -248,7 +249,7 @@ async def sync_payment(
                             Purchase.user_id == order.user_id,
                             Purchase.episode_id == order.episode_id,
                             Purchase.environment == order.environment,
-                            Purchase.status.in_(["active", "refund_pending", "review_required"]),
+                            Purchase.status.in_(PROTECTED_PURCHASE_STATUSES),
                         )
                         .with_for_update()
                     )

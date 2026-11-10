@@ -441,7 +441,7 @@ cancel_pending 실패 확정 ─→ paid (사용자 환불) | review_required (�
 - **구매 내역 FE 후속 (2026-11-10 사용자 확인)**: 일반 비공개 회차가 공개 작품·회차 목록에서 사라지는 동작은 유지한다. 대신 `/my/purchases`에는 해당 사용자의 기존 구매를 공개 여부와 무관하게 표시하고, 활성 구매의 회차 URL을 직접 열 수 있게 한다. 공개 catalog에 없는 회차를 구매 내역에서도 누락시키지 않는다. 로컬 `abcd` 비공개 전환에서 비구매 bootstrap·content 404와 구매자 full은 확인했으며, 구매 내역 화면·링크 연결은 아직 미구현이다.
 - 완료 증거: 미동의 intent 422, 표시 금액 stale 시 결제창 0, `checkout_changed` 현재 정보 표시 뒤 명시적 재확인·동의 전 SDK 호출 0, 미구매 paid key presign 0, 환불 winner일 때 full 문서·URL 응답 0, 구매 복귀 뒤 추가 클릭 없는 자동 전문 발급, access 만료 + refresh 유효면 full·쿠키 clear 0, stale hint + refresh 만료면 세 쿠키 clear·preview·full 0, 일반 비공개 뒤 구매 내역 direct link full·비구매 HTML/API 메타 0, 개인 SSR no-store.
 
-**구매 배지 선행 보완 (2026-11-10)**: 사용자 확인에서 구매자도 잠금으로 보이는 문제를 발견해 P1의 개인 구매 표시를 앞당겼다. 기존 no-store progress의 `purchased_episode_ids`와 WorkExperience가 공개 SSR 목록·개인 구매 배지·기존 진행도·CTA를 연결한다. 중앙 access 정책을 공유하며 읽기 이력이 없어도 활성 구매는 `구매완료`로 표시하고 잠금·가격을 숨긴다. 완독·진행률·CTA 의미 변경과 공개 placeholder 필드 제거는 후속이다. [구현·검증](../MODULES/FE/Catalog/IMPLEMENTATION_PURCHASE_BADGES.md).
+**구매 배지 선행 보완 (2026-11-10)**: 사용자 확인에서 구매자도 잠금으로 보이는 문제를 발견해 P1의 개인 구매 표시를 앞당겼다. 기존 no-store progress의 `purchased_episode_ids`와 WorkExperience가 공개 SSR 목록·개인 구매 배지·기존 진행도·CTA를 연결한다. 중앙 access 정책을 공유하며 읽기 이력이 없어도 활성 구매는 `구매완료`로 표시하고 잠금·가격을 숨긴다. 완독·진행률·CTA 의미 변경은 후속이며, 공개 placeholder 필드 제거는 [Q3](#m3-quality-followups)으로 분리해 선행한다. [구현·검증](../MODULES/FE/Catalog/IMPLEMENTATION_PURCHASE_BADGES.md).
 
 ### G. 환불·기본 매출
 
@@ -460,6 +460,38 @@ cancel_pending 실패 확정 ─→ paid (사용자 환불) | review_required (�
 
 ---
 
+<a id="m3-quality-followups"></a>
+
+## 코드 품질 후속 작업 (2026-11-10)
+
+전체 소스의 구조·반복 패턴과 구매·가격·뷰어 경로를 검토한 결과다. 모든 경로의 무결함을 보장하는 전수 검증은 아니다. [정리 시점 결정](../DECISIONS.md#m3-코드-품질-정리-시점-2026-11-10)에 따라 아래 미완료 작업을 관리한다.
+
+### 남은 구매 내역·환불 구현 전: 오류와 상태 계약
+
+- [x] **Q1. 비공개 구매 회차의 진행도 저장**: `progress_service.upsert_progress`는 `catalog_service.public_episode_exists`만 검사해 중앙 access 정책이 `full`을 허용한 구매자의 저장도 거부한다. 저장 가능 여부를 중앙 정책과 맞춘다. 완료조건: 작품·회차 각각의 일반 비공개와 양쪽 비공개에서 활성 구매자는 저장·재조회·복원이 되고, 비구매 비공개·삭제는 거부된다. 공개 preview의 기존 위치 저장은 유지하며 완독 허용으로 확대하지 않는다. 다른 사용자·환경·비활성 구매로 비공개 저장 권한을 얻을 수 없어야 한다.
+- [ ] **Q2. 가격 정수 상한**: `schemas/work.py`의 `WorkCreate`, `WorkUpdate`, `EpisodeCreate`, `EpisodeUpdate`는 가격 하한만 검사한다. DB `Integer` 범위에 맞춰 `2_147_483_647` 상한을 서버에서 강제하고 Admin 입력 검증도 맞춘다. 완료조건: 상한 초과는 DB 예외 대신 422, 경계값은 검증 통과, 가격 생략·회차 가격 null 상속은 유지된다. 결제 intent의 양수·금액 snapshot 검증은 유지한다.
+- [ ] **Q3. 공개 구매 placeholder 제거**: `schemas/catalog.py`, `catalog_service.py`, `frontend/src/lib/catalog.ts`의 항상 false인 `EpisodeSummary.is_purchased`를 제거하고 소비 타입·생성 타입·fixture를 동기화한다. 완료조건: 공개 응답·SSR에는 구매 필드나 개인 상태가 없고, `WorkExperience`는 기존 no-store progress의 `purchased_episode_ids`만으로 구매 배지를 표시한다. guest 로컬 기록·결제 복귀 query·공개 잠금 필드는 구매 근거로 쓰지 않는다. 개인 API 요청은 작품당 1회이며 배지 조회가 전문 발급·최초 열람을 만들지 않는다.
+- [x] **Q4. 보호 대상 구매 상태 집합 공통화**: `payment_intent_service`, `payment_sync_service`, `work_service`에 반복된 `active/refund_pending/review_required` 집합을 이름 있는 서버 공통 정책으로 둔다. 완료조건: 재구매 차단·중복 승인 처리·삭제 보호가 같은 상태 집합을 참조하고, `refunded`는 보호 대상에서 제외된다. 열람은 중앙 access 정책의 `active` 기준을 유지한다. 조회별 환경 범위·잠금·트랜잭션 의미를 공통화 과정에서 바꾸지 않는다.
+
+검토 당시 관련 기존 테스트는 101개 통과했다. 저장소 밖의 임시 재현 테스트 2개에서 활성 구매 비공개 회차의 `full` 판정과 저장 거부, `2_147_483_648`원 입력의 스키마 통과와 DB 실패를 확인했다. 이는 오류 재현 증거이며 수정 완료 증거가 아니다. 구현 시 Q1·Q2 시나리오를 저장소 회귀 테스트로 남긴다.
+
+**2026-11-11 BE 구현**: Q1·Q4와 Q2 서버 가격 상한, Q3 서버 placeholder 제거·Admin 생성 타입을 구현했다. Q2의 Admin 입력 검증과 Q3의 FE 수기 타입·fixture 제거는 BE 머지 후 영역별 후속으로 남겨 두 체크 항목을 미완료로 유지한다. [구현·검증](../MODULES/BE/Payment/IMPLEMENTATION_QUALITY_CONSISTENCY.md)을 따른다.
+
+### M3 진행 중: 기본값과 책임 분리
+
+- [ ] **Q5. 신규 작품 기본 가격 계약 정리**: `WorkForm`, `WorkCreate`, `Work`에 중복된 500원 기본값을 기존 DECISIONS의 0원 기본 정책과 맞춘다. 서버 생성 계약을 기준으로 Admin 기본값과 DB 기본값을 동기화하고, 고정 판매가를 클라이언트 판단에 넣지 않는다. 완료조건: Admin 생성과 API 가격 생략 생성이 같은 기본값을 사용하고, 기존 작품 가격·회차별 가격·null 상속은 보존된다. 0원 가격을 중앙 정책과 무관한 전문 열람 근거로 사용하지 않는다. 모델·DB 기본값 변경은 새 migration과 해당 검증을 포함한다.
+- **책임 분리 적용 기준**: 다음 기능이 해당 파일의 복잡도를 늘릴 때 필요한 책임부터 추출한다. `Viewer.tsx`는 본문·세션 요청, 진행도 복원·관측·저장, 컨트롤 표시를 분리하고, `EpisodeEditor.tsx`는 편집 세션·이미지 업로드·저장·발행을 분리한다. `episode_service.update_episode`는 변경안 계산·검증과 부작용 실행을 구분하되 트랜잭션 소유권·부모 잠금·CAS는 보존한다. 분리 여부와 회귀 증거는 해당 구현 문서에 기록한다. 모든 대형 파일의 분리를 M3 완료 gate로 만들지 않으며, 필드·제약조건 때문에 긴 결제 모델은 줄 수만으로 분리하지 않는다.
+
+### M3 종료 전: 운영 설정
+
+- [ ] **Q6. 운영 API 주소 검증**: `frontend/src/lib/api.ts`, `GoogleButton.astro`, `admin/src/lib/api.ts`의 localhost 폴백은 개발에만 허용한다. 운영 환경에서 필수 API 주소가 빠지거나 비어 있으면 지원하는 빌드·기동 경계에서 명확히 실패시킨다. 완료조건: 독자 API·Google 로그인·Admin API의 누락 설정이 검출되고, 명시한 정상 운영 주소와 SSR 내부 주소 분리는 유지되며 내부 주소가 브라우저 번들에 노출되지 않는다.
+
+Q1~Q4를 먼저 마친 뒤 남은 F 구매 내역·G 환불 작업을 진행한다. Q5는 M3 진행 중, Q6는 I 종료 점검까지 완료한다. 동작 수정과 구조 분리는 별도 커밋으로 검증하고, BE 계약 변경·Admin 생성 타입은 `be/`, FE 소비 변경은 선행 BE 머지 뒤 최신 main의 `fe/`, Admin 화면 변경은 `admin/`으로 나눈다. 2026-11-10에는 계획을 기록했고, 2026-11-11 BE 구현 범위와 남은 FE/Admin 작업은 위 상태 기록을 따른다.
+
+검증은 변경 범위에 맞는 집중 테스트부터 시작하고 완료 전에 해당 앱 전체 gate를 실행한다. Q3는 OpenAPI·소비 타입과 공개 캐시·개인화 계약을, Q4와 서비스 분리는 기존 구매·환불 경합 테스트를 포함한다. Q6는 운영 설정 누락·정상 설정의 빌드/기동 결과와 산출물을 확인한다. 브라우저 실기능 확인은 사용자에게 남기며 Playwright E2E는 추가하지 않는다.
+
+---
+
 ## 권장 PR 순서
 
 1. 현재 docs PR: foundation과 정본 동기화
@@ -473,7 +505,7 @@ cancel_pending 실패 확정 ─→ paid (사용자 환불) | review_required (�
 9. `common/feat/m3-donations`: H
 10. `common/feat/m3-revenue-ops`: I
 
-스택 PR은 사용하지 않는다. 선행 PR이 main에 머지된 뒤 최신 main에서 다음 브랜치를 만든다. 각 PR은 해당 `IMPLEMENTATION_*.md`, API 타입 생성물과 영향받는 backend/frontend/admin gate를 함께 갱신한다.
+위 목록은 그룹 의존 순서이며 BE·FE 구현이 함께 필요한 그룹은 영역별 브랜치·PR로 분리한다. 현재 F의 남은 구매 내역·G 환불 착수 전에는 [Q1~Q4](#m3-quality-followups)를 먼저 진행한다. 스택 PR은 사용하지 않는다. 선행 PR이 main에 머지된 뒤 최신 main에서 다음 브랜치를 만든다. 각 PR은 해당 `IMPLEMENTATION_*.md`, API 타입 생성물과 영향받는 backend/frontend/admin gate를 함께 갱신한다.
 
 ---
 
@@ -538,6 +570,7 @@ pnpm --filter admin lint && pnpm --filter admin test && pnpm --filter admin buil
 
 ### P0 gate
 
+- [ ] **정합성 후속 Q1~Q4**: 비공개 구매 진행도·가격 상한 회귀, 공개 구매 placeholder 제거와 개인 상태 계약, 보호 대상 상태 공통화 완료 ([완료조건](#m3-quality-followups))
 - [ ] **0·C 외부 연동**: 개발자 소유 PortOne V2 Store·API/webhook secret, 카드·카카오페이·토스페이 테스트 channel과 공개 FE/API/webhook HTTPS 준비
 - [ ] **0·C 브라우저 결제**: 카드·카카오페이 `TC0ONETIME`·토스페이 `tosstest`의 PC 결제창 완료와 모바일 redirect 복귀, 서버 사후 검증 스모크
 - [x] **C schema·adapter**: CHECK·partial unique와 test/live 공존, 작가·에피소드 후원 target, Purchase-order provenance FK, 복구 가능한 cancel bundle·PII 없는 exact snapshot, migration 왕복, 정확한 REST endpoint, typed 404·outstanding 409, SecretStr·65초 read timeout·unknown 응답 격리·secret 노출 0, 실제 API 읽기 전용 GET *(2026-09-01 완료, 2026-09-03·09-05 리뷰 보강, 2026-09-11 provider_total_amount 금액 분리와 취소 금액 CHECK 보강, 2026-09-12 최종 자동검증: pytest 578·focused 43, scratch 왕복·취소 3건/거부 4건)*
@@ -556,6 +589,7 @@ pnpm --filter admin lint && pnpm --filter admin test && pnpm --filter admin buil
 
 ### M3 완료
 
+- [ ] 코드 품질 후속 Q5 신규 가격 기본값 계약과 Q6 운영 API 주소 검증 완료 ([완료조건](#m3-quality-followups))
 - [ ] 기존·신규 이미지 metadata 100%와 공간 예약
 - [ ] 로그인·게스트 완독, 작품 진행률·CTA 의미 통일
 - [ ] 작가·에피소드 후원과 owner 메시지
