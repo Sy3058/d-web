@@ -21,14 +21,14 @@
 | `backend/migrations/versions/20260814_2100_viewer_progress_block_offset.py` | `block_offset_bp` 추가 + 0..10000 CHECK |
 | `backend/src/schemas/viewer.py` | `ProgressUpdate` / `ProgressRead` / `WorkProgressRead` |
 | `backend/src/services/progress_service.py` | 회차 단위 upsert·조회 / 작품 단위 읽은 회차·최근 회차 조회 |
-| `backend/src/services/catalog_service.py` | `public_episode_exists()` 추가 |
+| `backend/src/services/episode_access_service.py` | 중앙 권한 판정 재사용(M3 Q1에서 공개 여부 전용 helper 대체) |
 | `backend/src/routers/progress.py` | `PUT`/`GET /episodes/{id}/progress`, `GET /works/{id}/progress` |
 | `backend/tests/factories.py` | `make_work`/`make_episode` 공용 팩토리(test_catalog와 공유) |
 | `backend/tests/test_progress.py` | 29케이스(E4 쿼리 방향, 긴 블록 오프셋 경계·구버전 보존 포함) |
 
 | 엔드포인트 | 인증 | 역할 |
 |-----------|------|------|
-| `PUT /episodes/{id}/progress` | 필수 | 진행도 upsert. 회차가 공개+미삭제가 아니면 404. 응답 `no-store` |
+| `PUT /episodes/{id}/progress` | 필수 | 중앙 access 판정이 preview/full이면 진행도 upsert, unavailable이면 404. 성공 응답 `no-store` |
 | `GET /episodes/{id}/progress` | 필수 | 저장된 진행도 조회. 행 없으면 404. 응답 `no-store` |
 | `GET /works/{id}/progress` | 필수 | 공개·미삭제 회차의 읽은 ID 목록과 최근 회차 반환. 행 없으면 빈 값 200. 응답 `no-store` |
 
@@ -36,11 +36,11 @@
 
 ## 2. 주요 결정
 
-### 회차 공개성 검증 = `catalog_service.public_episode_exists()` 신설
+### M2의 회차 공개성 검증(2026-11-11 M3 Q1에서 대체)
 M2 문서 C1 원문은 "회차 존재 검증은 그룹 B(회차 콘텐츠 API)와 같은 공개 조회를 재사용"이라 적었으나, 착수 시점에 B1/B2가 아직 없어 재사용 대상이 없었다. `progress_service`에 사설 조회를 두면 B가 나중에 생겼을 때 필터가 두 곳으로 갈라진다 - 대신 기존 `public_work_filters()`(작품 공개+미삭제의 단일 출처)를 그대로 태우는 얇은 함수를 `catalog_service`에 추가해, B가 나중에 별도 로딩 버전을 만들어도 필터는 한 곳에 남도록 했다. `Episode.id`만 select해 `content`(JSONB) 로딩을 피한다.
 
-### PUT은 공개성 검사, GET은 검사 없음 (2026-07-20 사용자 확정)
-PUT은 저장 자체를 막는 게이트라 `public_episode_exists()`를 매번 통과해야 한다. 반대로 GET은 진행도 행 존재만 확인한다 - 작품이 일시 비공개로 전환됐다 재공개되는 경우, 기존 진행도가 계속 살아있는 편이 UX상 맞다고 판단했다(비공개 전환은 실수·일시적일 수 있고, 진행도 유실은 독자 경험을 해친다). 유출 위험도 없다 - GET이 노출하는 값은 요청한 본인의 정수 진행도 하나뿐이라, 회차 존재 여부 자체가 민감 정보가 아니다.
+### PUT은 중앙 권한 검사, GET은 본인 위치 조회
+M2에서는 PUT이 공개 여부를 검사했으나, M3 Q1에서 `resolve_episode_access`의 unavailable만 거부하도록 변경했다. 공개 preview와 활성 구매자의 일반 비공개 회차 저장을 허용하고, GET은 기존처럼 본인 진행도 행 존재만 확인한다. 권한 조회가 전문을 발급하거나 최초 열람을 기록하지 않는다. 상세 계약과 회귀 증거는 [M3 정합성 구현](../Payment/IMPLEMENTATION_QUALITY_CONSISTENCY.md)을 따른다.
 
 ### upsert = `postgresql.insert().on_conflict_do_update()` + `set_`에 `updated_at` 명시
 `ViewerProgress.updated_at`은 `onupdate=func.now()`로 선언돼 있지만, 이는 ORM/Core의 일반 UPDATE 문에만 적용되고 **INSERT의 `ON CONFLICT ... DO UPDATE SET` 절에는 자동으로 붙지 않는다.** `set_`에 `page_no`, `block_offset_bp`, `updated_at`을 모두 명시하지 않으면 재저장 시 위치 일부나 시각이 최초 값에 멈춘다. `test_put_twice_updates_same_row`와 `test_put_twice_bumps_updated_at`으로 독립 검증했다.
@@ -95,7 +95,7 @@ PUT은 저장 자체를 막는 게이트라 `public_episode_exists()`를 매번 
 
 | 항목 | 이동처 |
 |------|--------|
-| 그룹 B(회차 콘텐츠 API) 완성 후 `public_episode_exists()`와 B의 로딩 조회 통합 여부 재검토 | B1/B2 착수 시 |
+| 진행도 PUT을 중앙 권한 판정으로 통합하고 공개 여부 전용 helper 제거 | M3 Q1에서 구현, 위 정합성 구현 문서 참조 |
 | FE debounce 저장 호출 + 재진입 복원 UI | 그룹 F (뷰어 아일랜드) |
 | 작품 단위 진행률 바 + 이어 보기 React 섬 | 그룹 E4 FE |
 
