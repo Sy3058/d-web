@@ -87,6 +87,9 @@ docs/MISTAKES.md 참고해서 FastAPI 라우터 작성해줘
 
 ## Astro / React
 
+- **공유 SSR의 무료 가격으로 구매 버튼 자체를 생략하면 유료 전환 후 구매 진입이 막힌다** (2026-11-10 결제 UI 리뷰)
+  → SSR 메타는 60초 캐시되지만 content API의 권한·유료 경계는 현재 상태다. 무료 가격이어도 회차 경로를 전달하고, 실제 preview인데 가격이 없으면 공개 메타를 no-store로 재조회해 구매 진입을 복구한다. 가격 복구만으로 결제창을 자동 호출하지 않는다.
+
 - **SSR 이미지의 hydration 이전 오류는 React onError만으로 처리할 수 없다** (2026-11-10 구매 배지 리뷰)
   → 마운트 시 `complete && naturalWidth === 0`도 검사하고 URL 변경·이전 이미지의 늦은 오류를 격리한다. SSR→hydrateRoot 사이에 오류가 끝난 이미지로 회귀를 검증한다.
 

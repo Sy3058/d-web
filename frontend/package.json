@@ -19,6 +19,7 @@
     "@astrojs/react": "^6.0.4",
     "@d-web/shared": "workspace:*",
     "@hookform/resolvers": "^5.4.0",
+    "@portone/browser-sdk": "0.1.13",
     "@sentry/astro": "^10.55.0",
     "@tailwindcss/vite": "^4.3.0",
     "@tiptap/core": "3.27.4",

@@ -153,7 +153,7 @@ export default function ViewerControls({
           </div>
           <button
             type="button"
-            className={`${iconButtonClass} text-xs font-medium`}
+            className={`${iconButtonClass} text-xs font-medium cursor-pointer`}
             aria-label="현재 회차 공유"
             onClick={() => void handleShare()}
           >
