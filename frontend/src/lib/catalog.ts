@@ -46,7 +46,6 @@ export interface EpisodeSummary {
   thumbnail_url: string | null;
   is_free: boolean;
   is_locked: boolean;
-  is_purchased: boolean;
   price: number | null;
   // 최초 공개 시각(E3). BE의 first_published_at을 그대로 옮긴 것 - 재공개해도 안
   // 바뀐다(published_at은 재공개마다 갱신되므로 목록 표시엔 안 쓴다). offset 붙은 ISO

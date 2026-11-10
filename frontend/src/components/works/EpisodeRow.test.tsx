@@ -9,7 +9,7 @@ import EpisodeRow from './EpisodeRow';
 const episode: EpisodeSummary = {
   id: 'a', public_id: 12345678, title: '첫 화', subtitle: null,
   thumbnail_url: 'https://example.com/old.jpg', is_free: false,
-  is_locked: true, is_purchased: false, price: 500, first_published_at: null,
+  is_locked: true, price: 500, first_published_at: null,
 };
 let container: HTMLDivElement;
 let root: Root | undefined;

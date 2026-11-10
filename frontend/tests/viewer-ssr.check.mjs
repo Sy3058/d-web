@@ -46,7 +46,6 @@ test('뷰어 SSR의 공개 캐시·메타 없는 진입 셸·장애 구분', { t
           subtitle: null,
           is_free: price === null,
           is_locked: true,
-          is_purchased: false,
           price,
           thumbnail_url: null,
           first_published_at: '2026-11-01T00:00:00Z',

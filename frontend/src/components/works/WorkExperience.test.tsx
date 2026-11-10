@@ -32,7 +32,7 @@ const episodes = [
   { id: 'b', public_id: 22222222, title: '비 오는 날' },
   { id: 'c', public_id: 33333333, title: '달빛 아래 재회' },
   { id: 'd', public_id: 44444444, title: '새로운 아침' },
-].map((episode) => ({ ...episode, subtitle: '부제', thumbnail_url: null, is_free: episode.id === 'a', is_locked: episode.id !== 'a', is_purchased: true, price: 500, first_published_at: '2026-01-01T00:00:00Z' }));
+].map((episode) => ({ ...episode, subtitle: '부제', thumbnail_url: null, is_free: episode.id === 'a', is_locked: episode.id !== 'a', price: 500, first_published_at: '2026-01-01T00:00:00Z' }));
 
 async function renderProgress() {
   await act(async () => {
