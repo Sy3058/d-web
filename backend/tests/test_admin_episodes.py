@@ -1486,3 +1486,30 @@ async def test_image_urls_r2_unconfigured_503(
     r2_service._get_client.cache_clear()
     resp = await owner_client.get(_image_urls_url(work_id, episode_id))
     assert resp.status_code == 503
+
+
+async def test_episode_price_integer_boundary_create_and_update(owner_client):
+    maximum = 2_147_483_647
+    work = await owner_client.post(WORKS_URL, json={"title": "가격 경계"})
+    assert work.status_code == 201
+    url = _episodes_url(work.json()["id"])
+    invalid = await owner_client.post(url, json={"title": "상한", "price": maximum + 1})
+    assert invalid.status_code == 422
+    created = await owner_client.post(url, json={"title": "상한", "price": maximum})
+    assert created.status_code == 201
+    assert created.json()["price"] == maximum
+    episode_url = f"{url}/{created.json()['id']}"
+    invalid = await owner_client.put(episode_url, json={"price": maximum + 1})
+    assert invalid.status_code == 422
+    accepted = await owner_client.put(episode_url, json={"price": maximum})
+    assert accepted.status_code == 200
+    assert accepted.json()["price"] == maximum
+    omitted = await owner_client.put(episode_url, json={"subtitle": "가격 유지"})
+    assert omitted.status_code == 200
+    assert omitted.json()["price"] == maximum
+    inherited = await owner_client.put(episode_url, json={"price": None})
+    assert inherited.status_code == 200
+    assert inherited.json()["price"] is None
+    defaulted = await owner_client.post(url, json={"title": "기본 가격"})
+    assert defaulted.status_code == 201
+    assert defaulted.json()["price"] is None

@@ -23,6 +23,7 @@ from pydantic import (
 from src.models.work import WorkStatus
 from src.services import r2_service
 
+PRICE_MAX = 2_147_483_647
 TITLE_MAX = 200
 TAG_NAME_MAX = 50
 
@@ -56,7 +57,7 @@ class WorkCreate(BaseModel):
     title: str = Field(min_length=1, max_length=TITLE_MAX)
     synopsis: str | None = None
     cover_image: str | None = None  # R2 key
-    episode_base_price: int = Field(default=500, ge=0)
+    episode_base_price: int = Field(default=500, ge=0, le=PRICE_MAX)
     bundle_discount_rate: Decimal = Field(default=Decimal("0.1"), ge=0, le=1)
     status: WorkStatus = WorkStatus.ONGOING
     # 공개 카탈로그(M2 A) 노출 게이트. 기본 비공개 - 작가가 준비 끝나면 켠다.
@@ -72,7 +73,7 @@ class WorkUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=TITLE_MAX)
     synopsis: str | None = None
     cover_image: str | None = None
-    episode_base_price: int | None = Field(default=None, ge=0)
+    episode_base_price: int | None = Field(default=None, ge=0, le=PRICE_MAX)
     bundle_discount_rate: Decimal | None = Field(default=None, ge=0, le=1)
     status: WorkStatus | None = None
     is_published: bool | None = None
@@ -151,7 +152,9 @@ class EpisodeCreate(BaseModel):
 
     title: str = Field(min_length=1, max_length=TITLE_MAX)
     subtitle: str | None = Field(default=None, max_length=TITLE_MAX)
-    price: int | None = Field(default=None, ge=0)  # NULL = works.episode_base_price 참조
+    price: int | None = Field(
+        default=None, ge=0, le=PRICE_MAX
+    )  # NULL = works.episode_base_price 참조
     published_at: AwareDatetime | None = None
 
 
@@ -192,7 +195,7 @@ class EpisodeUpdate(BaseModel):
 
     title: str | None = Field(default=None, min_length=1, max_length=TITLE_MAX)
     subtitle: str | None = Field(default=None, max_length=TITLE_MAX)
-    price: int | None = Field(default=None, ge=0)
+    price: int | None = Field(default=None, ge=0, le=PRICE_MAX)
     is_published: bool | None = None
     thumbnail: str | None = None
     published_at: AwareDatetime | None = None

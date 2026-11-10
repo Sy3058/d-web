@@ -345,3 +345,26 @@ async def test_episode_count_reflects_episodes(owner_client: AsyncClient) -> Non
     # 수정 응답도 refresh 경로를 탄다(값 자체는 안 변한다).
     updated = await owner_client.put(f"{WORKS_URL}/{work_id}", json={"title": "새 제목"})
     assert updated.json()["episode_count"] == 2
+
+
+async def test_work_price_integer_boundary_create_and_update(owner_client):
+    maximum = 2_147_483_647
+    invalid = await owner_client.post(
+        WORKS_URL, json={"title": "상한", "episode_base_price": maximum + 1}
+    )
+    assert invalid.status_code == 422
+    created = await owner_client.post(
+        WORKS_URL, json={"title": "상한", "episode_base_price": maximum}
+    )
+    assert created.status_code == 201
+    assert created.json()["episode_base_price"] == maximum
+    url = f"{WORKS_URL}/{created.json()['id']}"
+    invalid = await owner_client.put(url, json={"episode_base_price": maximum + 1})
+    assert invalid.status_code == 422
+    accepted = await owner_client.put(url, json={"episode_base_price": maximum})
+    assert accepted.status_code == 200
+    assert accepted.json()["episode_base_price"] == maximum
+    omitted = await owner_client.put(url, json={"title": "생략"})
+    assert omitted.status_code == 200
+    assert omitted.json()["episode_base_price"] == maximum
+    assert (await owner_client.put(url, json={"episode_base_price": None})).status_code == 422
