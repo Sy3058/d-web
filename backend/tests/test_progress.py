@@ -7,6 +7,7 @@
 import uuid
 from datetime import UTC, datetime, timedelta
 
+import pytest
 import pytest_asyncio
 from httpx import AsyncClient
 from sqlalchemy import event
@@ -15,9 +16,10 @@ from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.lib.auth import access_cookie_name, create_access_token
+from src.models.payment import PaymentOrderStatus, PurchaseStatus
 from src.models.user import User
 from src.models.viewer import ViewerProgress
-from tests.factories import make_episode, make_work
+from tests.factories import PAYWALL, doc, make_episode, make_purchase, make_work, para
 
 INT32_MAX = 2_147_483_647
 BLOCK_OFFSET_MAX = 10_000
@@ -355,7 +357,11 @@ async def test_get_work_progress_returns_empty_state(
     resp = await async_client.get(_work_progress_url(work.id))
 
     assert resp.status_code == 200
-    assert resp.json() == {"read_episode_ids": [], "last_episode": None}
+    assert resp.json() == {
+        "read_episode_ids": [],
+        "purchased_episode_ids": [],
+        "last_episode": None,
+    }
     assert resp.headers["cache-control"] == "no-store"
 
 
@@ -388,6 +394,7 @@ async def test_get_work_progress_returns_all_read_episodes_and_latest(
     assert resp.status_code == 200
     assert resp.json() == {
         "read_episode_ids": [str(latest.id), str(older.id)],
+        "purchased_episode_ids": [],
         "last_episode": {
             "id": str(latest.id),
             "public_id": latest.public_id,
@@ -475,6 +482,7 @@ async def test_get_work_progress_excludes_unavailable_episodes(
     assert resp.status_code == 200
     assert resp.json() == {
         "read_episode_ids": [str(visible.id)],
+        "purchased_episode_ids": [],
         "last_episode": {
             "id": str(visible.id),
             "public_id": visible.public_id,
@@ -579,3 +587,58 @@ async def test_responses_are_not_cached(
 
     assert put_resp.headers["cache-control"] == "no-store"
     assert get_resp.headers["cache-control"] == "no-store"
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        "active",
+        "order_review",
+        "refund_pending",
+        "refunded",
+        "review_required",
+        "other_environment",
+        "other_user",
+        "hidden",
+        "deleted",
+        "broken",
+    ],
+)
+async def test_work_progress_purchase_badges_follow_access_policy(
+    async_client, db_session, user, other_user, case
+):
+    work = await make_work(db_session, user)
+    episode = await make_episode(db_session, work, content=doc(PAYWALL, para("유료 본문")))
+    purchase, order = await make_purchase(
+        db_session,
+        other_user if case == "other_user" else user,
+        episode,
+        environment="live" if case == "other_environment" else "test",
+        status=PurchaseStatus(case)
+        if case in {"refund_pending", "refunded", "review_required"}
+        else PurchaseStatus.ACTIVE,
+    )
+    if case == "order_review":
+        order.status = PaymentOrderStatus.REVIEW_REQUIRED
+    if case == "hidden":
+        episode.is_published = False
+    if case == "deleted":
+        episode.deleted_at = datetime.now(UTC)
+    if case == "broken":
+        episode.content = {"type": "doc", "content": "broken"}
+    await db_session.commit()
+    await _authed(async_client, user)
+    response = await async_client.get(_work_progress_url(work.id))
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store"
+    assert response.json() == {
+        "read_episode_ids": [],
+        "purchased_episode_ids": [str(episode.id)] if case in {"active", "order_review"} else [],
+        "last_episode": None,
+    }
+    assert "유료 본문" not in response.text
+    assert "image_keys" not in response.text
+    assert "content" not in response.text
+    await db_session.refresh(purchase)
+    assert purchase.first_viewed_at is None
+    assert (await db_session.exec(select(ViewerProgress))).all() == []

@@ -113,5 +113,6 @@ async def read_work_progress(
     )
     return WorkProgressRead(
         read_episode_ids=progress.read_episode_ids,
+        purchased_episode_ids=progress.purchased_episode_ids,
         last_episode=last_episode,
     )

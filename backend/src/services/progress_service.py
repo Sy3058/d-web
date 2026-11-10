@@ -8,9 +8,16 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from src.models.payment import Purchase
 from src.models.viewer import ViewerProgress
 from src.models.work import Episode, Work
 from src.services import catalog_service
+from src.services.episode_access_service import (
+    EpisodeAccessScope,
+    active_purchase_query,
+    episode_access_columns,
+    evaluate_episode_access,
+)
 
 
 @dataclass(frozen=True)
@@ -23,6 +30,7 @@ class LastReadEpisodeSnapshot:
 @dataclass(frozen=True)
 class WorkProgressSnapshot:
     read_episode_ids: list[uuid.UUID]
+    purchased_episode_ids: list[uuid.UUID]
     last_episode: LastReadEpisodeSnapshot | None
 
 
@@ -97,12 +105,14 @@ async def get_progress(
 async def get_work_progress(
     user_id: uuid.UUID, work_id: uuid.UUID, session: AsyncSession
 ) -> WorkProgressSnapshot | None:
-    """공개 작품의 사용자별 읽은 회차와 마지막 읽은 회차를 조회한다.
+    """공개 작품의 사용자별 읽은 회차, 구매 회차와 마지막 읽은 회차를 조회한다.
 
     먼저 PK로 공개 작품 존재를 확인하고, 진행도는 ViewerProgress에서 시작해 실제로 읽은
     행만 가져온다. Work에서 공개 Episode 전체를 LEFT JOIN하면 진행도 0건인 사용자도 작품의
     모든 회차를 DB에서 앱으로 전송하게 되므로 피한다. 두 번째 쿼리에도 작품 공개 필터를
     반복해 두 SELECT 사이에 비공개 전환이 일어나도 개인 진행도를 fail-closed로 숨긴다.
+    구매 회차는 공개 필터와 중앙 권한 입력을 한 번에 조회해 판정하며 본문 발급이나
+    최초 열람 시각 변경 없이 UUID만 반환한다.
     """
     work_exists = await session.exec(
         select(Work.id).where(Work.id == work_id, *catalog_service.public_work_filters())
@@ -134,12 +144,39 @@ async def get_work_progress(
             )
         )
     ).all()
+    purchase_rows = (
+        await session.exec(
+            select(Episode.id, *episode_access_columns(user_id))
+            .join(Work, Work.id == Episode.work_id)
+            .where(
+                Episode.work_id == work_id,
+                *catalog_service.public_episode_filters(),
+                *catalog_service.public_work_filters(),
+                active_purchase_query(user_id)
+                .where(Purchase.episode_id == Episode.id)
+                .correlate(Episode)
+                .exists(),
+            )
+            .order_by(Episode.id)
+        )
+    ).all()
+    purchased_episode_ids = []
+    for row in purchase_rows:
+        inputs = dict(row._mapping)
+        episode_id = inputs.pop("id")
+        access = evaluate_episode_access(**inputs).access
+        if access.scope == EpisodeAccessScope.FULL and access.purchase_id is not None:
+            purchased_episode_ids.append(episode_id)
+
     if not rows:
-        return WorkProgressSnapshot(read_episode_ids=[], last_episode=None)
+        return WorkProgressSnapshot(
+            read_episode_ids=[], purchased_episode_ids=purchased_episode_ids, last_episode=None
+        )
 
     latest_episode_id, latest_public_id, latest_title, _, _ = rows[0]
     return WorkProgressSnapshot(
         read_episode_ids=[episode_id for episode_id, _, _, _, _ in rows],
+        purchased_episode_ids=purchased_episode_ids,
         last_episode=LastReadEpisodeSnapshot(
             id=latest_episode_id,
             public_id=latest_public_id,

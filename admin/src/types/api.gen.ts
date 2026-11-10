@@ -1020,7 +1020,7 @@ export interface components {
         };
         /**
          * EpisodeContent
-         * @description 인가된 본문 응답. 회차 메타·네비는 GET /works/{id}가 담당한다.
+         * @description 인가된 본문 응답. 뷰어 초기 메타·네비는 viewer-bootstrap이 담당한다.
          */
         EpisodeContent: {
             /**
@@ -1574,6 +1574,8 @@ export interface components {
         WorkProgressRead: {
             /** Read Episode Ids */
             read_episode_ids: string[];
+            /** Purchased Episode Ids */
+            purchased_episode_ids: string[];
             last_episode: components["schemas"]["LastReadEpisode"] | null;
         };
         /** WorkRead */
