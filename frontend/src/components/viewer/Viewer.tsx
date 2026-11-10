@@ -4,6 +4,7 @@ import { buildViewerExtensions } from './extensions';
 import ViewerControls, { type ViewerEpisodeLink } from './ViewerControls';
 import { getBrowserGuestProgress, putBrowserGuestProgress } from '../../lib/guestProgress';
 import { restoreViewerSession } from '../../lib/viewerSession';
+import EpisodeCheckout from '../payment/EpisodeCheckout';
 import {
   createViewerControlsScrollState,
   syncViewerControlsScrollState,
@@ -24,6 +25,7 @@ import {
 
 interface Props {
   episodeId: string;
+  checkout?: { title: string; amount: number | null; returnPath: string; workId?: string };
   initialSessionReady?: boolean;
   navigation?: {
     workId: string;
@@ -98,7 +100,7 @@ function renderNodeHtml(node: ContentDocNode, extensions: Extensions): string {
   }
 }
 
-export default function Viewer({ episodeId, navigation, initialSessionReady = false }: Props) {
+export default function Viewer({ episodeId, navigation, checkout, initialSessionReady = false }: Props) {
   const extensions = useMemo(() => buildViewerExtensions(), []);
   const [contentState, setContentState] = useState<ContentRequestState>({
     status: 'loading',
@@ -589,6 +591,7 @@ export default function Viewer({ episodeId, navigation, initialSessionReady = fa
       {contentState.content.has_paid_part && (
         <div className="mt-8 py-12 text-center border-t border-line">
           <p className="text-sm text-muted">여기부터는 유료 구간이에요.</p>
+          {checkout && <EpisodeCheckout episodeId={episodeId} {...checkout} />}
         </div>
       )}
     </div>,

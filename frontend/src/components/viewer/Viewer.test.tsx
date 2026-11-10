@@ -129,6 +129,40 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
+it('미구매 preview에는 구매 버튼을 표시하고 클릭하면 결제 모달을 연다', async () => {
+  const checkout = { title: '유료 회차', amount: 500, returnPath: '/works/work-a/12345678' };
+  getEpisodeContent.mockResolvedValueOnce({ ...episodeContent('episode-a'), has_paid_part: true });
+  await act(async () => root.render(<Viewer episodeId="episode-a" checkout={checkout} />));
+  expect(container.textContent).toContain('유료 회차 구매하기');
+  expect(document.querySelector('[role="dialog"]')).toBeNull();
+  const buyButton = [...container.querySelectorAll('button')].find((button) => button.textContent === '유료 회차 구매하기');
+  await act(async () => buyButton!.click());
+  expect(document.querySelector('[role="dialog"]')?.textContent).toContain('500원');
+  expect(document.querySelector<HTMLInputElement>('[role="dialog"] input[type=checkbox]')?.checked).toBe(false);
+  getEpisodeContent.mockResolvedValueOnce(episodeContent('episode-b'));
+  await act(async () => root.render(<Viewer episodeId="episode-b" checkout={checkout} />));
+  expect(container.textContent).not.toContain('유료 회차 구매하기');
+  expect(document.querySelector('[role="dialog"]')).toBeNull();
+});
+
+it('캐시된 무료 가격이어도 현재 본문이 preview면 최신 가격으로 구매 진입을 복구한다', async () => {
+  getEpisodeContent.mockResolvedValueOnce({ ...episodeContent('episode-a'), has_paid_part: true });
+  const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify([
+    { id: 'episode-a', title: '유료로 전환한 회차', is_free: false, price: 700 },
+  ])));
+  vi.stubGlobal('fetch', fetchMock);
+  await act(async () => root.render(<Viewer episodeId="episode-a" checkout={{
+    workId: 'work-a', title: '예전 무료 회차', amount: null, returnPath: '/works/work-a/12345678',
+  }} />));
+  expect(container.textContent).toContain('유료 회차 구매하기');
+  const buyButton = [...container.querySelectorAll('button')].find((button) => button.textContent === '유료 회차 구매하기');
+  expect(buyButton?.disabled).toBe(false);
+  await act(async () => buyButton!.click());
+  expect(document.querySelector('[role="dialog"]')?.textContent).toContain('700원');
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+  expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/works/work-a/episodes'), expect.objectContaining({ cache: 'no-store' }));
+});
+
 describe('Viewer floating controls', () => {
   it('사용자 하향·상향 누적 스크롤에 따라 상하단 컨트롤을 함께 전환한다', async () => {
     await act(async () => root.render(<Viewer episodeId="episode-a" navigation={navigation} />));

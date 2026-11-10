@@ -137,6 +137,9 @@ importers:
       '@hookform/resolvers':
         specifier: ^5.4.0
         version: 5.4.0(react-hook-form@7.79.0(react@19.2.6))
+      '@portone/browser-sdk':
+        specifier: 0.1.13
+        version: 0.1.13
       '@sentry/astro':
         specifier: ^10.55.0
         version: 10.55.0(astro@7.2.4(@emnapi/core@1.11.3)(@emnapi/runtime@1.11.1)(@types/node@24.12.4)(jiti@2.7.0)(yaml@2.9.0))(rollup@4.60.4)
@@ -1091,6 +1094,9 @@ packages:
 
   '@oxc-project/types@0.146.0':
     resolution: {integrity: sha512-XC0QsnnhVe7sLIWmYmdPw7x5P0h4W8vUU3Nv1ySgWXtvCz8NizoAEpGXA0sOYoJQV2Rl13LgURAHQ5cI5ILCSA==}
+
+  '@portone/browser-sdk@0.1.13':
+    resolution: {integrity: sha512-zC94/gmMeh5O44iRx/SiIyt8p+1YXxEVRQu+Fhi7WKMlzbERBViwCxY6B6MVO2QprGJS5iQG2bf6e7KoXln5Kg==}
 
   '@redocly/ajv@8.11.2':
     resolution: {integrity: sha512-io1JpnwtIcvojV7QKDUSIuMN/ikdOUd1ReEnUnMKGfDVridQZ31J0MmIuqwuRjWDZfmvr+Q0MqCcfHM2gTivOg==}
@@ -4871,6 +4877,8 @@ snapshots:
   '@oslojs/encoding@1.1.0': {}
 
   '@oxc-project/types@0.146.0': {}
+
+  '@portone/browser-sdk@0.1.13': {}
 
   '@redocly/ajv@8.11.2':
     dependencies:

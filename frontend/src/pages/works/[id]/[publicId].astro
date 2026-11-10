@@ -92,6 +92,12 @@ const pageTitle = loadError
           <Viewer
             client:only="react"
             episodeId={episode.id}
+            checkout={{
+              workId: work.id,
+              title: episode.title,
+              amount: episode.price,
+              returnPath: `/works/${work.id}/${episode.public_id}`,
+            }}
             navigation={{
               workId: work.id,
               workTitle: work.title,

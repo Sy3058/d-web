@@ -1,0 +1,16 @@
+---
+export const prerender = false;
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import PaymentReturn from '../../components/payment/PaymentReturn';
+
+Astro.response.headers.set('Cache-Control', 'no-store');
+Astro.response.headers.set('Referrer-Policy', 'no-referrer');
+Astro.response.headers.set('X-Robots-Tag', 'noindex');
+---
+
+<BaseLayout title="결제 상태 확인">
+  <div class="mx-auto max-w-lg px-5 py-16">
+    <h1 class="mb-6 text-xl font-semibold">결제 상태 확인</h1>
+    <PaymentReturn client:load />
+  </div>
+</BaseLayout>

@@ -20,6 +20,7 @@ const episodeId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 test('뷰어 SSR의 공개 캐시·메타 없는 진입 셸·장애 구분', { timeout: 20_000 }, async (t) => {
   assert.ok(existsSync(entry), '먼저 pnpm --filter frontend build를 실행하세요.');
   const requests = [];
+  let publicPrice = 500;
   const api = createServer((req, res) => {
     requests.push({ url: req.url, cookie: req.headers.cookie });
     res.setHeader('Content-Type', 'application/json');
@@ -29,7 +30,7 @@ test('뷰어 SSR의 공개 캐시·메타 없는 진입 셸·장애 구분', { t
       res.writeHead(503).end('{}');
     } else if ([`/works/${ids[0]}`, `/works/${ids[2]}`].includes(req.url)) {
       const workId = req.url.split('/').at(-1);
-      const price = 500;
+      const price = workId === ids[0] ? publicPrice : 500;
       res.end(JSON.stringify({
         id: workId,
         title: workId === ids[2] ? 'OTHER_PUBLIC_WORK' : 'PUBLIC_WORK',
@@ -105,6 +106,18 @@ test('뷰어 SSR의 공개 캐시·메타 없는 진입 셸·장애 구분', { t
       assert.ok(!html.includes('ViewerEntry'));
     });
 
+    await t.test('무료 가격 셸에도 이후 유료 전환을 복구할 구매 경로를 전달한다', async () => {
+      publicPrice = null;
+      try {
+        const { response, html } = await read(0);
+        assert.equal(response.status, 200);
+        assert.equal(response.headers.get('cache-control'), 'public, max-age=60');
+        assert.ok(html.includes('returnPath'));
+        assert.ok(html.includes('amount'));
+      } finally {
+        publicPrice = 500;
+      }
+    });
 
     for (const index of [1, 2]) {
       await t.test(index === 1 ? '비공개 작품 경로의 HTML은 메타 없는 셸이다' : '공개 목록에 없는 회차도 메타 없는 셸이다', async () => {
@@ -132,6 +145,18 @@ test('뷰어 SSR의 공개 캐시·메타 없는 진입 셸·장애 구분', { t
       assert.equal(response.headers.get('cache-control'), 'no-store');
     });
 
+    await t.test('결제 복귀는 no-store이고 개인 query·결과를 SSR에 넣지 않는다', async () => {
+      const response = await fetch(`${siteUrl}/payments/return?paymentId=PRIVATE_ORDER&code=SUCCESS&message=PRIVATE_PG_MESSAGE`);
+      const html = await response.text();
+      assert.equal(response.status, 200);
+      assert.equal(response.headers.get('cache-control'), 'no-store');
+      assert.equal(response.headers.get('referrer-policy'), 'no-referrer');
+      assert.equal(response.headers.get('x-robots-tag'), 'noindex');
+      assert.ok(!html.includes('PRIVATE_ORDER'));
+      assert.ok(!html.includes('PRIVATE_PG_MESSAGE'));
+      assert.ok(!html.includes('결제가 확인됐어요'));
+      assert.ok(html.includes('서버에서 결제 상태를 확인하고 있어요'));
+    });
 
     await t.test('작품 회차 목록 SSR은 공개 잠금 표시와 공유 캐시만 포함한다', async () => {
       const response = await fetch(`${siteUrl}/works/${ids[0]}`, {
@@ -146,7 +171,7 @@ test('뷰어 SSR의 공개 캐시·메타 없는 진입 셸·장애 구분', { t
       assert.ok(!html.includes('FAKE_BROWSER_COOKIE'));
     });
 
-    assert.equal(requests.length, 5);
+    assert.equal(requests.length, 6);
     assert.ok(requests.every((req) => !req.cookie));
     assert.ok(requests.every((req) => /^\/works\/[^/]+$/.test(req.url)));
   } finally {
