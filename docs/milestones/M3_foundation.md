@@ -469,13 +469,15 @@ cancel_pending 실패 확정 ─→ paid (사용자 환불) | review_required (�
 ### 남은 구매 내역·환불 구현 전: 오류와 상태 계약
 
 - [x] **Q1. 비공개 구매 회차의 진행도 저장**: `progress_service.upsert_progress`는 `catalog_service.public_episode_exists`만 검사해 중앙 access 정책이 `full`을 허용한 구매자의 저장도 거부한다. 저장 가능 여부를 중앙 정책과 맞춘다. 완료조건: 작품·회차 각각의 일반 비공개와 양쪽 비공개에서 활성 구매자는 저장·재조회·복원이 되고, 비구매 비공개·삭제는 거부된다. 공개 preview의 기존 위치 저장은 유지하며 완독 허용으로 확대하지 않는다. 다른 사용자·환경·비활성 구매로 비공개 저장 권한을 얻을 수 없어야 한다.
-- [ ] **Q2. 가격 정수 상한**: `schemas/work.py`의 `WorkCreate`, `WorkUpdate`, `EpisodeCreate`, `EpisodeUpdate`는 가격 하한만 검사한다. DB `Integer` 범위에 맞춰 `2_147_483_647` 상한을 서버에서 강제하고 Admin 입력 검증도 맞춘다. 완료조건: 상한 초과는 DB 예외 대신 422, 경계값은 검증 통과, 가격 생략·회차 가격 null 상속은 유지된다. 결제 intent의 양수·금액 snapshot 검증은 유지한다.
+- [x] **Q2. 가격 정수 상한**: `schemas/work.py`의 `WorkCreate`, `WorkUpdate`, `EpisodeCreate`, `EpisodeUpdate`는 가격 하한만 검사한다. DB `Integer` 범위에 맞춰 `2_147_483_647` 상한을 서버에서 강제하고 Admin 입력 검증도 맞춘다. 완료조건: 상한 초과는 DB 예외 대신 422, 경계값은 검증 통과, 가격 생략·회차 가격 null 상속은 유지된다. 결제 intent의 양수·금액 snapshot 검증은 유지한다.
 - [ ] **Q3. 공개 구매 placeholder 제거**: `schemas/catalog.py`, `catalog_service.py`, `frontend/src/lib/catalog.ts`의 항상 false인 `EpisodeSummary.is_purchased`를 제거하고 소비 타입·생성 타입·fixture를 동기화한다. 완료조건: 공개 응답·SSR에는 구매 필드나 개인 상태가 없고, `WorkExperience`는 기존 no-store progress의 `purchased_episode_ids`만으로 구매 배지를 표시한다. guest 로컬 기록·결제 복귀 query·공개 잠금 필드는 구매 근거로 쓰지 않는다. 개인 API 요청은 작품당 1회이며 배지 조회가 전문 발급·최초 열람을 만들지 않는다.
 - [x] **Q4. 보호 대상 구매 상태 집합 공통화**: `payment_intent_service`, `payment_sync_service`, `work_service`에 반복된 `active/refund_pending/review_required` 집합을 이름 있는 서버 공통 정책으로 둔다. 완료조건: 재구매 차단·중복 승인 처리·삭제 보호가 같은 상태 집합을 참조하고, `refunded`는 보호 대상에서 제외된다. 열람은 중앙 access 정책의 `active` 기준을 유지한다. 조회별 환경 범위·잠금·트랜잭션 의미를 공통화 과정에서 바꾸지 않는다.
 
 검토 당시 관련 기존 테스트는 101개 통과했다. 저장소 밖의 임시 재현 테스트 2개에서 활성 구매 비공개 회차의 `full` 판정과 저장 거부, `2_147_483_648`원 입력의 스키마 통과와 DB 실패를 확인했다. 이는 오류 재현 증거이며 수정 완료 증거가 아니다. 구현 시 Q1·Q2 시나리오를 저장소 회귀 테스트로 남긴다.
 
 **2026-11-11 BE 구현**: Q1·Q4와 Q2 서버 가격 상한, Q3 서버 placeholder 제거·Admin 생성 타입을 구현했다. Q2의 Admin 입력 검증과 Q3의 FE 수기 타입·fixture 제거는 BE 머지 후 영역별 후속으로 남겨 두 체크 항목을 미완료로 유지한다. [구현·검증](../MODULES/BE/Payment/IMPLEMENTATION_QUALITY_CONSISTENCY.md)을 따른다.
+
+**2026-11-11 Admin Q2 완료**: 공유 가격 상한과 작품 등록·수정 및 회차 발행 폼 검증을 반영했다. 경계값·초과값·500원 기본값·null 상속을 확인하고 Admin lint·119개 테스트·build가 통과했다. [구현·검증](../MODULES/ADMIN/Works/IMPLEMENTATION_PRICE_LIMIT.md)을 따른다. Q3의 FE 후속은 별도 브랜치 범위로 미완료 상태를 유지한다.
 
 ### M3 진행 중: 기본값과 책임 분리
 

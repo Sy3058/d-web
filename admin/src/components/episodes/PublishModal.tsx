@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { episodePublishSchema, type EpisodePublishInput } from '../../lib/validation';
+import { PRICE_MAX, episodePublishSchema, type EpisodePublishInput } from '../../lib/validation';
 import type { EpisodeImageUrl } from '../../types';
 
 interface PublishModalProps {
@@ -135,6 +135,7 @@ export function PublishModal({
               <input
                 type="number"
                 min={0}
+                max={PRICE_MAX}
                 step={10}
                 placeholder="비우면 작품 기본가"
                 {...register('price', {
