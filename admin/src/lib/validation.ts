@@ -3,6 +3,7 @@ import { WORK_STATUS_VALUES } from './workStatus';
 
 // 백엔드 schemas/work.py TAG_NAME_MAX와 같은 값. TagInput의 maxLength도 이걸 쓴다.
 export const TAG_NAME_MAX = 50;
+export const PRICE_MAX = 2_147_483_647;
 
 // 이메일/비번 스키마는 @d-web/shared의 loginSchema를 재사용(F1 LoginForm에서 직접 import).
 // 여기서는 관리자 화면 전용(TOTP 코드) 스키마만 정의.
@@ -24,7 +25,8 @@ export const workSchema = z.object({
   episode_base_price: z
     .number({ error: '숫자를 입력해 주세요.' })
     .int('정수만 입력해 주세요.')
-    .min(0, '0 이상이어야 합니다.'),
+    .min(0, '0 이상이어야 합니다.')
+    .max(PRICE_MAX, '가격은 2,147,483,647원 이하여야 합니다.'),
   bundle_discount_rate: z
     .number({ error: '숫자를 입력해 주세요.' })
     .min(0, '0~1 사이 값이어야 합니다.')
@@ -47,6 +49,7 @@ export const episodePublishSchema = z
       .number({ error: '숫자를 입력해 주세요.' })
       .int('정수만 입력해 주세요.')
       .min(0, '0 이상이어야 합니다.')
+      .max(PRICE_MAX, '가격은 2,147,483,647원 이하여야 합니다.')
       .nullable(),
     // datetime-local 값(로컬 naive 문자열). 예약 모드일 때만 의미 - 제출 시 offset 포함 ISO로 변환.
     publishedAt: z.string().nullable(),

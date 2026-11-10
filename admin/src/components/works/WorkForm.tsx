@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { TAG_NAME_MAX, workSchema, type WorkInput } from '../../lib/validation';
+import { PRICE_MAX, TAG_NAME_MAX, workSchema, type WorkInput } from '../../lib/validation';
 import { WORK_STATUS_OPTIONS } from '../../lib/workStatus';
 import type { WorkStatus } from '../../types';
 import { TagInput } from './TagInput';
@@ -186,6 +186,7 @@ export function WorkForm({
             <input
               type="number"
               min={0}
+              max={PRICE_MAX}
               // 스피너(위/아래 버튼)를 10원 단위로. 직접 타이핑하는 값은 제한하지 않는다
               // (form에 noValidate가 걸려 브라우저 step 검사는 안 돌고, 검증은 zod 담당).
               step={10}

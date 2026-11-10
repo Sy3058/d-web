@@ -3,6 +3,33 @@ import { describe, expect, it, vi } from 'vitest';
 import { WorkForm } from './WorkForm';
 
 describe('WorkForm', () => {
+  it.each(['등록', '저장'])('%s 폼은 상한 초과를 막고 경계 가격을 제출한다', async (submitLabel) => {
+    const onSubmit = vi.fn();
+    render(
+      <WorkForm
+        defaultValues={submitLabel === '저장' ? { title: '기존 작품', episode_base_price: 800 } : undefined}
+        onSubmit={onSubmit}
+        isPending={false}
+        error={null}
+        submitLabel={submitLabel}
+      />,
+    );
+    if (submitLabel === '등록') {
+      fireEvent.change(screen.getByLabelText(/제목/), { target: { value: '새 작품' } });
+    }
+    const price = screen.getByRole('spinbutton', { name: /회차 기본가/ });
+    expect(price).toHaveAttribute('max', '2147483647');
+    fireEvent.change(price, { target: { value: '2147483648' } });
+    fireEvent.click(screen.getByRole('button', { name: submitLabel }));
+    expect(await screen.findByText('가격은 2,147,483,647원 이하여야 합니다.')).toBeInTheDocument();
+    expect(onSubmit).not.toHaveBeenCalled();
+
+    fireEvent.change(price, { target: { value: '2147483647' } });
+    fireEvent.click(screen.getByRole('button', { name: submitLabel }));
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    expect(onSubmit.mock.calls[0][0].episode_base_price).toBe(2_147_483_647);
+  });
+
   it('기본값은 비공개(is_published=false)로 제출된다', async () => {
     const onSubmit = vi.fn();
     render(<WorkForm onSubmit={onSubmit} isPending={false} error={null} submitLabel="등록" />);
@@ -13,6 +40,7 @@ describe('WorkForm', () => {
     await waitFor(() => expect(onSubmit).toHaveBeenCalled());
     const [data] = onSubmit.mock.calls[0];
     expect(data.is_published).toBe(false);
+    expect(data.episode_base_price).toBe(500);
   });
 
   it('공개 상태를 공개로 바꾸면 is_published=true로 제출된다', async () => {
