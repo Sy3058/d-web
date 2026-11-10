@@ -94,7 +94,6 @@ def _to_episode_summary(
         thumbnail_url=thumbnail_url,
         is_free=ep.is_free,
         is_locked=not ep.is_free,
-        is_purchased=False,  # M2는 결제 없음(M3에서 실제 구매 여부로 대체)
         # 실효가 계산은 여기(서버) 한 곳 - episodes.price NULL이면 작품 기준가(models/work.py).
         price=None if ep.is_free else (ep.price if ep.price is not None else base_price),
         first_published_at=ep.first_published_at,

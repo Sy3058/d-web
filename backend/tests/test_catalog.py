@@ -12,9 +12,11 @@ from httpx import AsyncClient
 from sqlalchemy import update
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from src.lib.auth import access_cookie_name, create_access_token
 from src.models.user import User
 from src.models.work import Episode, Tag, Work, WorkTag
 from tests.factories import make_episode as _make_episode
+from tests.factories import make_purchase
 from tests.factories import make_work as _make_work
 
 WORKS_URL = "/works"
@@ -224,7 +226,7 @@ async def test_detail_excludes_deleted_episode(
     assert {ep["id"] for ep in resp.json()["episodes"]} == {str(kept.id)}
 
 
-async def test_detail_episode_free_locked_purchased_flags(
+async def test_detail_episode_free_locked_flags_exclude_purchase_state(
     async_client: AsyncClient, db_session: AsyncSession, user: User
 ):
     work = await _make_work(db_session, user)
@@ -237,8 +239,28 @@ async def test_detail_episode_free_locked_purchased_flags(
     assert episodes[free_ep.public_id]["is_locked"] is False
     assert episodes[locked_ep.public_id]["is_free"] is False
     assert episodes[locked_ep.public_id]["is_locked"] is True
-    assert episodes[free_ep.public_id]["is_purchased"] is False
-    assert episodes[locked_ep.public_id]["is_purchased"] is False
+    assert all("is_purchased" not in episode for episode in episodes.values())
+
+
+async def test_public_catalog_stays_identical_for_purchaser(async_client, db_session, user):
+    work = await _make_work(db_session, user)
+    episode = await _make_episode(db_session, work, is_free=False)
+    purchase, _ = await make_purchase(db_session, user, episode)
+    paths = (f"{WORKS_URL}/{work.id}", f"{WORKS_URL}/{work.id}/episodes")
+    anonymous = [await async_client.get(path) for path in paths]
+    async_client.cookies.set(
+        access_cookie_name(), create_access_token(str(user.id)), domain="test.example"
+    )
+    for path, expected in zip(paths, anonymous, strict=True):
+        response = await async_client.get(path)
+        assert response.status_code == 200
+        assert expected.status_code == 200
+        assert response.headers.get("cache-control") == expected.headers.get("cache-control")
+        assert response.json() == expected.json()
+        assert "is_purchased" not in response.text
+        assert "purchased_episode_ids" not in response.text
+    await db_session.refresh(purchase)
+    assert purchase.first_viewed_at is None
 
 
 async def test_detail_episode_exposes_first_published_at(
