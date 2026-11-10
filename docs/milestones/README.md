@@ -222,6 +222,8 @@ M4 (커뮤니티 - 후원 제외)
 
 ### M3 P1 확장
 
+2026-11-10 구매 배지는 선행 보완했다. no-store progress의 `purchased_episode_ids`와 WorkExperience 단일 island로 활성 구매 회차의 잠금·가격을 `구매완료`로 교체한다. 공개 SSR 공유 캐시는 유지하며 완독·CTA 의미 변경과 구매 내역은 후속이다. [구현·검증](../MODULES/FE/Catalog/IMPLEMENTATION_PURCHASE_BADGES.md).
+
 - [ ] 이미지 width·height·byte_size 저장·백필과 뷰어 공간 예약
 - [ ] 로그인·게스트 완독, 작품 진행률·구매 배지·CTA 의미 통일
 - [ ] 작가·에피소드 후원과 owner 메시지 목록

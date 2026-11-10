@@ -29,15 +29,26 @@ test('뷰어 SSR의 공개 캐시·메타 없는 진입 셸·장애 구분', { t
       res.writeHead(503).end('{}');
     } else if ([`/works/${ids[0]}`, `/works/${ids[2]}`].includes(req.url)) {
       const workId = req.url.split('/').at(-1);
+      const price = 500;
       res.end(JSON.stringify({
         id: workId,
         title: workId === ids[2] ? 'OTHER_PUBLIC_WORK' : 'PUBLIC_WORK',
+        synopsis: null,
+        cover_image_url: null,
+        episode_base_price: 500,
+        status: 'ongoing',
+        tags: [],
         episodes: [{
           id: episodeId,
           public_id: workId === ids[2] ? 10000002 : 10000001,
           title: 'PUBLIC_EPISODE',
           subtitle: null,
-          is_free: true,
+          is_free: price === null,
+          is_locked: true,
+          is_purchased: false,
+          price,
+          thumbnail_url: null,
+          first_published_at: '2026-11-01T00:00:00Z',
         }],
       }));
     } else {
@@ -94,6 +105,7 @@ test('뷰어 SSR의 공개 캐시·메타 없는 진입 셸·장애 구분', { t
       assert.ok(!html.includes('ViewerEntry'));
     });
 
+
     for (const index of [1, 2]) {
       await t.test(index === 1 ? '비공개 작품 경로의 HTML은 메타 없는 셸이다' : '공개 목록에 없는 회차도 메타 없는 셸이다', async () => {
         const { response, html } = await read(index);
@@ -120,7 +132,21 @@ test('뷰어 SSR의 공개 캐시·메타 없는 진입 셸·장애 구분', { t
       assert.equal(response.headers.get('cache-control'), 'no-store');
     });
 
-    assert.equal(requests.length, 4);
+
+    await t.test('작품 회차 목록 SSR은 공개 잠금 표시와 공유 캐시만 포함한다', async () => {
+      const response = await fetch(`${siteUrl}/works/${ids[0]}`, {
+        headers: { Cookie: 'login_hint=reader; access_token=FAKE_BROWSER_COOKIE' },
+      });
+      const html = await response.text();
+      assert.equal(response.status, 200);
+      assert.equal(response.headers.get('cache-control'), 'public, max-age=60');
+      assert.ok(html.includes('PUBLIC_EPISODE'));
+      assert.ok(html.includes('잠금'));
+      assert.ok(!html.includes('구매완료'));
+      assert.ok(!html.includes('FAKE_BROWSER_COOKIE'));
+    });
+
+    assert.equal(requests.length, 5);
     assert.ok(requests.every((req) => !req.cookie));
     assert.ok(requests.every((req) => /^\/works\/[^/]+$/.test(req.url)));
   } finally {

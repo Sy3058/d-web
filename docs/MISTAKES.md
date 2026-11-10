@@ -87,6 +87,9 @@ docs/MISTAKES.md 참고해서 FastAPI 라우터 작성해줘
 
 ## Astro / React
 
+- **SSR 이미지의 hydration 이전 오류는 React onError만으로 처리할 수 없다** (2026-11-10 구매 배지 리뷰)
+  → 마운트 시 `complete && naturalWidth === 0`도 검사하고 URL 변경·이전 이미지의 늦은 오류를 격리한다. SSR→hydrateRoot 사이에 오류가 끝난 이미지로 회귀를 검증한다.
+
 - **refresh의 모든 실패를 원요청 401로 바꾸면 서버 장애도 익명 상태로 오인한다** (2026-11-09 M3 F3 리뷰)
   → `me 401 → refresh 503/네트워크 실패`를 삼키면 optional bootstrap은 비구매 404, 공개 content는 preview로 진행해 유효한 구매자를 막는다. refresh의 최종 401만 세션 종료로 처리하고 그 외 오류는 전파한다.
   → 최초 me 요청 실패뿐 아니라 refresh 단계 실패도 raw fetch로 재현한다. 장애 중 bootstrap·content 요청 0과 오류 UI, 실패 뒤 in-flight 해제 및 명시적 재시도 성공을 함께 확인한다.

@@ -8,6 +8,8 @@ export interface LastReadEpisode {
 
 export interface WorkProgressRead {
   read_episode_ids: string[];
+  // 응답 전환 기간에 필드가 없으면 구매 표시는 비운다. 로컬 이력은 구매 근거가 아니다.
+  purchased_episode_ids?: string[];
   last_episode: LastReadEpisode | null;
 }
 

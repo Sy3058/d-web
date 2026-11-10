@@ -34,6 +34,7 @@ class LastReadEpisode(BaseModel):
 
 class WorkProgressRead(BaseModel):
     read_episode_ids: list[uuid.UUID]
+    purchased_episode_ids: list[uuid.UUID]
     last_episode: LastReadEpisode | None
 
 

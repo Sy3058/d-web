@@ -1,5 +1,7 @@
 # 작품 단위 진행도 (M2 그룹 E4 FE)
 
+2026-11-10 M3 구매 배지 보완에서 `WorkProgress`의 화면·개인 조회를 `WorkExperience`로 이동했다. 현재 구현은 [작품 회차 목록 구매 배지](../Catalog/IMPLEMENTATION_PURCHASE_BADGES.md)를 따른다. 아래는 기존 M2의 진행도·CTA 의미를 기록하며 완독 기반 의미 변경은 후속이다.
+
 | 항목 | 내용 |
 |------|------|
 | 모듈 | Frontend / Progress (작품 상세 개인화 섬) |

@@ -18,6 +18,7 @@ describe('getWorkProgress', () => {
   it('작품 진행도 API 계약을 그대로 반환한다', async () => {
     const response = {
       read_episode_ids: ['episode-a'],
+      purchased_episode_ids: ['episode-b'],
       last_episode: { id: 'episode-a', public_id: 12345678, title: '첫 번째 모험' },
     };
     apiGet.mockResolvedValue(response);
