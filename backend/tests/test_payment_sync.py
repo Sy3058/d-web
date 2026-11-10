@@ -10,9 +10,10 @@ from sqlmodel import select
 
 from src.config import settings
 from src.models.payment import PaymentLog, PaymentOrder, Purchase
+from src.models.work import Episode
 from src.services.payment_sync_service import sync_payment
 from src.services.portone_rest import PortOnePaymentSnapshot, PortOneTransportError
-from tests.factories import PAYWALL, doc, make_episode, make_work, para
+from tests.factories import PAYWALL, doc, make_episode, make_purchase, make_work, para
 
 pytestmark = pytest.mark.asyncio
 NOW = datetime(2026, 11, 7, tzinfo=UTC)
@@ -142,6 +143,36 @@ async def test_two_approvals_one_purchase_one_compensation(orders, session_facto
     loser = next(row for row in rows if row.status == "cancel_pending")
     assert loser.cancel_reason == "system_duplicate"
     assert loser.cancel_request_snapshot["amount"] == 500
+
+
+@pytest.mark.parametrize("status", ["active", "refund_pending", "review_required", "refunded"])
+@pytest.mark.parametrize("environment", ["test", "live"])
+async def test_existing_purchase_duplicate_compensation_respects_status_and_environment(
+    orders, db_session, user, session_factory, test_engine, status, environment
+):
+    episode = await db_session.get(Episode, orders[0].episode_id)
+    existing, _ = await make_purchase(
+        db_session, user, episode, status=status, environment=environment
+    )
+    existing_id = existing.id
+    adapter = Adapter(test_engine)
+    result = await sync_payment(session_factory, adapter, orders[0].payment_id, "browser", now=NOW)
+    protected = environment == "test" and status != "refunded"
+    assert result == ("cancel_pending" if protected else "paid")
+    purchases = await read_all(session_factory, Purchase)
+    original = next(row for row in purchases if row.id == existing_id)
+    assert original.status == status
+    new_purchases = [row for row in purchases if row.payment_order_id == orders[0].id]
+    if protected:
+        assert new_purchases == []
+        assert len(adapter.posts) == 1
+        rows = await read_all(session_factory, PaymentOrder)
+        order = next(row for row in rows if row.id == orders[0].id)
+        assert order.cancel_reason == "system_duplicate"
+    else:
+        assert len(new_purchases) == 1
+        assert new_purchases[0].status == "active"
+        assert adapter.posts == []
 
 
 @pytest.mark.parametrize(

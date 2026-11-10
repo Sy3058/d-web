@@ -16,12 +16,12 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from src.config import settings
 from src.lib.content_doc import derive_is_free
 from src.models.payment import (
+    PROTECTED_PURCHASE_STATUSES,
     PaymentEnvironment,
     PaymentOrder,
     PaymentOrderKind,
     PaymentOrderStatus,
     Purchase,
-    PurchaseStatus,
 )
 from src.models.work import Episode, Work
 from src.schemas.payment import (
@@ -41,11 +41,6 @@ NOTICE_VERSION = "episode-immediate-v1"
 INTENT_TTL = timedelta(minutes=30)
 ORDER_NAME = "웹툰 회차 구매"
 _OPEN_STATUSES = (PaymentOrderStatus.PREPARING, PaymentOrderStatus.READY)
-_PURCHASE_BLOCKING_STATUSES = (
-    PurchaseStatus.ACTIVE,
-    PurchaseStatus.REFUND_PENDING,
-    PurchaseStatus.REVIEW_REQUIRED,
-)
 
 
 class PaymentAdapter(Protocol):
@@ -175,7 +170,7 @@ async def _ensure_not_purchased(
                 Purchase.user_id == user_id,
                 Purchase.episode_id == episode_id,
                 Purchase.environment == _environment(),
-                Purchase.status.in_(_PURCHASE_BLOCKING_STATUSES),
+                Purchase.status.in_(PROTECTED_PURCHASE_STATUSES),
             )
             .with_for_update()
             .execution_options(populate_existing=True)
