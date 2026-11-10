@@ -28,9 +28,9 @@ from src.services import r2_service
 def public_work_filters() -> list:
     """독자에게 노출 가능한 작품 조건(공개 + 미삭제). 작품을 거치는 모든 공개 경로의 단일 출처.
 
-    ⚠️ 그룹 B/C(회차 콘텐츠·진행도)도 Work join 시 반드시 이걸 쓸 것 - admin의
-    episode_service.get_episode 패턴은 deleted_at만 검사해서(관리자는 비공개 작품도
-    봐야 하므로) 그대로 복사하면 숨긴 작품(is_published=false)의 회차가 새어 나간다.
+    공개 카탈로그는 Work join 시 이 조건을 사용한다. 구매자의 비공개 회차 열람과
+    진행도 저장은 episode_access_service의 중앙 권한 판정을 사용한다. 관리자의
+    deleted_at 검사만 복사하면 공개 카탈로그에 비공개 작품이 노출될 수 있다.
     """
     return [Work.is_published.is_(True), Work.deleted_at.is_(None)]
 
@@ -211,22 +211,3 @@ async def list_public_episodes(
     """
     detail = await get_work_detail(work_id, session)
     return None if detail is None else detail.episodes
-
-
-async def public_episode_exists(episode_id: uuid.UUID, session: AsyncSession) -> bool:
-    """독자에게 노출 가능한 회차인지 확인 (회차 자체 공개 + 소속 작품 public_work_filters()).
-
-    그룹 C1(뷰어 진행도) PUT 저장 게이트. 그룹 B(회차 콘텐츠 API)가 아직 없어 신설했지만
-    필터 단일 출처는 그대로 public_work_filters() - B가 나중에 별도 조회 함수를 만들어도
-    이 필터는 갈라지지 않는다. Episode.id만 select해 content(JSONB) 로딩을 피한다.
-    """
-    result = await session.exec(
-        select(Episode.id)
-        .join(Work, Work.id == Episode.work_id)
-        .where(
-            Episode.id == episode_id,
-            *public_episode_filters(),
-            *public_work_filters(),
-        )
-    )
-    return result.first() is not None

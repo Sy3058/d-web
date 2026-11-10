@@ -642,3 +642,80 @@ async def test_work_progress_purchase_badges_follow_access_policy(
     await db_session.refresh(purchase)
     assert purchase.first_viewed_at is None
     assert (await db_session.exec(select(ViewerProgress))).all() == []
+
+
+@pytest.mark.parametrize("hidden", ["work", "episode", "both"])
+@pytest.mark.parametrize("viewed", [False, True])
+async def test_hidden_purchase_progress_restores_anchor_without_starting_view(
+    async_client, db_session, user, hidden, viewed
+):
+    work = await make_work(db_session, user, is_published=hidden == "episode")
+    episode = await make_episode(
+        db_session, work, is_published=hidden == "work", content=doc(PAYWALL, para("유료"))
+    )
+    purchase, _ = await make_purchase(db_session, user, episode)
+    first_viewed_at = datetime.now(UTC) - timedelta(days=1) if viewed else None
+    purchase.first_viewed_at = first_viewed_at
+    await db_session.commit()
+    await _authed(async_client, user)
+
+    saved = await async_client.put(
+        _progress_url(episode.id), json={"page_no": 7, "block_offset_bp": 8125}
+    )
+    restored = await async_client.get(_progress_url(episode.id))
+
+    assert saved.status_code == restored.status_code == 200
+    assert restored.json()["page_no"] == 7
+    assert restored.json()["block_offset_bp"] == 8125
+    await db_session.refresh(purchase)
+    assert purchase.first_viewed_at == first_viewed_at
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        "refund_pending",
+        "refunded",
+        "review_required",
+        "other_user",
+        "other_environment",
+        "deleted_work",
+        "deleted_episode",
+        "malformed",
+    ],
+)
+async def test_hidden_progress_rejects_unavailable_purchase(
+    async_client, db_session, user, other_user, case
+):
+    work = await make_work(db_session, user, is_published=False)
+    episode = await make_episode(db_session, work, content=doc(PAYWALL, para("유료")))
+    await make_purchase(
+        db_session,
+        other_user if case == "other_user" else user,
+        episode,
+        environment="live" if case == "other_environment" else "test",
+        status=PurchaseStatus(case)
+        if case in {"refund_pending", "refunded", "review_required"}
+        else PurchaseStatus.ACTIVE,
+    )
+    if case == "deleted_work":
+        work.deleted_at = datetime.now(UTC)
+    if case == "deleted_episode":
+        episode.deleted_at = datetime.now(UTC)
+    if case == "malformed":
+        episode.content = {"type": "doc", "content": "broken"}
+    await db_session.commit()
+    await _authed(async_client, user)
+
+    response = await async_client.put(_progress_url(episode.id), json={"page_no": 7})
+
+    assert response.status_code == 404
+    assert (await db_session.exec(select(ViewerProgress))).all() == []
+
+
+async def test_public_paid_preview_allows_progress_without_purchase(async_client, db_session, user):
+    work = await make_work(db_session, user)
+    episode = await make_episode(db_session, work, content=doc(PAYWALL, para("유료")))
+    await _authed(async_client, user)
+    response = await async_client.put(_progress_url(episode.id), json={"page_no": 1})
+    assert response.status_code == 200
