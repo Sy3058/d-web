@@ -2,3 +2,6 @@ packages:
   - 'packages/*'
   - 'frontend'
   - 'admin'
+
+overrides:
+  prosemirror-view: 1.42.3
