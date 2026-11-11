@@ -766,6 +766,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/my/purchases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Purchase History */
+        get: operations["purchase_history_my_purchases_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/episodes/{episode_id}/progress": {
         parameters: {
             query?: never;
@@ -1336,6 +1353,59 @@ export interface components {
             /** Work Count */
             work_count: number;
         };
+        /** PurchaseHistoryItem */
+        PurchaseHistoryItem: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Payment Id */
+            payment_id: string;
+            /** Item Title */
+            item_title: string;
+            /** Order Name */
+            order_name: string;
+            /** Amount */
+            amount: number;
+            /** Currency */
+            currency: string;
+            /**
+             * Paid At
+             * Format: date-time
+             */
+            paid_at: string;
+            status: components["schemas"]["PurchaseStatus"];
+            /** First Viewed At */
+            first_viewed_at: string | null;
+            /** Refunded At */
+            refunded_at: string | null;
+            /** Refund Amount */
+            refund_amount: number | null;
+            /** Receipt Url */
+            receipt_url: string | null;
+            /** Viewer Path */
+            viewer_path: string | null;
+        };
+        /** PurchaseHistoryRead */
+        PurchaseHistoryRead: {
+            /** Items */
+            items: components["schemas"]["PurchaseHistoryItem"][];
+            /** Total */
+            total: number;
+            /** Page */
+            page: number;
+            /**
+             * Page Size
+             * @default 20
+             */
+            page_size: number;
+        };
+        /**
+         * PurchaseStatus
+         * @enum {string}
+         */
+        PurchaseStatus: "active" | "refund_pending" | "refunded" | "review_required";
         /** ResendVerificationRequest */
         ResendVerificationRequest: {
             /**
@@ -3125,6 +3195,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PaymentCompleteRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    purchase_history_my_purchases_get: {
+        parameters: {
+            query?: {
+                page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PurchaseHistoryRead"];
                 };
             };
             /** @description Validation Error */
