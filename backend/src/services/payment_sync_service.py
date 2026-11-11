@@ -9,6 +9,7 @@ from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.lib.content_doc import derive_is_free
+from src.lib.payment_receipt import safe_receipt_url
 from src.models.payment import (
     PROTECTED_PURCHASE_STATUSES,
     PaymentCancelReason,
@@ -220,7 +221,15 @@ async def sync_payment(
         elif payment.money_state in {"UNKNOWN", "PARTIAL_CANCELLED", "VIRTUAL_ACCOUNT_ISSUED"}:
             reason = "unsupported_money_state"
         elif order.status == "paid":
-            pass
+            if (
+                payment.money_state == "PAID"
+                and _matches(order, payment)
+                and payment.paid_at == order.paid_at
+                and (order.transaction_id is None or payment.transaction_id == order.transaction_id)
+            ):
+                receipt_url = safe_receipt_url(payment.receipt_url)
+                if receipt_url is not None:
+                    order.receipt_url = receipt_url
         elif payment.money_state == "PAID" and order.status in _OPEN:
             cancel_reason = None
             if order.requested_payment_method is None:
@@ -262,6 +271,7 @@ async def sync_payment(
                     order.pg_provider = payment.pg_provider
                     order.payment_method = payment.payment_method
                     order.easy_pay_provider = payment.easy_pay_provider
+                    order.receipt_url = safe_receipt_url(payment.receipt_url)
                     order.status = "paid"
                     order.paid_at = payment.paid_at
                     order.provider_total_amount = payment.total_amount

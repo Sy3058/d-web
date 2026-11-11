@@ -217,6 +217,7 @@ M4 (커뮤니티 - 후원 제외)
 - [ ] 결제 전 즉시 제공 고지·동의 snapshot, 미구매 paywall 절단, `useEffect` login_hint 판별·access 자동 refresh, 활성 구매 full 자동 반환, 첫 전문 발급·환불 승인 race 단일 승자
 - [ ] 구매 내역·영수증, 잠정 168시간 전문 미발급 환불, owner 승인·거부·취소·결과 메일 복구
 - [ ] 구매 내역 FE: 공개 목록에서 숨겨진 일반 비공개 구매 회차도 내역에 유지하고, 활성 구매자는 회차 직접 링크로 전체 본문 열람. 공개 catalog 결과로 구매 내역을 필터링하지 않는다. *(2026-11-10 사용자 확인, [후속 범위](M3_foundation.md#f-구매-권한전문최소-ui))*
+- [x] F 구매 내역 BE API: 현재 사용자·환경의 20건 페이지, 주문 snapshot·구매/환불 상태·HTTPS 영수증·중앙 정책 기반 direct viewer 경로, 비공개·환불·삭제 이력 보존과 발급 부작용 없음 *(2026-11-11, 2026-11-12 리뷰에서 결제 sync 영수증 저장·기존 paid 재조회 복구 보완. 신규 21개 포함 Backend 전체 1,147개·Ruff 통과. [계약·검증](../MODULES/BE/Payment/IMPLEMENTATION_PURCHASE_HISTORY.md)). FE 목록·영수증 연결은 BE main 머지 후 별도 진행하며 F 전체는 미완료다.*
 - [ ] 환불 확정 실패 복원·재선점 race, `cancel_attempt_no`·시도별 새 key·발송 token CAS와 자격 상실 거부 계약
 - [ ] 구매 gross/refund/net과 결제 상태 재확인이 필요한 화면, test 결제 기본 제외
 - [ ] 개발자 test Store에서 작가 live Store로 DB 이관 없이 배포 설정 교체

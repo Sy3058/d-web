@@ -42,7 +42,7 @@ M2 G부터 `/`, `/commission`이 admin 편집 데이터를 SSR로 반영하므�
 ### 3. 코드리뷰(Opus) 반영 보안 수정
 
 - postgres 5432 / api 8000 포트를 `127.0.0.1` 바인딩 (외부 노출 차단)
-- backend Dockerfile uv를 `latest` → `0.11.17` 핀 (재현성 + 보안 패치)
+- backend Dockerfile uv를 `latest` → `0.11.17` 핀. 2026-11-12 CA 보안 수정으로 `0.13.4`로 갱신했다([검증 기록](../Security/IMPLEMENTATION_DEPENDENCY_SECURITY_UPDATES.md)).
 - `backend/.dockerignore` 추가 (루트 .dockerignore가 ./backend 컨텍스트에 미적용되므로 별도)
 - **VPS 배포 전 처리 필요 (Major)**: 포트 노출 차단 / DB 강한 비밀번호 / 컨테이너 비root → M0_foundation.md 그룹 D에 기록. 이 compose는 D4 선행이라 VPS에 그대로 올리면 안 됨.
 

@@ -21,7 +21,7 @@ E2는 서버 주문의 결제 상태와 구매 권한을 반영하는 내부 서
 
 조회 시작 시 주문 status·updated_at을 기록하고, 외부 GET 뒤 부모부터 잠근 현재 주문이 달라졌으면 응답을 적용하지 않는다. fresh 재호출과 stale 호출을 구분하며 순차 재조회에는 감사 로그가 추가될 수 있지만 구매 생성은 한 번이다. GET 실패는 만료 근거로 쓰지 않고 재조회를 예약한다. expired는 자금 종결이 아니며 nonpaid 뒤에도 다음 조회를 유지한다. E4의 bounded selector·backoff는 아직 연결하지 않았다.
 
-KRW 외 통화·알 수 없는 자금 상태는 격리한다. 검증된 CANCELLED는 주문과 기존 구매를 함께 닫는다. cancel_pending 시스템 주문은 E1의 최신 GET·발송 token·동일 key/body 정책으로 처리하고 사용자 환불 복원은 수행하지 않는다. 정상 승인에는 검증된 비민감 ID·수단을 저장하며 receipt URL 저장은 생략한다. 후원 주문은 성공 결과를 만들지 않고 운영 확인 대상으로 남긴다.
+KRW 외 통화·알 수 없는 자금 상태는 격리한다. 검증된 CANCELLED는 주문과 기존 구매를 함께 닫는다. cancel_pending 시스템 주문은 E1의 최신 GET·발송 token·동일 key/body 정책으로 처리하고 사용자 환불 복원은 수행하지 않는다. 정상 승인에는 검증된 비민감 ID·수단을 저장한다. E2에서는 receipt URL 저장을 생략했으나, F 구매 내역 연결에서 안전한 HTTPS 영수증 저장과 기존 paid 주문의 검증된 재조회 보완을 추가했다. 후원 주문은 성공 결과를 만들지 않고 운영 확인 대상으로 남긴다.
 
 catalog는 Work 부모 잠금으로 sync와 직렬화한다. 작품 삭제는 부모 잠금 아래 하위 회차 구매를 검사한다. 회차 수정은 기존 content·thumbnail·manifest CAS를 보존하며, 회차 삭제는 부모 뒤 회차를 다시 잠근다. 일반 비공개는 구매 권한을 유지하고 열린 주문만 expired로 닫아 재조회를 예약한다.
 
@@ -58,3 +58,7 @@ scratch DB에서 `upgrade e1f6a7b8c9d0 -> legacy insert -> upgrade head -> check
 메인 재검토에서 현재 channel 설정 의존 제거, snapshot과 조회 메타데이터 구분, legacy 자동 취소 차단, commit 이후 알림, E1 CAS 승자만 격리 알림을 발행하는 경로를 확인했다. 실제 PortOne write·브라우저·Sentry 원격 전송은 수행하지 않았다. Sentry는 before_send에서 이벤트를 수집 후 폐기해 네트워크 없이 검증했다.
 
 - 알림 근거: [Sentry Python LoggingIntegration 공식 소스](https://getsentry.github.io/sentry-python/_modules/sentry_sdk/integrations/logging.html). ERROR 레코드 이벤트 수집을 SDK 실제 테스트로 확인했다.
+
+## F 영수증 연결 보완 (2026-11-12)
+
+구매 내역 리뷰에서 정상 PAID snapshot의 `receiptUrl`이 주문에 저장되지 않는 누락을 재현했다. 신규 정상 구매 확정과 같은 transaction에서 안전한 URL을 저장하고, 기존 paid 주문의 동일 snapshot·결제 시각·기록된 transaction ID를 검증한 재조회에서도 보완한다. 누락·안전하지 않은 URL·불일치·조회 실패는 기존 영수증을 지우지 않는다. 기존 상태 머신·lock·version·외부 I/O와 구매 권한 경계는 유지한다. 실제 외부 거래 일괄 조회는 하지 않으며 [구매 내역 구현·회귀 검증](./IMPLEMENTATION_PURCHASE_HISTORY.md)에 결과를 기록한다.
