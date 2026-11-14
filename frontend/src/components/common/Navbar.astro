@@ -1,37 +1,15 @@
 ---
+import AccountMenuEntry from './AccountMenuEntry.astro';
+const navLinkClass = 'inline-flex min-h-11 items-center justify-center rounded-control px-3 text-sm font-medium text-ink hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink';
 ---
 
 <header class="border-b border-line bg-paper" transition:persist>
-  <nav class="max-w-[1140px] mx-auto px-5 sm:px-6 h-14 flex items-center justify-between">
+  <nav aria-label="주 메뉴" class="max-w-[1140px] mx-auto px-5 sm:px-6 h-14 flex items-center justify-between">
     <a href="/" class="font-semibold text-base text-ink tracking-tight">도군</a>
-    <div class="flex items-center gap-3 sm:gap-6">
-      <a href="/works" class="text-sm font-medium text-ink tracking-wider hover:underline underline-offset-4">작품</a>
-      <a href="/commission" class="text-sm font-medium text-ink tracking-wider hover:underline underline-offset-4">커미션</a>
-      <a id="nav-user" href="/auth/login" class="text-sm font-medium text-ink tracking-wider hover:underline underline-offset-4">로그인</a>
+    <div class="flex items-center gap-1 sm:gap-2">
+      <a href="/works" class={navLinkClass}>작품</a>
+      <a href="/commission" class={navLinkClass}>커미션</a>
+      <AccountMenuEntry />
     </div>
   </nav>
-  <script is:inline>
-    // 페인트 전 동기 실행: login_hint 쿠키(비-HttpOnly 표시용)를 읽어 네비 라벨을 미리 보정한다.
-    // React 섬(하이드레이션 1틱)·getMe 왕복을 안 쓰므로 첫 프레임부터 닉네임이 보인다(레이아웃 시프트 0).
-    // 표시 전용 - 진짜 인증은 HttpOnly JWT가 담당. 라벨 출처는 리프레시 수명과 함께 가는 힌트 쿠키.
-    (function () {
-      const prefix = 'login_hint=';
-      const entry = document.cookie.split('; ').find(function (c) {
-        return c.indexOf(prefix) === 0;
-      });
-      if (!entry) return;
-      let name;
-      try {
-        name = decodeURIComponent(entry.slice(prefix.length));
-      } catch {
-        return;
-      }
-      if (!name) return;
-      const el = document.getElementById('nav-user');
-      if (el) {
-        el.textContent = name;
-        el.setAttribute('href', '/my');
-      }
-    })();
-  </script>
 </header>
