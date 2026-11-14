@@ -70,6 +70,8 @@ async def test_snapshot_private_link_read_only(
         "id",
         "payment_id",
         "item_title",
+        "work_title",
+        "thumbnail_url",
         "order_name",
         "amount",
         "currency",
@@ -82,6 +84,7 @@ async def test_snapshot_private_link_read_only(
         "viewer_path",
     }
     assert item["item_title"] == "구매 당시"
+    assert item["work_title"] == work.title
     assert item["amount"] == 500
     assert item["viewer_path"] == f"/works/{work.id}/{ep.public_id}"
     assert item["receipt_url"] == order.receipt_url
@@ -125,6 +128,64 @@ async def test_retained_unavailable(async_client, db_session, user, case):
     assert response.json()["items"][0]["viewer_path"] is None
     assert response.json()["items"][0]["status"] == status
     assert response.json()["items"][0]["refund_amount"] == purchase.refund_amount
+
+
+@pytest.mark.parametrize("asset", ["thumbnail", "cover", "none"])
+async def test_private_purchase_public_thumbnail(
+    async_client, db_session, user, monkeypatch, asset
+):
+    monkeypatch.setattr(settings, "public_asset_base_url", "https://assets.example")
+    work_updated = datetime(2026, 8, 1, tzinfo=UTC)
+    episode_updated = datetime(2026, 8, 2, tzinfo=UTC)
+    cover = "works/private/cover.webp" if asset != "none" else None
+    original = "private/manuscript-page.webp"
+    work = await make_work(
+        db_session,
+        user,
+        title="비공개 구매 작품",
+        is_published=False,
+        cover_image=cover,
+        updated_at=work_updated,
+    )
+    ep = await make_episode(
+        db_session,
+        work,
+        is_published=False,
+        thumbnail=original if asset == "thumbnail" else None,
+        image_keys=[original],
+        content=doc(PAYWALL, para("비공개 본문")),
+        updated_at=episode_updated,
+    )
+    await make_purchase(db_session, user, ep)
+    login(async_client, user.id)
+    response = await async_client.get("/my/purchases")
+    no_store(response, 200)
+    item = response.json()["items"][0]
+    assert item["work_title"] == "비공개 구매 작품"
+    expected_key = r2_service.episode_thumb_key(work.id, ep.id) if asset == "thumbnail" else cover
+    version = episode_updated if asset == "thumbnail" else work_updated
+    assert item["thumbnail_url"] == r2_service.public_url(expected_key, version=version)
+    assert original not in response.text
+
+
+@pytest.mark.parametrize("deleted", ["episode", "work"])
+async def test_deleted_purchase_has_no_thumbnail(
+    async_client, db_session, user, monkeypatch, deleted
+):
+    monkeypatch.setattr(settings, "public_asset_base_url", "https://assets.example")
+    work = await make_work(db_session, user, cover_image="works/cover.webp")
+    ep = await make_episode(db_session, work, thumbnail="private/original.webp")
+    await make_purchase(db_session, user, ep)
+    target = ep if deleted == "episode" else work
+    target.deleted_at = datetime.now(UTC)
+    db_session.add(target)
+    await db_session.commit()
+    login(async_client, user.id)
+    response = await async_client.get("/my/purchases")
+    no_store(response, 200)
+    item = response.json()["items"][0]
+    assert item["thumbnail_url"] is None
+    assert item["viewer_path"] is None
 
 
 async def test_pagination_environment(async_client, db_session, user, monkeypatch):
