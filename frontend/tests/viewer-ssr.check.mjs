@@ -170,6 +170,25 @@ test('뷰어 SSR의 공개 캐시·메타 없는 진입 셸·장애 구분', { t
       assert.ok(!html.includes('FAKE_BROWSER_COOKIE'));
     });
 
+    await t.test('구매 내역은 쿠키와 query에 관계없이 개인 정보 없는 no-store 셸이다', async () => {
+      const before = requests.length;
+      for (const cookie of [undefined, 'login_hint=PRIVATE_READER; access_token=FAKE_BROWSER_COOKIE']) {
+        const response = await fetch(`${siteUrl}/my/purchases?page=2&paymentId=PRIVATE_ORDER`, {
+          headers: cookie ? { Cookie: cookie } : {},
+        });
+        const html = await response.text();
+        assert.equal(response.status, 200);
+        assert.equal(response.headers.get('cache-control'), 'no-store');
+        assert.equal(response.headers.get('referrer-policy'), 'no-referrer');
+        assert.equal(response.headers.get('x-robots-tag'), 'noindex');
+        assert.ok(html.includes('구매 내역'));
+        for (const secret of ['PRIVATE_READER', 'FAKE_BROWSER_COOKIE', 'PRIVATE_ORDER']) {
+          assert.ok(!html.includes(secret));
+        }
+      }
+      assert.equal(requests.length, before, 'SSR에서 계정·구매 목록 API를 조회하지 않는다');
+    });
+
     assert.equal(requests.length, 6);
     assert.ok(requests.every((req) => !req.cookie));
     assert.ok(requests.every((req) => /^\/works\/[^/]+$/.test(req.url)));
