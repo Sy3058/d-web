@@ -56,6 +56,14 @@
 - Vite+React SPA 단독: SEO 약해서 검색 유입 불가
 - SvelteKit/React Router v7: 한국 자료/결제 가이드 부족
 
+### 공통 UI 참고 기준: shadcn/ui Base UI
+
+**2026-11-13 사용자 합의**
+- 페이지네이션, 드롭다운을 비롯한 공통 UI 요소는 shadcn/ui의 공식 Base UI 예제를 우선 참고한다.
+- 사이트의 기존 색상, 타이포그래피와 디자인 토큰에 맞춰 적용한다. 현재 직접 구현한 요소가 모두 shadcn/ui 기반으로 전환된 상태는 아니다.
+- 페이지네이션: https://ui.shadcn.com/docs/components/base/pagination
+- 드롭다운: https://ui.shadcn.com/docs/components/base/dropdown-menu
+
 ### Vite 버전: 8로 workspace 통일, Astro 7 migration 완료
 
 **현재 상태 (2026-08-24)**
@@ -426,9 +434,15 @@ bcrypt( base64( hmac_sha384(password, key=PASSWORD_PEPPER) ), gensalt(cost=12) )
 - **제약: pre-hash pepper는 로테이션 불가** - 교체하려면 원문 비번이 필요해 전 유저 비번 재설정 강제. (토큰 pepper는 post-hash라 재-HMAC으로 로테이션 가능)
 - 상세 원리: study `secret-hashing`, 계획: `docs/milestones/M1_foundation.md` B1.
 
-### 네비 로그인 표시: 비-HttpOnly 힌트 쿠키 + pre-paint 인라인 스크립트 (2026-06-21 확정)
+### 네비 로그인 표시: 비-HttpOnly 힌트 쿠키 (2026-06-21 확정, 2026-11-14 표시 방식 보완)
 
-**결정: 인증 쿠키와 나란히 표시 전용 `login_hint`(비-HttpOnly) 쿠키를 발급하고, 네비 라벨을 React 섬이 아니라 정적 `<a>` + 페인트 전 동기 인라인 스크립트로 채워, 로그인/닉네임을 네트워크 왕복·깜빡임 없이(0프레임) 그린다.**
+**현재 결정 (2026-11-14): 표시 전용 `login_hint` 쿠키를 유지하고 일반 메뉴와 뷰어에서 공통 React `AccountMenu`를 사용한다. shadcn/ui Base UI 예제를 참고해 `@base-ui/react` Menu의 포털·키보드·포커스 처리를 사용한다. 닉네임 드롭다운에는 마이페이지·구매내역·설정·로그아웃을 둔다. 메뉴 링크는 밑줄 대신 회색 `bg-hover`와 둥근 버튼 스타일로 통일한다.**
+
+2026-11-13의 `client:load` 전환에서 pre-paint 보정을 제거해 로그인 라벨이 닉네임으로 바뀌는 깜빡임이 재발했다. 2026-11-14에는 일반 메뉴를 `AccountMenuEntry.astro`의 `client:only="react"` 경계로 감싸고, 마운트 전 Astro fallback 링크만 인라인 스크립트로 보정한다. React 메뉴는 `useLayoutEffect`에서 힌트를 읽어 페인트 전에 닉네임을 반영한다. React가 소유한 DOM을 외부 스크립트로 수정하지 않으며 서버 HTML에는 개인 닉네임을 넣지 않는다. 뷰어는 기존 client-only 경계 안에서 같은 메뉴를 사용한다. 포커스 복귀와 뷰어 표시 변경 때도 갱신한다.
+
+힌트는 표시용이며 인증·인가와 공유 SSR 캐시에는 사용하지 않는다. 사이트 전체 React SPA 전환이나 회차 상태 초기화를 위한 전체 이동 제거는 하지 않는다. 구매 내역의 마이페이지 링크와 마이페이지의 구매·설정·로그아웃 중복 진입은 제거하고 `/my/settings`로 기존 알림 준비 안내를 옮긴다. 닉네임에 `title` 툴팁을 붙이지 않고 접근성 이름은 유지한다. 로그아웃·실제 삭제처럼 주의가 필요한 동작은 빨간 글씨로 표시한다.
+
+아래는 2026-06-21 결정 당시 근거다. 쿠키 계약과 pre-paint 목적은 유지하고 구현 경계는 위 결정으로 대체한다.
 
 - **문제**: 네비 라벨은 SSG라 빌드 HTML에 로그인 상태가 없다. `getMe()` 왕복으로 채우면 콜드 로드마다 "빈 칸 → 닉네임" 깜빡임이 보인다.
 - **라벨 출처 = 리프레시 수명**: `getMe` 401은 access(15분) 만료일 수 있어 로그아웃과 구분되지 않는다 → 라벨 gate에 못 쓴다. 라벨은 리프레시 토큰 수명(7일)과 함께 가는 힌트 쿠키가 출처여야 한다.
@@ -524,6 +538,7 @@ bcrypt( base64( hmac_sha384(password, key=PASSWORD_PEPPER) ), gensalt(cost=12) )
 - 첫 전문 자동 발급과 owner 환불 승인은 같은 `purchases` 행의 조건부 UPDATE로 한쪽만 성공시킨다. 테스트 환불 창은 `paid_at + 168시간` 미만이며 실결제 기간·동의·문구는 M7 법무 gate에서 확정한다. 포스타입의 구매 후 이어보기와 네이버웹툰의 `결제 후 작품 바로 보기`는 후속 버튼이 필수가 아님을 보여주는 UX 참고 사례일 뿐, 각 플랫폼의 환불 정책을 그대로 복사하지 않는다.
 - **2026-09-22 환불 보강**: processing 미확정 재생은 168시간 경과만으로 포기하지 않고 시도 번호·key·body와 권한 잠금을 유지한다. action_required 재시작만 이전 취소의 최종 실패·payment PAID·발송 token 해제와 168시간 미만·미발급·active를 재확인해 request·purchase·order CAS, `cancel_attempt_no` 증가와 새 key·발급 시각을 같은 transaction에 commit한다. body는 유지한다. 발송 token은 POST 자체를 선점하고 token·시도 번호·key는 응답 적용을 제한한다. 자격 상실(first_viewed_at 기록 또는 168시간 경과) 확정은 rejected와 사유·notification pending을 commit한 뒤 409를 반환하며 취소 호출은 하지 않는다. reject는 취소 시도 전 pending, 또는 이전 취소 최종 실패·paid/active·자격 상실이 모두 확정된 action_required에만 허용한다. 자격이 남으면 같은 요청을 retry한다.
 - `episodes.sales_paused_at`은 신규 판매만 막고 기존 구매 열람은 유지한다. 일반 비공개도 카탈로그·신규 intent만 닫고 기존 구매의 direct viewer full은 유지한다. route를 없애는 soft delete는 미종결 구매가 있으면 409로 거부하고, 긴급 법적 차단은 환불·고객 고지 SOP와 함께 M7에서 확정한다.
+- **2026-11-13 후속 정책 변경 합의, 구현 보류**: 구매자가 있어도 작가의 삭제를 허용하되 구매자용 원고·이미지는 보존하고, 구매자에게 삭제 안내와 소장본 열람 경로를 제공하는 방향으로 바꾼다. 목록 숨기기는 결제 기록·열람 권한과 분리한다. 사용자가 현재 FE 브랜치에서는 구매 카드와 열람 오류만 마무리하도록 범위를 한정했으므로, 해당 보존·권한·자금 경합·이미지 정리 검증이 끝날 때까지 위 기존 409와 삭제 콘텐츠 차단 구현을 유지한다. [후속 할 일](milestones/M3_foundation.md#구매-내역계정-후속-합의-2026-11-13-구현-보류)을 따른다.
 - 구매 sync와 판매 중지·비공개·soft delete는 Work→Episode→Order→Purchase의 공통 lock 순서로 단일 승자를 정한다. 구매 commit이 먼저면 판매 중지·일반 비공개 뒤에도 full이고 soft delete는 409다. 판매 중지·비공개·삭제 commit이 먼저면 열린 주문을 만료시키고 늦은 외부 `PAID`는 purchase 없이 전액 보상한다. 결제 성공인데 비공개 때문에 열람만 실패하는 상태는 금지한다.
 
 **결정 5: optional content 전에 refresh 수명의 세션 힌트로 access를 복구한다.**
