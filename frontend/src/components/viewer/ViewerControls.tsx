@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import AccountMenu from '../common/AccountMenu';
 
 export interface ViewerEpisodeLink {
   publicId: number;
@@ -82,6 +83,7 @@ export default function ViewerControls({
   nextEpisode,
 }: Props) {
   const [shareStatus, setShareStatus] = useState<ShareStatus>('idle');
+
   const episodeDisplayTitle = episodeSubtitle
     ? `${episodeTitle} · ${episodeSubtitle}`
     : episodeTitle;
@@ -166,6 +168,7 @@ export default function ViewerControls({
           >
             목록
           </a>
+          <AccountMenu compact visible={visible} />
         </div>
         <p className="sr-only" role="status" aria-live="polite">
           {shareMessage}

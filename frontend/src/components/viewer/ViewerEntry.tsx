@@ -86,7 +86,7 @@ function ViewerEntryRequest({ workId, publicId }: Props) {
         {previous ? (
           <a
             href={`/works/${bootstrap.work_id}/${previous.public_id}`}
-            className="text-ink hover:underline truncate max-w-[45%]"
+            className="min-h-[44px] rounded-control px-3 py-3 text-ink hover:bg-hover truncate max-w-[45%]"
             title={previous.title}
             data-astro-reload
           >
@@ -96,7 +96,7 @@ function ViewerEntryRequest({ workId, publicId }: Props) {
         {next ? (
           <a
             href={`/works/${bootstrap.work_id}/${next.public_id}`}
-            className="text-ink hover:underline truncate max-w-[45%]"
+            className="min-h-[44px] rounded-control px-3 py-3 text-ink hover:bg-hover truncate max-w-[45%]"
             title={next.title}
             data-astro-reload
           >

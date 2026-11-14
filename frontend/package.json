@@ -17,6 +17,7 @@
   "dependencies": {
     "@astrojs/node": "^11.1.4",
     "@astrojs/react": "^6.0.4",
+    "@base-ui/react": "1.9.0",
     "@d-web/shared": "workspace:*",
     "@hookform/resolvers": "^5.4.0",
     "@portone/browser-sdk": "0.1.13",

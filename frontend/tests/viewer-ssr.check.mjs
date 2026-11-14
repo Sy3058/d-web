@@ -5,6 +5,7 @@ import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
+import { JSDOM } from 'jsdom';
 
 const frontendDir = fileURLToPath(new URL('../', import.meta.url));
 const entry = fileURLToPath(new URL('../dist/server/entry.mjs', import.meta.url));
@@ -24,7 +25,17 @@ test('뷰어 SSR의 공개 캐시·메타 없는 진입 셸·장애 구분', { t
   const api = createServer((req, res) => {
     requests.push({ url: req.url, cookie: req.headers.cookie });
     res.setHeader('Content-Type', 'application/json');
-    if (req.url === `/works/${ids[1]}`) {
+    if (req.url === '/auth/refresh') {
+      res.writeHead(401).end('{}');
+    } else if (req.url === '/auth/me') {
+      if (req.headers.cookie?.includes('access_token=VALID_ACCOUNT')) {
+        res.end(JSON.stringify({ nickname: 'PRIVATE_ACCOUNT', email: 'private@example.com' }));
+      } else if (req.headers.cookie?.includes('access_token=TEMP_ERROR')) {
+        res.writeHead(503).end('{}');
+      } else {
+        res.writeHead(401).end('{}');
+      }
+    } else if (req.url === `/works/${ids[1]}`) {
       res.writeHead(404).end(JSON.stringify({ detail: 'PRIVATE_METADATA_MUST_NOT_LEAK' }));
     } else if (req.url === `/works/${ids[3]}`) {
       res.writeHead(503).end('{}');
@@ -170,9 +181,73 @@ test('뷰어 SSR의 공개 캐시·메타 없는 진입 셸·장애 구분', { t
       assert.ok(!html.includes('FAKE_BROWSER_COOKIE'));
     });
 
+    await t.test('구매 내역은 쿠키와 query에 관계없이 개인 정보 없는 no-store 셸이다', async () => {
+      const before = requests.length;
+      for (const cookie of [undefined, 'login_hint=PRIVATE_READER; access_token=FAKE_BROWSER_COOKIE']) {
+        const response = await fetch(`${siteUrl}/my/purchases?page=2&paymentId=PRIVATE_ORDER`, {
+          headers: cookie ? { Cookie: cookie } : {},
+        });
+        const html = await response.text();
+        assert.equal(response.status, 200);
+        assert.equal(response.headers.get('cache-control'), 'no-store');
+        assert.equal(response.headers.get('referrer-policy'), 'no-referrer');
+        assert.equal(response.headers.get('x-robots-tag'), 'noindex');
+        assert.ok(html.includes('구매 내역'));
+        for (const secret of ['PRIVATE_READER', 'FAKE_BROWSER_COOKIE', 'PRIVATE_ORDER']) {
+          assert.ok(!html.includes(secret));
+        }
+      }
+      assert.equal(requests.length, before, 'SSR에서 계정·구매 목록 API를 조회하지 않는다');
+    });
+
     assert.equal(requests.length, 6);
     assert.ok(requests.every((req) => !req.cookie));
     assert.ok(requests.every((req) => /^\/works\/[^/]+$/.test(req.url)));
+
+    await t.test('공유 메뉴 셸은 마운트 전 fallback만 닉네임으로 보정하고 HTML을 삽입하지 않는다', async () => {
+      const response = await fetch(`${siteUrl}/my/purchases`);
+      const html = await response.text();
+      const nickname = '독자 <img src=x onerror=alert(1)>';
+      for (const hint of ['', encodeURIComponent(nickname), '%E0%A4']) {
+        const dom = new JSDOM(html, { url: siteUrl, runScripts: 'outside-only' });
+        try {
+          dom.window.document.cookie = `login_hint=${hint}; Path=/`;
+          const script = dom.window.document.querySelector('script[data-account-bootstrap]');
+          assert.ok(script, '서버 셸에 페인트 전 fallback 보정이 포함된다');
+          dom.window.eval(script.textContent);
+          const link = dom.window.document.querySelector('[data-account-placeholder]');
+          assert.ok(link);
+          assert.equal(link.textContent.trim(), hint === encodeURIComponent(nickname) ? nickname : '로그인');
+          assert.equal(link.getAttribute('href'), hint === encodeURIComponent(nickname) ? '/my' : '/auth/login');
+          assert.equal(link.querySelector('img'), null);
+          assert.equal(link.hasAttribute('title'), false);
+        } finally {
+          dom.window.close();
+        }
+      }
+      assert.ok(!html.includes(nickname));
+    });
+
+    await t.test('설정은 인증 후 접근하고 no-store이며 계정 API 장애는 오류로 표시한다', async () => {
+      const guest = await fetch(`${siteUrl}/my/settings`, { redirect: 'manual' });
+      assert.equal(guest.status, 302);
+      assert.equal(guest.headers.get('location'), '/auth/login');
+      for (const token of ['VALID_ACCOUNT', 'TEMP_ERROR']) {
+        const response = await fetch(`${siteUrl}/my/settings`, {
+          headers: { Cookie: `access_token=${token}` },
+        });
+        const html = await response.text();
+        assert.equal(response.status, 200);
+        assert.equal(response.headers.get('cache-control'), 'no-store');
+        assert.equal(response.headers.get('x-robots-tag'), 'noindex');
+        assert.ok(html.includes(token === 'VALID_ACCOUNT' ? '알림 설정 기능은 준비 중' : '일시적인 오류'));
+        assert.ok(!html.includes('PRIVATE_ACCOUNT'));
+        assert.ok(!html.includes('private@example.com'));
+      }
+      const authRequests = requests.filter((req) => req.url === '/auth/me');
+      assert.equal(authRequests.length, 3);
+      assert.equal(authRequests[1].cookie, 'access_token=VALID_ACCOUNT');
+    });
   } finally {
     if (site && site.exitCode === null && site.signalCode === null) {
       const exit = once(site, 'exit');

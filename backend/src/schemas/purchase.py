@@ -10,6 +10,8 @@ class PurchaseHistoryItem(BaseModel):
     id: uuid.UUID
     payment_id: str
     item_title: str
+    work_title: str | None = None
+    thumbnail_url: str | None = None
     order_name: str
     amount: int
     currency: str

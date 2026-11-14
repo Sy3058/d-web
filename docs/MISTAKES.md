@@ -128,6 +128,12 @@ docs/MISTAKES.md 참고해서 FastAPI 라우터 작성해줘
 
 ## Vite / Astro
 
+- **로그인 메뉴를 React로 바꾸며 pre-paint 계약을 제거하면 로그인 라벨 깜빡임이 재발한다** (2026-11-14)
+  -> `client:load`의 공통 로그인 SSR과 `useEffect` 닉네임 갱신 사이가 그대로 페인트됐다. 일반 메뉴는 `client:only`의 Astro fallback만 인라인 스크립트로 보정하고 React 메뉴는 layout effect로 페인트 전에 힌트를 반영한다. 공유 서버 HTML에 개인 닉네임을 넣거나 React 소유 DOM을 인라인 스크립트로 바꾸지 않는다. production SSR 셸의 실제 보정 스크립트와 한글·잘못된 인코딩·HTML 형태 닉네임을 DOM 단위 검증한다.
+
+- **같은 프로젝트의 데모·일반 config가 Vite 최적화 캐시를 공유하면 열린 브라우저가 이전 청크를 요청할 수 있다** (2026-11-13 구매내역 사용자 확인)
+  → 별도 모의 결제 SDK alias config로 빌드한 뒤 일반 개발 서버에서 TipTap 의존성 요청이 `504 (Outdated Optimize Dep)`로 실패했다. config 전환에 따른 재최적화 로그를 확인했다. 개발 서버를 정상 종료하고 기존 `frontend/node_modules/.vite`를 백업한 뒤 재시작했으며, 변환된 뷰어 모듈이 실제 참조하는 최신 TipTap 파일 URL의 200을 확인했다. 브라우저의 이전 URL은 강력 새로고침으로 교체한다. 임시 config에는 별도 `vite.cacheDir`을 지정해 일반 dev 캐시와 분리했다. 메타데이터의 전역 hash를 임의로 붙이지 말고 실제 변환 모듈에 출력된 의존성 URL로 확인한다. [Vite cacheDir](https://vite.dev/config/shared-options.html#cachedir).
+
 - **SSR 컨테이너와 브라우저에 같은 API base URL을 쓰면 `localhost`의 주체가 달라진다** (M2 G, 2026-08-13)
   -> 브라우저의 `http://localhost:8000`은 호스트에 바인딩된 API를 가리키지만, frontend 컨테이너의 같은 주소는 frontend 자신을 가리킨다. Astro 페이지를 SSR로 전환하면 정적 빌드에서 숨어 있던 이 차이가 런타임 장애로 드러난다.
   -> 브라우저용 `PUBLIC_API_URL`과 SSR용 `API_INTERNAL_URL`을 분리하고, Node standalone은 `process.env.API_INTERNAL_URL`, compose는 `http://api:8000`을 주입한다. 정적 자산 healthcheck만으로는 이 장애를 못 잡으므로 분기 단위 테스트와 서버/클라이언트 산출물 grep으로 내부 주소 노출·제거 여부를 검증한다.

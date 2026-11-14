@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import { renderToString } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ViewerControls from './ViewerControls';
 
@@ -18,6 +19,7 @@ const props = {
 };
 
 beforeEach(() => {
+  document.cookie = 'login_hint=; Max-Age=0; Path=/';
   (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean })
     .IS_REACT_ACT_ENVIRONMENT = true;
   container = document.createElement('div');
@@ -30,6 +32,7 @@ afterEach(async () => {
   container.remove();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  document.cookie = 'login_hint=; Max-Age=0; Path=/';
 });
 
 describe('ViewerControls', () => {
@@ -58,7 +61,41 @@ describe('ViewerControls', () => {
     expect(container.querySelector('a[aria-label="다음 화: 다음 회차"]')?.getAttribute('href')).toBe(
       '/works/work-a/10000003',
     );
-    expect(container.querySelectorAll('a[data-astro-reload]')).toHaveLength(2);
+    expect(container.querySelectorAll('nav a[data-astro-reload]')).toHaveLength(2);
+  });
+
+  it('비로그인 독자에게 로그인 화면으로 이동하는 링크를 제공한다', async () => {
+    await act(async () => root.render(<ViewerControls {...props} />));
+
+    const account = container.querySelector('a[aria-label="로그인 화면으로 이동"]');
+    expect(account?.getAttribute('href')).toBe('/auth/login');
+    expect(account?.textContent).toBe('로그인');
+    expect(account?.className).toContain('min-h-11');
+    expect(account?.hasAttribute('data-astro-reload')).toBe(true);
+  });
+
+  it('마운트 뒤 로그인 힌트의 닉네임을 표시하고 포커스 때 갱신한다', async () => {
+    document.cookie = `login_hint=${encodeURIComponent('독자 닉네임')}; Path=/`;
+    await act(async () => root.render(<ViewerControls {...props} />));
+
+    const account = container.querySelector('button[aria-label="독자 닉네임 계정 메뉴"]');
+    expect(account?.hasAttribute('title')).toBe(false);
+    expect(account?.textContent).toBe('독자 닉네임');
+
+    document.cookie = 'login_hint=; Max-Age=0; Path=/';
+    await act(async () => window.dispatchEvent(new Event('focus')));
+    expect(container.querySelector('a[href="/auth/login"]')?.textContent).toBe('로그인');
+  });
+
+  it('SSR은 쿠키를 읽지 않고 로그인 링크를 렌더한다', () => {
+    document.cookie = 'login_hint=reader; Path=/';
+    const cookie = vi.spyOn(document, 'cookie', 'get');
+
+    const html = renderToString(<ViewerControls {...props} />);
+
+    expect(cookie).not.toHaveBeenCalled();
+    expect(html).toContain('href="/auth/login"');
+    expect(html).not.toContain('href="/my"');
   });
 
   it('첫 화와 마지막 화의 없는 방향을 비활성 접근성 상태로 표시한다', async () => {

@@ -9,6 +9,7 @@ from src.lib.payment_receipt import safe_receipt_url
 from src.models.payment import PaymentOrder, Purchase, PurchaseStatus
 from src.models.work import Episode, Work
 from src.schemas.purchase import PurchaseHistoryItem, PurchaseHistoryRead
+from src.services import r2_service
 from src.services.episode_access_service import (
     EpisodeAccessScope,
     episode_access_columns,
@@ -41,7 +42,12 @@ async def get_purchase_history(
                 Episode.id.label("episode_id"),
                 Episode.public_id,
                 Episode.deleted_at.label("episode_deleted_at"),
+                Episode.thumbnail.label("episode_thumbnail"),
+                Episode.updated_at.label("episode_updated_at"),
                 Work.id.label("work_id"),
+                Work.title.label("work_title"),
+                Work.cover_image.label("work_cover_image"),
+                Work.updated_at.label("work_updated_at"),
                 Work.deleted_at.label("work_deleted_at"),
                 *episode_access_columns(user_id),
             )
@@ -58,6 +64,22 @@ async def get_purchase_history(
     items = []
     for row in rows:
         viewer_path = None
+        thumbnail_url = None
+        if (
+            row.episode_id is not None
+            and row.work_id is not None
+            and row.episode_deleted_at is None
+            and row.work_deleted_at is None
+        ):
+            if row.episode_thumbnail is not None:
+                thumbnail_url = r2_service.public_url(
+                    r2_service.episode_thumb_key(row.work_id, row.episode_id),
+                    version=row.episode_updated_at,
+                )
+            else:
+                thumbnail_url = r2_service.public_url(
+                    row.work_cover_image, version=row.work_updated_at
+                )
         if (
             row.status == PurchaseStatus.ACTIVE
             and row.episode_id is not None
@@ -80,10 +102,11 @@ async def get_purchase_history(
                 **{
                     key: row._mapping[key]
                     for key in PurchaseHistoryItem.model_fields
-                    if key not in {"receipt_url", "viewer_path"}
+                    if key not in {"receipt_url", "viewer_path", "thumbnail_url"}
                 },
                 receipt_url=safe_receipt_url(row.receipt_url),
                 viewer_path=viewer_path,
+                thumbnail_url=thumbnail_url,
             )
         )
     return PurchaseHistoryRead(items=items, total=total, page=page)

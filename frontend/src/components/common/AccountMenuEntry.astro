@@ -1,0 +1,39 @@
+---
+import AccountMenu from './AccountMenu';
+---
+
+<AccountMenu client:only="react">
+  <a
+    slot="fallback"
+    data-account-placeholder
+    href="/auth/login"
+    aria-label="로그인 화면으로 이동"
+    data-astro-reload
+    class="inline-flex min-h-11 min-w-11 max-w-[25vw] shrink-0 items-center justify-center rounded-control px-2 text-sm font-medium text-ink hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+  >
+    <span class="truncate">로그인</span>
+  </a>
+</AccountMenu>
+<script is:inline data-account-bootstrap>
+  // React 소유 DOM 대신 마운트 전에 제거되는 Astro fallback만 보정한다.
+  (function () {
+    const prefix = 'login_hint=';
+    const entry = document.cookie.split(';').map(function (value) {
+      return value.trim();
+    }).find(function (value) {
+      return value.indexOf(prefix) === 0;
+    });
+    let nickname = '';
+    try {
+      nickname = entry ? decodeURIComponent(entry.slice(prefix.length)) : '';
+    } catch {
+      return;
+    }
+    if (!nickname) return;
+    document.querySelectorAll('[data-account-placeholder]').forEach(function (link) {
+      link.querySelector('span').textContent = nickname;
+      link.setAttribute('href', '/my');
+      link.setAttribute('aria-label', nickname + ' 계정 메뉴');
+    });
+  })();
+</script>

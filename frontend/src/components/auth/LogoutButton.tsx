@@ -22,7 +22,7 @@ export default function LogoutButton() {
       type="button"
       onClick={handleLogout}
       disabled={loading}
-      className="text-sm text-muted underline underline-offset-4 hover:text-ink disabled:opacity-50"
+      className="min-h-[44px] rounded-control px-3 py-2 text-sm text-danger hover:bg-hover disabled:opacity-50"
     >
       {loading ? '처리 중...' : '로그아웃'}
     </button>

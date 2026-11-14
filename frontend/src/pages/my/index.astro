@@ -1,8 +1,10 @@
 ---
 export const prerender = false;
 import BaseLayout from '../../layouts/BaseLayout.astro';
-import LogoutButton from '../../components/auth/LogoutButton';
 import { getMe, type User } from '../../lib/auth';
+
+Astro.response.headers.set('Cache-Control', 'no-store');
+Astro.response.headers.set('X-Robots-Tag', 'noindex');
 
 const cookie = Astro.request.headers.get('cookie') ?? undefined;
 
@@ -57,18 +59,6 @@ if (!loadError && !user) {
             </div>
           </dl>
         </section>
-
-        <section class="rounded-control border border-line p-6 mb-6">
-          <h2 class="text-sm font-medium tracking-wide text-muted uppercase mb-2">구매 내역</h2>
-          <p class="text-sm text-muted">구매 내역 기능은 준비 중이에요.</p>
-        </section>
-
-        <section class="rounded-control border border-line p-6 mb-8">
-          <h2 class="text-sm font-medium tracking-wide text-muted uppercase mb-2">알림 설정</h2>
-          <p class="text-sm text-muted">알림 설정 기능은 준비 중이에요.</p>
-        </section>
-
-        <LogoutButton client:load />
       </>
     )}
   </div>

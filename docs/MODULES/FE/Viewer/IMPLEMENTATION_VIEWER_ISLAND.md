@@ -245,6 +245,10 @@ PLAUSIBLE 4건(§6 표 참조 - stale 클로저·진행도 중간값 저장·rAF
 
 ### 이동과 공유
 
+2026-11-13 계정 이동 보완: 뷰어 상단 컨트롤에 계정 링크를 추가한다. 비로그인은 `로그인`으로 `/auth/login`, 로그인 표시 힌트가 있으면 URL 디코딩한 닉네임을 공통 `AccountMenu`의 트리거로 표시한다. 닉네임 드롭다운에서 마이페이지·구매내역·설정·로그아웃으로 이동하며 일반 Navbar도 같은 컴포넌트를 사용한다. 메뉴는 Base UI 포털로 렌더하고 뷰어 컨트롤을 숨기면 열린 메뉴도 닫는다. 힌트는 클라이언트의 layout effect에서 페인트 전 표시용으로만 읽고 권한 판정이나 SSR 개인 데이터에 사용하지 않는다. 계정 화면으로 나갈 때 `data-astro-reload`로 전체 이동해 뷰어 상태를 남기지 않는다. 긴 닉네임은 말줄임하고 접근성 이름으로 전체 닉네임을 제공하며 title 툴팁은 제거한다. 기존 스크롤 표시·숨김과 최소 44px 터치 영역을 유지한다.
+
+게스트·로그인 힌트·포커스 복귀 갱신·SSR 쿠키 미조회 회귀를 추가했고, Frontend lint·Astro check(error·warning 0, 기존 hint 1)·258 tests·production build를 통과했다. 기존 공유·인접 회차·스크롤 컨트롤 검증을 유지한다. 실제 브라우저·모바일 조작은 사용자 확인 대상이다.
+
 상단은 작품 상세, 작품·회차 제목과 부제, 공유, 작품 상세 `#episodes` 목록으로 연결하며 제목 옆 잠금 표시는 노출하지 않는다. 플로팅 하단과 본문 끝 제목형 nav는 공개 배열의 실제 인접 회차 링크를 쓰며 `data-astro-reload`를 유지한다. 첫·마지막 회차에서 플로팅 컨트롤의 없는 방향은 아이콘 위치를 유지한 disabled button과 `aria-disabled`로 표현한다.
 
 공유는 `navigator.share`가 있으면 제목과 현재 URL을 전달하고, 미지원 또는 취소 외 실패이면 `navigator.clipboard.writeText`로 폴백한다. 성공·복사·최종 실패는 `aria-live="polite"` status로 알린다. 사용자 취소는 오류로 표시하지 않는다.
@@ -256,3 +260,5 @@ PLAUSIBLE 4건(§6 표 참조 - stale 클로저·진행도 중간값 저장·rAF
 - `Viewer.test.tsx`: 상하단 동시 전환, 진행도 자동 복원 뒤 최초 visible, unmount listener·rAF 정리와 기존 진행도·paywall 회귀.
 - Frontend 전체 gate: lint 통과, Astro check 0 errors와 기존 무관 hint 1건, 13 files·132 tests 통과, build 성공. Sentry token·sourcemap 경고는 기존 baseline이다.
 - 사용자 브라우저 확인 완료(2026-08-20): 데스크톱·모바일에서 집중 모드 컨트롤과 본문 끝 회차 이동을 포함한 실기능이 정상 동작한다.
+
+2026-11-14 표시 보완: 본문 끝 이전·다음 회차 링크도 회색 배경 hover와 둥근 버튼·최소 44px 높이를 사용한다. 공통 계정 메뉴의 닉네임 툴팁을 제거하고 로그아웃은 빨간 글씨로 표시한다. 일반 Navbar는 React 바깥 Astro fallback의 pre-paint 보정과 메뉴의 layout effect를 조합해 초기 로그인 표시가 닉네임으로 바뀌는 회귀를 처리한다. 회차 이동의 `data-astro-reload`와 상태 초기화 경계는 유지한다.

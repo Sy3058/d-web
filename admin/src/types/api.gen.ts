@@ -1364,6 +1364,10 @@ export interface components {
             payment_id: string;
             /** Item Title */
             item_title: string;
+            /** Work Title */
+            work_title?: string | null;
+            /** Thumbnail Url */
+            thumbnail_url?: string | null;
             /** Order Name */
             order_name: string;
             /** Amount */
