@@ -31,25 +31,25 @@ function Dashboard() {
     <main className="flex min-h-screen flex-col items-center justify-center gap-4">
       <h1 className="text-2xl font-bold">관리자 페이지</h1>
       {user && <p className="text-gray-500">{user.nickname}님, 환영합니다.</p>}
-      <Link to="/works" className="text-blue-600 hover:underline">
+      <Link to="/works" className="admin-control admin-control-ghost">
         작품 관리
       </Link>
-      <Link to="/episodes/new" className="text-blue-600 hover:underline">
+      <Link to="/episodes/new" className="admin-control admin-control-ghost">
         새 에피소드
       </Link>
-      <Link to="/commission" className="text-blue-600 hover:underline">
+      <Link to="/commission" className="admin-control admin-control-ghost">
         커미션 관리
       </Link>
-      <Link to="/site-texts" className="text-blue-600 hover:underline">
+      <Link to="/site-texts" className="admin-control admin-control-ghost">
         사이트 문구 편집
       </Link>
-      <Link to="/artist-profile" className="text-blue-600 hover:underline">
+      <Link to="/artist-profile" className="admin-control admin-control-ghost">
         작가 프로필 수정
       </Link>
       <button
         onClick={handleLogout}
         disabled={logout.isPending}
-        className="rounded border border-gray-300 px-3 py-2 disabled:opacity-50"
+        className="admin-control admin-control-outline text-red-600"
       >
         {logout.isPending ? '로그아웃 중...' : '로그아웃'}
       </button>

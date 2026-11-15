@@ -26,14 +26,14 @@ function EpisodesPage() {
           <Link
             to="/works/$workId"
             params={{ workId }}
-            className="rounded-lg border border-gray-900 px-3 py-2 text-sm text-gray-900 hover:bg-gray-50"
+            className="admin-control admin-control-outline"
           >
             수정
           </Link>
           <Link
             to="/works/$workId/episodes/upload"
             params={{ workId }}
-            className="rounded-lg bg-gray-900 px-3 py-2 text-sm text-white"
+            className="admin-control admin-control-primary"
           >
             새 에피소드
           </Link>
@@ -47,7 +47,7 @@ function EpisodesPage() {
       <p className="mt-6">
         <Link
           to="/works"
-          className="text-sm text-gray-500 underline"
+          className="admin-control admin-control-ghost"
         >
           ← 작품 리스트로
         </Link>

@@ -19,11 +19,11 @@ function CommissionPage() {
         <div className="flex gap-2">
           <Link
             to="/site-texts"
-            className="rounded border border-gray-300 px-3 py-2 text-sm hover:bg-gray-50"
+            className="admin-control admin-control-outline"
           >
             사이트 문구 편집
           </Link>
-          <Link to="/commission/new" className="rounded bg-gray-900 px-3 py-2 text-white">
+          <Link to="/commission/new" className="admin-control admin-control-primary">
             + 카드 등록
           </Link>
         </div>
