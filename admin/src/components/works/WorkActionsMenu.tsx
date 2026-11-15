@@ -1,3 +1,4 @@
+import { Menu } from '@base-ui/react/menu';
 import { ACTION_ITEM_CLASS, ActionsMenu } from '../common/ActionsMenu';
 
 interface WorkActionsMenuProps {
@@ -11,8 +12,9 @@ export function WorkActionsMenu({ onEdit, onDelete, isDeleting }: WorkActionsMen
     <ActionsMenu label="작품 관리 메뉴">
       {(close) => (
         <>
-          <button
-            type="button"
+          <Menu.Item
+            render={<button type="button" />}
+            nativeButton
             onClick={() => {
               close();
               onEdit();
@@ -20,10 +22,11 @@ export function WorkActionsMenu({ onEdit, onDelete, isDeleting }: WorkActionsMen
             className={ACTION_ITEM_CLASS}
           >
             수정
-          </button>
+          </Menu.Item>
           {/* 요청이 끝나기 전에 다시 눌러 같은 작품에 DELETE를 중복 발사하지 않도록 잠근다. */}
-          <button
-            type="button"
+          <Menu.Item
+            render={<button type="button" />}
+            nativeButton
             disabled={isDeleting}
             onClick={() => {
               close();
@@ -32,7 +35,7 @@ export function WorkActionsMenu({ onEdit, onDelete, isDeleting }: WorkActionsMen
             className={`${ACTION_ITEM_CLASS} text-red-600`}
           >
             {isDeleting ? '삭제 중...' : '삭제'}
-          </button>
+          </Menu.Item>
         </>
       )}
     </ActionsMenu>

@@ -141,15 +141,15 @@ describe('EpisodeList 액션 메뉴 (#85)', () => {
       makeEpisode({ id: 'e1', is_published: true, published_at: '2026-07-01T00:00:00Z' }),
     ]);
     openMenu('1화');
-    expect(screen.getByRole('button', { name: '비공개로 전환' })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: '비공개로 전환' })).toBeInTheDocument();
   });
 
   it('이미 비공개인 회차에는 비공개 전환 항목이 뜨지 않는다', async () => {
     renderList([makeEpisode({ id: 'e1', is_published: false })]);
     openMenu('1화');
-    expect(screen.queryByRole('button', { name: '비공개로 전환' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: '비공개로 전환' })).not.toBeInTheDocument();
     // 삭제는 상태와 무관하게 항상 있어야 한다 - 메뉴 자체가 안 열린 걸 통과로 오인하지 않게.
-    expect(screen.getByRole('button', { name: '삭제' })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: '삭제' })).toBeInTheDocument();
   });
 
   it('비공개 전환은 is_published:false만 보낸다 (content 동봉 금지 - #86 409 회피)', async () => {
@@ -164,7 +164,7 @@ describe('EpisodeList 액션 메뉴 (#85)', () => {
     ]);
 
     openMenu('1화');
-    fireEvent.click(screen.getByRole('button', { name: '비공개로 전환' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: '비공개로 전환' }));
 
     await waitFor(() => expect(api.put).toHaveBeenCalledTimes(1));
     // 본문(content)이 한 글자라도 실리면 서버가 공개 회차 발행본 보호로 409를 낸다.
@@ -176,7 +176,7 @@ describe('EpisodeList 액션 메뉴 (#85)', () => {
     renderList([makeEpisode({ id: 'e1' })]);
 
     openMenu('1화');
-    fireEvent.click(screen.getByRole('button', { name: '삭제' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: '삭제' }));
 
     expect(confirmSpy).toHaveBeenCalled();
     expect(api.delete).not.toHaveBeenCalled();
@@ -188,7 +188,7 @@ describe('EpisodeList 액션 메뉴 (#85)', () => {
     renderList([makeEpisode({ id: 'e1', title: '3화 제목' })]);
 
     openMenu('3화 제목');
-    fireEvent.click(screen.getByRole('button', { name: '삭제' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: '삭제' }));
 
     // soft delete는 되돌릴 API가 없다 - 누르기 전에 알아야 한다(#85 결정).
     expect(confirmSpy.mock.calls[0][0]).toContain('되돌릴 수 없습니다');
@@ -207,26 +207,27 @@ describe('EpisodeList 액션 메뉴 (#85)', () => {
     ]);
 
     openMenu('1화');
-    fireEvent.click(screen.getByRole('button', { name: '삭제' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: '삭제' }));
 
     // 훅 옵저버는 가장 최근 mutate 하나만 추적한다 - 두 번째 발사를 허용하면 앞선 요청의
     // 실패 표시(isError)가 유실되고 잠금이 새 행으로 옮겨간다(#85 리뷰 실측). 그래서
     // 행 단위가 아니라 종류 단위로 잠근다. (1화 메뉴는 클릭 시 닫혔으니 아래는 2화 항목이다.)
     openMenu('2화');
-    await waitFor(() => expect(screen.getByRole('button', { name: '삭제' })).toBeDisabled());
+    await waitFor(() => expect(screen.getByRole('menuitem', { name: '삭제' })).toHaveAttribute('aria-disabled', 'true'));
+    fireEvent.click(screen.getByRole('menuitem', { name: '삭제' }));
+    expect(api.delete).toHaveBeenCalledTimes(1);
     // 종류가 다른 액션(비공개 전환)은 별개 훅 인스턴스라 간섭이 없어 잠그지 않는다.
-    expect(screen.getByRole('button', { name: '비공개로 전환' })).not.toBeDisabled();
+    expect(screen.getByRole('menuitem', { name: '비공개로 전환' })).not.toHaveAttribute('aria-disabled', 'true');
   });
 
   it('메뉴 바깥을 클릭하면 닫힌다', async () => {
     renderList([makeEpisode({ id: 'e1' })]);
     openMenu('1화');
-    expect(screen.getByRole('button', { name: '삭제' })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: '삭제' })).toBeInTheDocument();
 
-    // 컴포넌트는 click이 아니라 mousedown을 듣는다 - 항목을 누르는 도중(mousedown 시점)에
-    // 닫히면 click이 사라진 요소로 가서 액션이 발화하지 않기 때문.
+    // Base UI의 바깥 포인터 처리로 메뉴를 닫는다.
     fireEvent.mouseDown(document.body);
-    expect(screen.queryByRole('button', { name: '삭제' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: '삭제' })).not.toBeInTheDocument();
   });
 
   it('순서 이동: 인접 회차와 맞바꾼 **전량** 목록을 컬렉션 PUT으로 보낸다', async () => {

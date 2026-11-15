@@ -22,7 +22,7 @@ function SiteTextsPage() {
         <h1 className="text-2xl font-bold">사이트 문구 편집</h1>
         <Link
           to="/commission"
-          className="rounded border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50"
+          className="admin-control admin-control-outline"
         >
           커미션 관리로
         </Link>

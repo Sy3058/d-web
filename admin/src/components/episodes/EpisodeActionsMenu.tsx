@@ -1,3 +1,4 @@
+import { Menu } from '@base-ui/react/menu';
 import type { Episode } from '../../types';
 import { ACTION_ITEM_CLASS, ActionsMenu } from '../common/ActionsMenu';
 
@@ -33,8 +34,9 @@ export function EpisodeActionsMenu({
               published_at까지 NULL로 밀어버려서, 이 항목을 예약 취소 겸용으로 쓰면
               "내리기"와 "예약 취소"가 한 버튼에 섞인다(#85 - 예약 취소는 후속). */}
           {episode.is_published && (
-            <button
-              type="button"
+            <Menu.Item
+              render={<button type="button" />}
+              nativeButton
               disabled={unpublishLocked}
               onClick={() => {
                 close();
@@ -43,12 +45,13 @@ export function EpisodeActionsMenu({
               className={ACTION_ITEM_CLASS}
             >
               {isUnpublishing ? '내리는 중...' : '비공개로 전환'}
-            </button>
+            </Menu.Item>
           )}
           {/* 잠금은 행 단위가 아니라 종류 단위(deleteLocked) - 같은 회차 중복 발사만 막으면
               다른 행과의 동시 발사가 앞선 요청의 실패 표시를 유실시킨다(위 주석). */}
-          <button
-            type="button"
+          <Menu.Item
+            render={<button type="button" />}
+            nativeButton
             disabled={deleteLocked}
             onClick={() => {
               close();
@@ -57,7 +60,7 @@ export function EpisodeActionsMenu({
             className={`${ACTION_ITEM_CLASS} text-red-600`}
           >
             {isDeleting ? '삭제 중...' : '삭제'}
-          </button>
+          </Menu.Item>
         </>
       )}
     </ActionsMenu>

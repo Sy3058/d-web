@@ -12,7 +12,7 @@ function ArtistProfilePage() {
         <h1 className="text-2xl font-bold">작가 프로필 수정</h1>
         <Link
           to="/"
-          className="rounded border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50"
+          className="admin-control admin-control-outline"
         >
           관리자 홈으로
         </Link>

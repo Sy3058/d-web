@@ -41,7 +41,7 @@ function EditCommissionItemPage() {
         <button
           type="button"
           onClick={() => navigate({ to: '/commission' })}
-          className="rounded border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50"
+          className="admin-control admin-control-outline"
         >
           목록으로
         </button>

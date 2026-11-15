@@ -1,3 +1,4 @@
+import { Menu } from '@base-ui/react/menu';
 import { ACTION_ITEM_CLASS, ActionsMenu } from '../common/ActionsMenu';
 
 interface CommissionActionsMenuProps {
@@ -15,8 +16,9 @@ export function CommissionActionsMenu({
     <ActionsMenu label="커미션 카드 관리 메뉴">
       {(close) => (
         <>
-          <button
-            type="button"
+          <Menu.Item
+            render={<button type="button" />}
+            nativeButton
             onClick={() => {
               close();
               onEdit();
@@ -24,9 +26,10 @@ export function CommissionActionsMenu({
             className={ACTION_ITEM_CLASS}
           >
             수정
-          </button>
-          <button
-            type="button"
+          </Menu.Item>
+          <Menu.Item
+            render={<button type="button" />}
+            nativeButton
             disabled={isDeleting}
             onClick={() => {
               close();
@@ -35,7 +38,7 @@ export function CommissionActionsMenu({
             className={`${ACTION_ITEM_CLASS} text-red-600`}
           >
             {isDeleting ? '삭제 중...' : '삭제'}
-          </button>
+          </Menu.Item>
         </>
       )}
     </ActionsMenu>

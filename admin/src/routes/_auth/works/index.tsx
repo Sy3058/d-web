@@ -16,7 +16,7 @@ function WorksPage() {
         <h1 className="text-2xl font-bold">
           작품 관리{works && <span className="ml-2 text-gray-400">{works.length}</span>}
         </h1>
-        <Link to="/works/new" className="rounded bg-gray-900 px-3 py-2 text-white">
+        <Link to="/works/new" className="admin-control admin-control-primary">
           + 작품 등록
         </Link>
       </div>

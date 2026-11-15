@@ -78,7 +78,7 @@ export function CommissionList({ items }: CommissionListProps) {
                 onClick={() => move(index, -1)}
                 disabled={index === 0 || updatingItemId !== null || ordering}
                 aria-label="위로 이동"
-                className="flex h-6 w-6 items-center justify-center text-gray-400 hover:text-gray-700 disabled:opacity-30"
+                className="admin-control admin-control-ghost admin-control-icon"
               >
                 ▲
               </button>
@@ -87,7 +87,7 @@ export function CommissionList({ items }: CommissionListProps) {
                 onClick={() => move(index, 1)}
                 disabled={index === items.length - 1 || updatingItemId !== null || ordering}
                 aria-label="아래로 이동"
-                className="flex h-6 w-6 items-center justify-center text-gray-400 hover:text-gray-700 disabled:opacity-30"
+                className="admin-control admin-control-ghost admin-control-icon"
               >
                 ▼
               </button>
@@ -139,7 +139,7 @@ export function CommissionList({ items }: CommissionListProps) {
               type="button"
               onClick={() => toggleOpen(item)}
               disabled={updatingItemId !== null || ordering}
-              className="rounded border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50 disabled:opacity-50"
+              className="admin-control admin-control-outline"
             >
               {item.is_open ? '마감 처리' : '접수 재개'}
             </button>

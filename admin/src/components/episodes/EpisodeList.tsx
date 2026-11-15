@@ -84,12 +84,12 @@ export function EpisodeList({ workId, episodes, basePrice }: EpisodeListProps) {
       <div className="overflow-x-auto">
         <table className="w-full min-w-[44rem] table-fixed border-collapse text-sm">
           <colgroup>
-            <col className="w-10" />
+            <col className="w-18" />
             <col />
             <col className="w-20" />
             <col className="w-24" />
             <col className="w-28" />
-            <col className="w-10" />
+            <col className="w-18" />
           </colgroup>
           <thead>
             <tr className="text-left text-gray-500">
@@ -126,7 +126,7 @@ export function EpisodeList({ workId, episodes, basePrice }: EpisodeListProps) {
                         onClick={() => move(index, -1)}
                         disabled={index === 0 || reorderEpisodes.isPending}
                         aria-label={`${episode.title} 위로 이동`}
-                        className="rounded px-1 leading-none text-gray-400 hover:bg-gray-200 hover:text-gray-700 disabled:opacity-30 disabled:hover:bg-transparent"
+                        className="admin-control admin-control-ghost admin-control-icon"
                       >
                         <span aria-hidden="true">↑</span>
                       </button>
@@ -135,7 +135,7 @@ export function EpisodeList({ workId, episodes, basePrice }: EpisodeListProps) {
                         onClick={() => move(index, 1)}
                         disabled={index === episodes.length - 1 || reorderEpisodes.isPending}
                         aria-label={`${episode.title} 아래로 이동`}
-                        className="rounded px-1 leading-none text-gray-400 hover:bg-gray-200 hover:text-gray-700 disabled:opacity-30 disabled:hover:bg-transparent"
+                        className="admin-control admin-control-ghost admin-control-icon"
                       >
                         <span aria-hidden="true">↓</span>
                       </button>
@@ -145,7 +145,7 @@ export function EpisodeList({ workId, episodes, basePrice }: EpisodeListProps) {
                     <Link
                       to="/works/$workId/episodes/$episodeId"
                       params={{ workId, episodeId: episode.id }}
-                      className="block truncate font-medium hover:underline"
+                      className="admin-control admin-control-ghost block w-full truncate text-left"
                     >
                       {episode.title}
                     </Link>

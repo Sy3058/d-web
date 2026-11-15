@@ -12,6 +12,7 @@
     "generate:types": "bash ../scripts/generate-api-types.sh"
   },
   "dependencies": {
+    "@base-ui/react": "1.9.0",
     "@d-web/shared": "workspace:*",
     "@hookform/resolvers": "^5.4.0",
     "@sentry/react": "^10.55.0",
