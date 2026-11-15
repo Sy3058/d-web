@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { getViewerBootstrap, type ViewerBootstrap } from '../../lib/viewerBootstrap';
 import Viewer from './Viewer';
+import { ghostControl } from '../ui/controlStyles';
 
 interface Props {
   workId: string;
@@ -48,7 +49,7 @@ function ViewerEntryRequest({ workId, publicId }: Props) {
         <p className="text-sm text-muted">일시적인 오류로 회차를 불러오지 못했어요.</p>
         <button
           type="button"
-          className="mt-4 text-sm underline"
+          className={`${ghostControl} mt-4`}
           onClick={() => {
             setState({ status: 'loading' });
             setAttempt((value) => value + 1);

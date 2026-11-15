@@ -4,7 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { renderToString } from 'react-dom/server';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import PurchaseHistory from './PurchaseHistory';
-import type { PurchaseHistoryItem } from '../../lib/purchases';
+import { MAX_PURCHASE_PAGE, type PurchaseHistoryItem } from '../../lib/purchases';
 const item: PurchaseHistoryItem = {
   id: 'purchase', payment_id: 'payment', item_title: '구매 당시 제목', order_name: '[LOCAL FIXTURE] viewer abcd', work_title: '작품 제목', thumbnail_url: 'https://images.example/public/cover.webp', amount: 1500, currency: 'KRW', paid_at: '2026-11-01T00:00:00Z', status: 'active', first_viewed_at: null, refund_amount: null, refunded_at: null,
   receipt_url: 'https://receipt.example/pay', viewer_path: '/works/12345678-1234-1234-1234-123456789abc/12345678',
@@ -22,7 +22,7 @@ afterEach(async () => {
   container.remove(); vi.unstubAllGlobals();
 });
 async function mount() { await act(async () => { root = createRoot(container); root.render(<PurchaseHistory />); }); }
-async function click(label: string) { await act(async () => { Array.from(container.querySelectorAll('button')).find((button) => button.textContent === label)!.click(); }); }
+async function click(label: string) { await act(async () => { Array.from(container.querySelectorAll('button')).find((button) => (button.getAttribute('aria-label') || button.textContent) === label)!.click(); }); }
 it('SSR는 개인 props나 요청 없이 로딩 셸만 렌더한다', () => {
   const fetch = vi.fn(); vi.stubGlobal('fetch', fetch);
   const html = renderToString(<PurchaseHistory />);
@@ -120,4 +120,28 @@ it('썸네일 오류는 추가 API 요청 없이 대체 표시한다', async () 
   expect(container.querySelector('img')).toBeNull();
   expect(container.textContent).toContain('이미지 없음');
   expect(fetch).toHaveBeenCalledTimes(1);
+});
+
+it('페이지 이동은 다른 쿼리를 보존하고 현재 페이지와 경계 버튼을 제공한다', async () => {
+  window.history.replaceState(null, '', '/my/purchases?source=account&page=1#history');
+  const fetch = vi.fn().mockResolvedValueOnce(response()).mockResolvedValueOnce(response([item], 2));
+  vi.stubGlobal('fetch', fetch); await mount();
+  expect(container.querySelector<HTMLButtonElement>('[aria-label="이전 페이지"]')?.disabled).toBe(true);
+  expect(container.querySelector('[aria-current="page"]')?.textContent).toContain('1페이지');
+  await click('이전 페이지'); expect(fetch).toHaveBeenCalledTimes(1);
+  await click('다음 페이지');
+  expect(window.location.search).toBe('?source=account&page=2');
+  expect(window.location.hash).toBe('#history');
+  expect(fetch).toHaveBeenCalledTimes(2);
+  expect(fetch.mock.calls[1][0]).toContain('/my/purchases?page=2');
+  expect(container.querySelector<HTMLButtonElement>('[aria-label="다음 페이지"]')?.disabled).toBe(true);
+  await click('다음 페이지'); expect(fetch).toHaveBeenCalledTimes(2);
+});
+it('구매 페이지 상한에서는 전체 건수가 더 있어도 다음 요청을 보내지 않는다', async () => {
+  window.history.replaceState(null, '', `/my/purchases?page=${MAX_PURCHASE_PAGE}`);
+  const fetch = vi.fn().mockResolvedValue(response([], MAX_PURCHASE_PAGE, MAX_PURCHASE_PAGE * 20 + 1));
+  vi.stubGlobal('fetch', fetch); await mount();
+  expect(container.querySelector('[aria-current="page"]')?.textContent).toContain(`${MAX_PURCHASE_PAGE}페이지`);
+  expect(container.querySelector<HTMLButtonElement>('[aria-label="다음 페이지"]')?.disabled).toBe(true);
+  await click('다음 페이지'); expect(fetch).toHaveBeenCalledTimes(1);
 });

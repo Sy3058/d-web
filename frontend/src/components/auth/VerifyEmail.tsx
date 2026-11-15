@@ -1,4 +1,5 @@
 import { useState, useSyncExternalStore } from 'react';
+import { controlBase, ghostControl } from '../ui/controlStyles';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { loginSchema } from '../../lib/validation';
@@ -52,7 +53,7 @@ export default function VerifyEmail() {
       <div className="space-y-4">
         <FormNotice message="이메일 인증이 완료됐어요." />
         <p className="text-sm text-center">
-          <a href="/auth/login" className="text-ink underline underline-offset-4">
+          <a href="/auth/login" className={ghostControl}>
             로그인하러 가기
           </a>
         </p>
@@ -73,7 +74,7 @@ export default function VerifyEmail() {
               type="button"
               onClick={handleVerify}
               disabled={verifyState === 'verifying'}
-              className="w-full bg-ink text-paper text-sm font-medium tracking-wide py-2.5 px-4 rounded-control hover:bg-ink-strong disabled:opacity-50"
+              className={`${controlBase} w-full bg-ink px-4 py-2.5 text-paper tracking-wide hover:bg-ink-strong`}
             >
               {verifyState === 'verifying' ? '인증 중...' : '이메일 인증 완료하기'}
             </button>

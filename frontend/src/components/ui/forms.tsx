@@ -1,4 +1,5 @@
 import { forwardRef } from 'react';
+import { controlBase } from './controlStyles';
 import type { ComponentPropsWithoutRef, ReactNode } from 'react';
 
 interface TextFieldProps extends ComponentPropsWithoutRef<'input'> {
@@ -49,7 +50,7 @@ export function SubmitButton({ disabled, children }: SubmitButtonProps) {
     <button
       type="submit"
       disabled={disabled}
-      className="w-full bg-ink text-paper text-sm font-medium tracking-wide py-2.5 px-4 rounded-control hover:bg-ink-strong disabled:opacity-50"
+      className={`${controlBase} w-full bg-ink px-4 py-2.5 text-paper tracking-wide hover:bg-ink-strong`}
     >
       {children}
     </button>

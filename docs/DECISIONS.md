@@ -63,6 +63,7 @@
 - 사이트의 기존 색상, 타이포그래피와 디자인 토큰에 맞춰 적용한다. 현재 직접 구현한 요소가 모두 shadcn/ui 기반으로 전환된 상태는 아니다.
 - 페이지네이션: https://ui.shadcn.com/docs/components/base/pagination
 - 드롭다운: https://ui.shadcn.com/docs/components/base/dropdown-menu
+- 2026-11-15 U1: Astro·React가 공통 controlStyles를 사용하고 ghost 컨트롤은 회색 hover·최소 44px·focus-visible·disabled 상태를 공유한다. 작품·구매내역 페이지네이션은 같은 목록 구조와 현재 페이지 의미를 사용하되 SSR 링크와 클라이언트 버튼의 기존 탐색 계약을 각각 유지한다. 콘텐츠 링크·원고 밑줄 서식은 변경하지 않는다.
 
 ### Vite 버전: 8로 workspace 통일, Astro 7 migration 완료
 
