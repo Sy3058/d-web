@@ -5,6 +5,7 @@ export const prerender = false;
 import BaseLayout from '../../../layouts/BaseLayout.astro';
 import Viewer from '../../../components/viewer/Viewer';
 import ViewerEntry from '../../../components/viewer/ViewerEntry';
+import { ghostControl } from '../../../components/ui/controlStyles';
 import { getWorkDetail } from '../../../lib/catalog';
 import { applyCatalogCache } from '../../../lib/http';
 
@@ -119,7 +120,7 @@ const pageTitle = loadError
             {prevEpisode ? (
               <a
                 href={`/works/${work.id}/${prevEpisode.public_id}`}
-                class="text-ink hover:underline truncate max-w-[45%]"
+                class={`${ghostControl} max-w-[45%] truncate`}
                 title={prevEpisode.title}
                 data-astro-reload
               >
@@ -131,7 +132,7 @@ const pageTitle = loadError
             {nextEpisode ? (
               <a
                 href={`/works/${work.id}/${nextEpisode.public_id}`}
-                class="text-ink hover:underline truncate max-w-[45%]"
+                class={`${ghostControl} max-w-[45%] truncate`}
                 title={nextEpisode.title}
                 data-astro-reload
               >

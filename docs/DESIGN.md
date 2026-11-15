@@ -168,7 +168,7 @@ The shape language is **uniformly rounded** - soft corners everywhere to match t
 ### Buttons
 - **Primary:** Solid `#171B24` fill, white text, no border, `control` (8px) radius. Hover to `#2C3039`. No accent color, the primary action is simply the darkest thing on the page.
 - **Secondary:** 1px `#2C3039` border, transparent fill, `control` (8px) radius.
-- **Ghost:** No border, fill, or box - a text link that underlines on hover. Not rounded (it is not a box).
+- **Ghost:** Transparent fill with `control` (8px) radius, neutral `#F5F5F5` hover background and at least a 44px target. Action and menu controls use this style; prose hyperlinks and manuscript formatting retain their own link/underline semantics. Keyboard focus remains visible and disabled controls do not navigate. (2026-11-15 UI agreement.)
 
 ### Input Fields
 - **Default:** white fill, 1px solid `#EEEEEE` border, `control` (8px) radius. Applies to every input - search box, login/signup fields, etc.

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ApiError } from '../../lib/api';
+import { ghostControl } from '../ui/controlStyles';
 import { completePayment, type PaymentStatus } from '../../lib/payments';
 import { goToPurchasedEpisode, readPaymentReturn } from '../../lib/paymentReturn';
 
@@ -54,13 +55,15 @@ export default function PaymentReturn() {
             : state.status === 'paid' && !state.returnPath
               ? '결제가 확인됐어요. 원래 회차 주소로 돌아가 열람해 주세요.'
               : STATUS_TEXT[state.status]}</p>
-    {state.kind === 'login' && <a href="/auth/login" target="_blank" rel="noopener noreferrer" className="underline">새 창에서 로그인</a>}
-    {canRetry && <button type="button" className="rounded border border-line px-4 py-2" onClick={() => {
-      setState({ kind: 'loading' });
-      setAttempt((value) => value + 1);
-    }}>결제 상태 다시 확인</button>}
-    {(state.kind === 'result' || state.kind === 'error') && state.returnPath
-      && <a href={state.returnPath} data-astro-reload className="block underline">회차로 돌아가기</a>}
-    <a href="/my" data-astro-reload className="block text-sm underline">마이페이지</a>
+    <div className="flex flex-col items-start gap-2">
+      {state.kind === 'login' && <a href="/auth/login" target="_blank" rel="noopener noreferrer" className={ghostControl}>새 창에서 로그인</a>}
+      {canRetry && <button type="button" className={ghostControl} onClick={() => {
+        setState({ kind: 'loading' });
+        setAttempt((value) => value + 1);
+      }}>결제 상태 다시 확인</button>}
+      {(state.kind === 'result' || state.kind === 'error') && state.returnPath
+        && <a href={state.returnPath} data-astro-reload className={ghostControl}>회차로 돌아가기</a>}
+      <a href="/my" data-astro-reload className={ghostControl}>마이페이지</a>
+    </div>
   </section>;
 }

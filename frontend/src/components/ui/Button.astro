@@ -1,6 +1,8 @@
 ---
-// 버튼형 요소 (DESIGN.md Buttons). href가 있으면 <a>, 없으면 <button>으로 렌더한다 -
-// 페이지네이션·목록 CTA는 링크, 폼 제출은 버튼이라 하나로 겸용.
+import { controlBase, ghostControl } from './controlStyles';
+
+// 버튼형 요소 (DESIGN.md Buttons). 탐색은 링크, 동작은 버튼으로 렌더한다.
+// 비활성 링크에는 href와 포커스 진입점을 주지 않는다.
 interface Props {
   variant?: 'primary' | 'secondary' | 'ghost';
   href?: string;
@@ -11,23 +13,24 @@ interface Props {
 
 const { variant = 'primary', href, type = 'button', disabled = false, class: className } = Astro.props;
 
-const base =
-  'inline-flex items-center justify-center gap-2 text-sm font-medium transition-colors disabled:opacity-50 disabled:pointer-events-none';
-
 const variants = {
-  primary: 'rounded-control bg-ink-strong text-paper px-4 py-2.5 hover:bg-ink',
-  secondary: 'rounded-control border border-ink text-ink px-4 py-2.5 hover:bg-hover',
-  ghost: 'text-ink underline-offset-4 hover:underline px-1 py-1',
+  primary: `${controlBase} bg-ink-strong text-paper px-4 py-2.5 hover:bg-ink disabled:hover:bg-ink-strong aria-disabled:hover:bg-ink-strong`,
+  secondary: `${controlBase} border border-ink text-ink px-4 py-2.5 hover:bg-hover disabled:hover:bg-transparent aria-disabled:hover:bg-transparent`,
+  ghost: ghostControl,
 };
 ---
 
 {
-  href ? (
-    <a href={href} class:list={[base, variants[variant], className]}>
+  href && disabled ? (
+    <span aria-disabled="true" class:list={[variants[variant], className]}>
+      <slot />
+    </span>
+  ) : href ? (
+    <a href={href} class:list={[variants[variant], className]}>
       <slot />
     </a>
   ) : (
-    <button type={type} disabled={disabled} class:list={[base, variants[variant], className]}>
+    <button type={type} disabled={disabled} class:list={[variants[variant], className]}>
       <slot />
     </button>
   )

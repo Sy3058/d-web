@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { ghostControl, paginationList, paginationCurrent } from '../ui/controlStyles';
 import { ApiError } from '../../lib/api';
 import { getPurchaseHistory, MAX_PURCHASE_PAGE, parsePurchasePage, safeReceiptUrl, safeViewerPath, type PurchaseHistoryRead } from '../../lib/purchases';
 
@@ -44,8 +45,8 @@ export default function PurchaseHistory() {
   }
 
   if (state.kind === 'loading') return <p role="status" className="text-sm text-muted">구매 내역을 불러오는 중이에요.</p>;
-  if (state.kind === 'login') return <div><p className="text-sm text-muted">구매 내역을 보려면 로그인해 주세요.</p><a href="/auth/login" data-astro-reload className="underline underline-offset-4">로그인</a></div>;
-  if (state.kind === 'error') return <div role="alert"><p className="text-sm text-muted">구매 내역을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.</p><button type="button" onClick={retry} className="mt-4 underline underline-offset-4">다시 시도</button></div>;
+  if (state.kind === 'login') return <div><p className="text-sm text-muted">구매 내역을 보려면 로그인해 주세요.</p><a href="/auth/login" data-astro-reload className={`${ghostControl} mt-4`}>로그인</a></div>;
+  if (state.kind === 'error') return <div role="alert"><p className="text-sm text-muted">구매 내역을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.</p><button type="button" onClick={retry} className={`${ghostControl} mt-4`}>다시 시도</button></div>;
   const { items, total, page_size, page } = state.data;
   return <div>
     <p className="text-sm text-muted mb-6">총 {total.toLocaleString('ko-KR')}건</p>
@@ -67,15 +68,17 @@ export default function PurchaseHistory() {
           </div>
           <div className="mt-3 flex items-center justify-between gap-4 text-xs text-muted">
             <time dateTime={item.paid_at} className="text-muted">{date(item.paid_at)}</time>
-            {receipt && <a href={receipt} target="_blank" rel="noopener noreferrer" className="shrink-0 underline underline-offset-4">영수증 보기</a>}
+            {receipt && <a href={receipt} target="_blank" rel="noopener noreferrer" className={`${ghostControl} shrink-0`}>영수증 보기</a>}
           </div>
         </li>;
       })}
     </ul>}
-    <nav aria-label="구매 내역 페이지" className="flex items-center justify-between mt-8 text-sm">
-      <button type="button" disabled={page <= 1} onClick={() => navigate(page - 1)} className="disabled:opacity-40">이전 페이지</button>
-      <span aria-current="page">{page}페이지</span>
-      <button type="button" disabled={page >= MAX_PURCHASE_PAGE || page * page_size >= total} onClick={() => navigate(page + 1)} className="disabled:opacity-40">다음 페이지</button>
+    <nav aria-label="구매 내역 페이지" className="mt-8">
+      <ul className={paginationList}>
+        <li><button type="button" aria-label="이전 페이지" disabled={page <= 1} onClick={() => navigate(page - 1)} className={ghostControl}><span aria-hidden="true">‹</span> 이전 페이지</button></li>
+        <li><span aria-current="page" className={paginationCurrent}><span className="sr-only">현재 </span>{page}<span className="sr-only">페이지</span></span></li>
+        <li><button type="button" aria-label="다음 페이지" disabled={page >= MAX_PURCHASE_PAGE || page * page_size >= total} onClick={() => navigate(page + 1)} className={ghostControl}>다음 페이지 <span aria-hidden="true">›</span></button></li>
+      </ul>
     </nav>
   </div>;
 }

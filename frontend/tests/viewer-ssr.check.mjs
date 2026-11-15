@@ -25,7 +25,15 @@ test('뷰어 SSR의 공개 캐시·메타 없는 진입 셸·장애 구분', { t
   const api = createServer((req, res) => {
     requests.push({ url: req.url, cookie: req.headers.cookie });
     res.setHeader('Content-Type', 'application/json');
-    if (req.url === '/auth/refresh') {
+    if (req.url === '/tags') {
+      res.end(JSON.stringify([{ id: 'tag', name: '테스트 태그', work_count: 72 }]));
+    } else if (req.url.startsWith('/works?')) {
+      const query = new URL(req.url, 'http://localhost').searchParams;
+      res.end(JSON.stringify({
+        items: [{ id: ids[0], title: 'PUBLIC_WORK', cover_image_url: null, status: 'ongoing', tags: [], episode_count: 1 }],
+        total: 72, page: Number(query.get('page')), size: 24,
+      }));
+    } else if (req.url === '/auth/refresh') {
       res.writeHead(401).end('{}');
     } else if (req.url === '/auth/me') {
       if (req.headers.cookie?.includes('access_token=VALID_ACCOUNT')) {
@@ -203,6 +211,34 @@ test('뷰어 SSR의 공개 캐시·메타 없는 진입 셸·장애 구분', { t
     assert.equal(requests.length, 6);
     assert.ok(requests.every((req) => !req.cookie));
     assert.ok(requests.every((req) => /^\/works\/[^/]+$/.test(req.url)));
+
+    await t.test('작품 페이지네이션은 SSR 링크의 태그와 페이지 경계를 보존한다', async () => {
+      for (const page of [1, 2, 3]) {
+        const response = await fetch(`${siteUrl}/works?page=${page}&tag=${encodeURIComponent('테스트 태그')}`);
+        assert.equal(response.status, 200);
+        const dom = new JSDOM(await response.text(), { url: siteUrl });
+        try {
+          const nav = dom.window.document.querySelector('nav[aria-label="페이지 이동"]');
+          assert.ok(nav);
+          assert.equal(nav.querySelectorAll('ul > li').length, 3);
+          assert.ok(nav.querySelector('[aria-current="page"]').textContent.includes(`${page}페이지`));
+          const [previous, , next] = nav.querySelectorAll('li');
+          for (const [item, target, unavailable] of [[previous, page - 1, page === 1], [next, page + 1, page === 3]]) {
+            if (unavailable) {
+              assert.equal(item.querySelector('a'), null);
+              assert.ok(item.querySelector('button')?.disabled);
+            } else {
+              const link = new URL(item.querySelector('a').href);
+              assert.equal(link.pathname, '/works');
+              assert.equal(link.searchParams.get('tag'), '테스트 태그');
+              assert.equal(Number(link.searchParams.get('page') ?? 1), target);
+            }
+          }
+        } finally {
+          dom.window.close();
+        }
+      }
+    });
 
     await t.test('공유 메뉴 셸은 마운트 전 fallback만 닉네임으로 보정하고 HTML을 삽입하지 않는다', async () => {
       const response = await fetch(`${siteUrl}/my/purchases`);
