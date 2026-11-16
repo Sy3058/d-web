@@ -66,12 +66,7 @@ async def _locked_user(user_id: uuid.UUID, session: AsyncSession) -> User:
 
 
 async def update_nickname(user_id: uuid.UUID, nickname: str, session: AsyncSession) -> User:
-    user = await _locked_user(user_id, session)
-    user.nickname = nickname
-    session.add(user)
-    await session.commit()
-    await session.refresh(user)
-    return user
+    return await update_profile(user_id, nickname, session)
 
 
 async def _cleanup(key: str) -> None:
@@ -83,23 +78,51 @@ async def _cleanup(key: str) -> None:
 
 
 async def update_avatar(user_id: uuid.UUID, data: bytes, session: AsyncSession) -> User:
-    base = _public_base()  # 외부 쓰기 전에 URL과 공개 저장소 설정 검증
-    converted = await avatar_service.convert_avatar(data)
-    key = f"avatars/{user_id}/{uuid.uuid4().hex}.webp"
-    try:
-        await r2_service.upload_bytes(key, converted, bucket=settings.r2_public_bucket)
-    except Exception:
-        # PUT 성공 뒤 전송 오류가 나더라도 신규 고유 키만 정리한다.
-        await _cleanup(key)
-        raise
+    return await update_profile(user_id, None, session, data=data)
+
+
+async def update_profile(
+    user_id: uuid.UUID,
+    nickname: str | None,
+    session: AsyncSession,
+    *,
+    data: bytes | None = None,
+    remove_image: bool = False,
+) -> User:
+    if data is not None and remove_image:
+        raise ValueError("이미지 업로드와 삭제를 함께 요청할 수 없습니다")
+    base = None
+    key = None
+    if data is not None:
+        base = _public_base()  # 외부 쓰기 전에 URL과 공개 저장소 설정 검증
+        converted = await avatar_service.convert_avatar(data)
+        key = f"avatars/{user_id}/{uuid.uuid4().hex}.webp"
+        try:
+            await r2_service.upload_bytes(key, converted, bucket=settings.r2_public_bucket)
+        except Exception:
+            # PUT 성공 뒤 전송 오류가 나더라도 신규 고유 키만 정리한다.
+            await _cleanup(key)
+            raise
+    elif remove_image:
+        try:
+            base = _public_base()
+        except r2_service.R2NotConfiguredError:
+            # 저장소 장애여도 DB 참조는 제거한다. 소유권을 확인할 수 없는 객체는 보존한다.
+            pass
+    previous_key = None
     try:
         user = await _locked_user(user_id, session)
-        previous_key = _previous_key(user.profile_image, user_id, base)
-        user.profile_image = f"{base}/{key}"
+        if nickname is not None:
+            user.nickname = nickname
+        if key is not None or remove_image:
+            if base is not None:
+                previous_key = _previous_key(user.profile_image, user_id, base)
+            user.profile_image = f"{base}/{key}" if key is not None else None
         session.add(user)
     except Exception:
         await session.rollback()
-        await _cleanup(key)
+        if key is not None:
+            await _cleanup(key)
         raise
     try:
         await session.commit()

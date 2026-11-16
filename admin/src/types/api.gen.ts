@@ -141,6 +141,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/me/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Update Profile */
+        put: operations["update_profile_auth_me_profile_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/me/password": {
         parameters: {
             query?: never;
@@ -995,6 +1012,18 @@ export interface components {
         Body_update_avatar_auth_me_profile_image_post: {
             /** File */
             file: string;
+        };
+        /** Body_update_profile_auth_me_profile_put */
+        Body_update_profile_auth_me_profile_put: {
+            /** Nickname */
+            nickname: string;
+            /** File */
+            file?: string | null;
+            /**
+             * Remove Image
+             * @default false
+             */
+            remove_image: boolean;
         };
         /** Body_upload_artist_profile_image_admin_artist_profile_image_post */
         Body_upload_artist_profile_image_admin_artist_profile_image_post: {
@@ -2022,6 +2051,39 @@ export interface operations {
         requestBody: {
             content: {
                 "multipart/form-data": components["schemas"]["Body_update_avatar_auth_me_profile_image_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_profile_auth_me_profile_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_update_profile_auth_me_profile_put"];
             };
         };
         responses: {
