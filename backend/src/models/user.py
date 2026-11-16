@@ -116,6 +116,11 @@ class User(SQLModel, table=True):
         default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
     )
 
+    @property
+    def has_password(self) -> bool:
+        """본인 계정 화면의 비밀번호 편집 가능 여부. 해시는 응답에 넣지 않는다."""
+        return self.hashed_password is not None
+
 
 class OAuthAccount(SQLModel, table=True):
     __tablename__ = "oauth_accounts"
@@ -219,6 +224,7 @@ class UserRead(SQLModel):
     email: str
     nickname: str
     profile_image: str | None
+    has_password: bool
     is_email_verified: bool
     role: RoleEnum
     created_at: datetime

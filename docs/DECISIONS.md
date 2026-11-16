@@ -455,6 +455,15 @@ bcrypt( base64( hmac_sha384(password, key=PASSWORD_PEPPER) ), gensalt(cost=12) )
 - **제약(stale)**: 닉네임 변경 시 다음 refresh/login 전까지 옛 닉네임 표시(표시용이라 허용. 닉네임 변경 기능 자체 미구현).
 - 구현: BE는 `set_auth_cookies`(로그인/갱신/OAuth)·`clear_auth_cookies`(로그아웃/refresh 재사용)에서 발급/제거. FE는 `Navbar.astro`의 정적 `<a id="nav-user">` + pre-paint `is:inline` 스크립트가 쿠키를 읽어 보정(React 섬 `NavUser.tsx`는 제거). study `astro-auth-ui-state`, `no-flash-inline-script`.
 
+### 계정 편집과 비밀번호 변경 세션 계약 (2026-11-16)
+
+- 본인 인증 계정만 닉네임·아바타·비밀번호를 변경한다. 닉네임 변경은 표시용 login_hint만 갱신하며, 기존 로그인/refresh/OAuth의 인증 쿠키 발급 계약은 유지한다.
+- 현재 비밀번호를 검증하고 새 비밀번호에 가입 정책과 HIBP를 적용한다. 소셜 전용 계정의 비밀번호 설정/연결은 별도 기능으로 둔다. 성공 후 모든 refresh·신뢰 기기를 폐기하고 현재 쿠키를 제거해 재로그인을 요구한다.
+- User 우선 잠금과 최신 비밀번호 재검증으로 변경과 세션 발급을 직렬화한다. owner pending은 목적·계정·비밀번호 해시의 HMAC 태그로 결합해 변경 전 인증을 재사용하지 못하게 한다. 원문 해시는 JWT/응답/로그에 넣지 않는다.
+- 기존 access는 기본 15분과 leeway 10초까지 유효할 수 있다. 즉시 모든 access를 폐기한다고 주장하지 않으며, 신규 DB auth_version/denylist를 도입하지 않는다.
+- 아바타는 제한 형식·크기와 no-draft 경로에서 변환해 본인 전용 공개 namespace에 저장한다. COMMIT 결과가 불확실하면 현재 참조할 수 있는 객체를 보존한다. 기존 owner 이미지 변환의 알려진 Pillow 취약점이 해결됐다는 뜻은 아니다.
+- UserRead.has_password는 본인 계정용 파생 bool이며 공개 댓글 프로필 DTO로 재사용하지 않는다. [구현·검증](MODULES/BE/Auth/IMPLEMENTATION_ACCOUNT_SETTINGS.md).
+
 ### 관리자 권한 분리: 3-역할 RBAC (reader/owner/moderator) - M1.5 owner 단독 빌드 (2026-07-01 확정)
 
 **결정: `users.role`(VARCHAR(16), default `reader`)로 권한을 나눈다. 값은 `reader`(일반)·`owner`(작가)·`moderator`(커뮤니티 운영) 셋. authz 진실 소스는 JWT claim이 아니라 DB `user.role`. 모델은 3-역할로 열어두되, M1.5에서 실제 빌드·프로비저닝하는 역할은 `owner` 하나뿐이다(moderator는 M4 커뮤니티에서 도입). 빈 껍데기 계정은 만들지 않는다.**

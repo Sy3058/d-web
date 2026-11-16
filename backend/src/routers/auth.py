@@ -176,7 +176,8 @@ async def refresh(
 
 
 @router.get("/me", response_model=UserRead)
-async def me(current_user: CurrentUser) -> User:
+async def me(current_user: CurrentUser, response: Response) -> User:
+    response.headers["Cache-Control"] = "no-store"
     return current_user
 
 

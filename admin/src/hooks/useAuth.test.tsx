@@ -28,6 +28,7 @@ const OWNER: UserRead = {
   email: 'owner@example.com',
   nickname: '작가',
   profile_image: null,
+  has_password: true,
   is_email_verified: true,
   role: 'owner',
   created_at: '2026-07-14T00:00:00Z',

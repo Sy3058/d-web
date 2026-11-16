@@ -9,6 +9,8 @@ payload 구조:
   iat  - 발급 시각
 """
 
+import hashlib
+import hmac
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
@@ -137,6 +139,11 @@ def set_auth_cookies(
         secure=secure,
         samesite="strict",
     )
+    set_login_hint_cookie(response, nickname)
+
+
+def set_login_hint_cookie(response: Response, nickname: str) -> None:
+    """인증 쿠키를 건드리지 않고 표시용 닉네임만 갱신한다."""
     # 닉네임은 한글/특수문자 가능 -> quote(safe="")로 URL 인코딩해 쿠키/헤더 인젝션을 차단한다.
     # FE는 document.cookie로 읽어 decodeURIComponent로 복원한다. httponly=False는 의도된 것.
     response.set_cookie(
@@ -145,7 +152,7 @@ def set_auth_cookies(
         max_age=settings.jwt_refresh_token_expire_days * 86400,
         path="/",
         httponly=False,
-        secure=secure,
+        secure=settings.cookie_secure,
         samesite="lax",
     )
 
@@ -277,13 +284,22 @@ TOTP_SETUP_PENDING = "totp_setup_pending"
 TOTP_PENDING = "totp_pending"
 
 
-def create_admin_pending_token(user_id: str, typ: str) -> str:
+def _pending_credential_tag(user_id: str, typ: str, hashed_password: str) -> str:
+    return hmac.new(
+        settings.token_pepper.get_secret_value().encode("utf-8"),
+        f"admin-pending\0{typ}\0{user_id}\0{hashed_password}".encode(),
+        hashlib.sha256,
+    ).hexdigest()
+
+
+def create_admin_pending_token(user_id: str, typ: str, hashed_password: str) -> str:
     """pending 단계 운반용 서명 JWT. typ은 TOTP_SETUP_PENDING 또는 TOTP_PENDING."""
     now = datetime.now(UTC)
     return jwt.encode(
         {
             "sub": user_id,
             "typ": typ,
+            "credential": _pending_credential_tag(user_id, typ, hashed_password),
             "iat": now,
             "exp": now + timedelta(seconds=ADMIN_PENDING_MAX_AGE),
         },
@@ -292,11 +308,13 @@ def create_admin_pending_token(user_id: str, typ: str) -> str:
     )
 
 
-def set_admin_pending_cookie(response: Response, user_id: str, typ: str) -> None:
+def set_admin_pending_cookie(
+    response: Response, user_id: str, typ: str, hashed_password: str
+) -> None:
     """1단계(이메일/비번) 통과 직후 pending 쿠키를 set. B3 /admin/login이 호출한다."""
     response.set_cookie(
         key=ADMIN_PENDING_COOKIE_NAME,
-        value=create_admin_pending_token(user_id, typ),
+        value=create_admin_pending_token(user_id, typ, hashed_password),
         max_age=ADMIN_PENDING_MAX_AGE,
         path=ADMIN_PENDING_PATH,
         httponly=True,
@@ -327,9 +345,27 @@ def read_admin_pending(request: Request, expected_typ: str) -> str | None:
     if payload.get("typ") != expected_typ:
         return None
     sub = payload.get("sub")
-    if not isinstance(sub, str):
+    if not isinstance(payload.get("credential"), str) or not isinstance(sub, str):
         return None
     return sub
+
+
+def admin_pending_matches_credentials(request: Request, typ: str, user: User) -> bool:
+    """User 행을 잠근 소비자가 최신 비밀번호와 pending의 결합을 검증한다."""
+    if user.hashed_password is None or read_admin_pending(request, typ) != str(user.id):
+        return False
+    try:
+        payload = jwt.decode(
+            request.cookies[ADMIN_PENDING_COOKIE_NAME],
+            settings.jwt_secret,
+            algorithms=[settings.jwt_algorithm],
+            leeway=JWT_LEEWAY_SECONDS,
+        )
+    except jwt.InvalidTokenError:
+        return False
+    return hmac.compare_digest(
+        payload["credential"], _pending_credential_tag(str(user.id), typ, user.hashed_password)
+    )
 
 
 def clear_admin_pending_cookie(response: Response) -> None:

@@ -223,7 +223,7 @@ async def test_totp_login_with_setup_cookie_401(async_client: AsyncClient, activ
     owner, secret = active_owner
     async_client.cookies.set(
         ADMIN_PENDING_COOKIE_NAME,
-        create_admin_pending_token(str(owner.id), TOTP_SETUP_PENDING),
+        create_admin_pending_token(str(owner.id), TOTP_SETUP_PENDING, owner.hashed_password),
         domain="test.example",
         path="/admin",
     )
@@ -242,7 +242,7 @@ async def test_totp_login_survives_backward_clock_jump(async_client: AsyncClient
     owner, secret = active_owner
     with patch("src.lib.auth.datetime") as mock_dt:
         mock_dt.now.return_value = datetime.now(UTC) + timedelta(seconds=5)
-        pending = create_admin_pending_token(str(owner.id), TOTP_PENDING)
+        pending = create_admin_pending_token(str(owner.id), TOTP_PENDING, owner.hashed_password)
     async_client.cookies.set(
         ADMIN_PENDING_COOKIE_NAME, pending, domain="test.example", path="/admin"
     )
@@ -317,7 +317,7 @@ async def test_confirm_code_not_reusable_for_login(async_client: AsyncClient, pw
     # 그대로 로그인 2단계에 재사용할 수 없다(cross-endpoint replay).
     async_client.cookies.set(
         ADMIN_PENDING_COOKIE_NAME,
-        create_admin_pending_token(str(pw_owner.id), TOTP_SETUP_PENDING),
+        create_admin_pending_token(str(pw_owner.id), TOTP_SETUP_PENDING, pw_owner.hashed_password),
         domain="test.example",
         path="/admin",
     )
@@ -444,7 +444,7 @@ async def test_confirm_with_remember_sets_trusted_cookie(
     # 등록(confirm) 시점에도 remember_device 옵트인이 동작한다(B2 엔드포인트 확장).
     async_client.cookies.set(
         ADMIN_PENDING_COOKIE_NAME,
-        create_admin_pending_token(str(pw_owner.id), TOTP_SETUP_PENDING),
+        create_admin_pending_token(str(pw_owner.id), TOTP_SETUP_PENDING, pw_owner.hashed_password),
         domain="test.example",
         path="/admin",
     )

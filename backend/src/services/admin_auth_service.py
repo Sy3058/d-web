@@ -25,6 +25,8 @@ from src.services.auth_service import (
     _hash_token,
     create_refresh_token,
     get_user_by_email,
+    lock_user,
+    revalidate_password_user,
     verify_password,
 )
 
@@ -145,6 +147,7 @@ async def authenticate_owner(email: str, password: str, session: AsyncSession) -
         raise InvalidCredentialsError
     if not await verify_password(password, user.hashed_password):
         raise InvalidCredentialsError
+    user = await revalidate_password_user(user, password, session)
     if user.role != RoleEnum.OWNER:
         raise InvalidCredentialsError
     return user
@@ -190,6 +193,7 @@ async def create_trusted_device(user: User, session: AsyncSession) -> str:
     (created_at >= totp_confirmed_at)의 양변이 같은 시계를 쓰게 해 앱-DB 시계 스큐로 인한
     '방금 발급했는데 무효' 오판을 없앤다. 절대 만료: expires_at 고정, 갱신 경로 없음.
     """
+    await lock_user(user.id, session)
     raw = secrets.token_urlsafe(32)
     now = datetime.now(UTC)
     record = TrustedDevice(
@@ -210,7 +214,8 @@ async def verify_trusted_device(user: User, raw: str, session: AsyncSession) -> 
     마지막 조건으로 TOTP 재등록(대개 기기 분실 복구) 시 옛 등록 시절의 기기 신뢰가
     전부 자동 실효된다 - 잃어버린 기기의 신뢰 쿠키가 리셋 후에도 살아남으면 안 된다.
     """
-    if user.totp_confirmed_at is None:
+    user = await lock_user(user.id, session)
+    if user is None or user.totp_confirmed_at is None:
         return False
     result = await session.exec(
         select(TrustedDevice).where(
@@ -229,6 +234,7 @@ async def revoke_trusted_devices(user_id: uuid.UUID, session: AsyncSession) -> N
 
     승격(promote) 시 refresh 일괄 revoke와 함께 호출한다(위생 - 재등록 실효 규칙과 이중 방어).
     """
+    await lock_user(user_id, session)
     now = datetime.now(UTC)
     result = await session.exec(
         select(TrustedDevice).where(

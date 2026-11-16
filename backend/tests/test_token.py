@@ -208,22 +208,22 @@ async def test_concurrent_rotation_single_winner(db_session, user, session_facto
     호출하면 DB 행 락 + READ COMMITTED 재평가로 정확히 하나만 새 토큰을 발급하고 나머지는
     거부된다. I1의 _claim 프록시 테스트(단일 세션)가 못 메운 실제 동시성을 검증한다.
 
-    asyncio.Barrier로 두 코루틴이 SELECT를 마친 시점에 _claim UPDATE를 동시 발사하도록 강제해
-    직렬화를 막는다(둘 다 revoked_at IS NULL을 본 진짜 race). 따라서 패자는 stale-reuse가
+    asyncio.Barrier로 두 코루틴이 SELECT를 마친 뒤 User 잠금을 경쟁하도록 강제한다
+    (둘 다 revoked_at IS NULL을 본 진짜 race). 따라서 패자는 stale-reuse가
     아니라 _claim 패배 → 세션 유지하는 RefreshRotationConflictError다.
     """
     raw = await create_refresh_token(user.id, db_session)
     await db_session.commit()  # 다른 커넥션이 보도록 커밋
 
     barrier = asyncio.Barrier(2)
-    real_claim = _claim_refresh_token
+    real_read = auth_service.get_refresh_token
 
-    async def claim_after_barrier(record, session):
-        # 두 세션의 SELECT가 모두 끝난 뒤 UPDATE를 동시 발사(진짜 행 락 경쟁 유도)
+    async def read_before_either_lock(raw, session):
+        record = await real_read(raw, session)
         await barrier.wait()
-        return await real_claim(record, session)
+        return record
 
-    monkeypatch.setattr(auth_service, "_claim_refresh_token", claim_after_barrier)
+    monkeypatch.setattr(auth_service, "get_refresh_token", read_before_either_lock)
 
     async def rotate():
         async with session_factory() as session:

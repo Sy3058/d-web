@@ -30,7 +30,12 @@ CONFIRM_URL = "/admin/2fa/confirm"
 
 @pytest_asyncio.fixture
 async def owner(db_session: AsyncSession) -> User:
-    u = User(email="2fa-owner@example.com", nickname="owner", role=RoleEnum.OWNER)
+    u = User(
+        email="2fa-owner@example.com",
+        nickname="owner",
+        role=RoleEnum.OWNER,
+        hashed_password="fixture-password-hash",
+    )
     db_session.add(u)
     await db_session.commit()
     await db_session.refresh(u)
@@ -42,7 +47,7 @@ def _set_pending(client: AsyncClient, user: User, typ: str = TOTP_SETUP_PENDING)
     # 쿠키가 미전송된다(MISTAKES pytest 절).
     client.cookies.set(
         ADMIN_PENDING_COOKIE_NAME,
-        create_admin_pending_token(str(user.id), typ),
+        create_admin_pending_token(str(user.id), typ, user.hashed_password),
         domain="test.example",
         path="/admin",
     )

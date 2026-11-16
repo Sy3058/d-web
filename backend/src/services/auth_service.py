@@ -115,6 +115,7 @@ async def create_refresh_token(
     original_issued_at: 토큰 체인의 최초 발급 시각. None이면 now(최초 로그인/OAuth 발급),
     회전 시 부모 토큰 값을 넘겨 절대 수명 cap의 기준점을 유지한다 (M1 A).
     """
+    await lock_user(user_id, session)
     raw = secrets.token_urlsafe(32)
     now = datetime.now(UTC)
     expires_at = now + timedelta(days=settings.jwt_refresh_token_expire_days)
@@ -150,6 +151,7 @@ async def revoke_all_refresh_tokens(user_id: uuid.UUID, session: AsyncSession) -
 
     commit은 호출자 책임(C4에서 신규 발급과 한 트랜잭션으로 묶기 위함).
     """
+    await lock_user(user_id, session)
     now = datetime.now(UTC)
     result = await session.exec(
         select(RefreshToken).where(
@@ -398,6 +400,30 @@ def requires_totp_login(user: User) -> bool:
     return user.role == RoleEnum.OWNER
 
 
+async def lock_user(user_id: uuid.UUID, session: AsyncSession) -> User | None:
+    """인증 변경은 User를 먼저 잠근 뒤 refresh/trusted 행을 변경한다."""
+    result = await session.exec(
+        select(User)
+        .where(User.id == user_id, User.deleted_at.is_(None))
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    return result.first()
+
+
+async def revalidate_password_user(user: User, password: str, session: AsyncSession) -> User:
+    """초기 bcrypt 검증 뒤 잠금 대기 중 바뀐 자격 증명을 최신 행으로 재검증한다."""
+    verified_hash = user.hashed_password
+    fresh = await lock_user(user.id, session)
+    if fresh is None or fresh.hashed_password is None:
+        raise InvalidCredentialsError
+    if fresh.hashed_password != verified_hash and not await verify_password(
+        password, fresh.hashed_password
+    ):
+        raise InvalidCredentialsError
+    return fresh
+
+
 async def login(email: str, password: str, session: AsyncSession) -> tuple[User, str, str]:
     """이메일/비번 검증 후 (user, access_token, refresh_token) 반환. 실패 시 401 매핑.
 
@@ -410,6 +436,8 @@ async def login(email: str, password: str, session: AsyncSession) -> tuple[User,
         raise InvalidCredentialsError
     if not await verify_password(password, user.hashed_password):
         raise InvalidCredentialsError
+
+    user = await revalidate_password_user(user, password, session)
 
     if requires_totp_login(user):
         # owner가 일반 로그인으로 세션을 열면 2FA가 우회된다 -> /admin/login 전용.
@@ -430,6 +458,7 @@ async def logout(user_id: uuid.UUID, session: AsyncSession) -> None:
     refresh 쿠키는 Path=/auth/refresh라 /auth/logout엔 안 실린다. 특정 토큰을 받을 수
     없으므로 access 토큰으로 식별한 유저의 세션 전체를 무효화한다.
     """
+    await lock_user(user_id, session)
     await revoke_all_refresh_tokens(user_id, session)
     await session.commit()
 
@@ -446,6 +475,12 @@ async def rotate_refresh(raw: str, session: AsyncSession) -> tuple[User, str, st
     """
     record = await get_refresh_token(raw, session)
     if record is None:
+        raise InvalidTokenError
+
+    # 최초 조회의 revoked 상태를 유지한다. User 잠금 대기 후 최신 revoked를 읽어
+    # 정상 동시 회전 패자를 재사용 공격으로 바꾸면 승자의 새 쿠키까지 지워진다.
+    user = await lock_user(record.user_id, session)
+    if user is None:
         raise InvalidTokenError
 
     # 제출된 토큰 자체가 이미 죽음(stale): 회전이 지난 토큰의 재제출 = 탈취 신호.
@@ -482,8 +517,6 @@ async def rotate_refresh(raw: str, session: AsyncSession) -> tuple[User, str, st
     new_refresh = await create_refresh_token(
         record.user_id, session, original_issued_at=record.original_issued_at
     )
-    user = await session.get(User, record.user_id)
-    assert user is not None  # FK 무결성상 항상 존재
     access = create_access_token(str(record.user_id))
     await session.commit()
     return user, access, new_refresh
