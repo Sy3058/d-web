@@ -86,7 +86,8 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /** Update Nickname */
+        patch: operations["update_nickname_auth_me_patch"];
         trace?: never;
     };
     "/auth/verify-email": {
@@ -117,6 +118,40 @@ export interface paths {
         put?: never;
         /** Resend Verification */
         post: operations["resend_verification_auth_resend_verification_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/me/profile-image": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Update Avatar */
+        post: operations["update_avatar_auth_me_profile_image_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/me/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Change Password */
+        post: operations["change_password_auth_me_password_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -956,6 +991,11 @@ export interface components {
             /** Postype Url */
             postype_url?: string | null;
         };
+        /** Body_update_avatar_auth_me_profile_image_post */
+        Body_update_avatar_auth_me_profile_image_post: {
+            /** File */
+            file: string;
+        };
         /** Body_upload_artist_profile_image_admin_artist_profile_image_post */
         Body_upload_artist_profile_image_admin_artist_profile_image_post: {
             /** Image */
@@ -1279,6 +1319,20 @@ export interface components {
             /** Message */
             message: string;
         };
+        /** NicknameUpdateRequest */
+        NicknameUpdateRequest: {
+            /** Nickname */
+            nickname: string;
+        };
+        /** PasswordChangeRequest */
+        PasswordChangeRequest: {
+            /** Current Password */
+            current_password: string;
+            /** New Password */
+            new_password: string;
+            /** Confirm Password */
+            confirm_password: string;
+        };
         /** PaymentCompleteRead */
         PaymentCompleteRead: {
             /** Payment Id */
@@ -1505,6 +1559,8 @@ export interface components {
             nickname: string;
             /** Profile Image */
             profile_image: string | null;
+            /** Has Password */
+            has_password: boolean;
             /** Is Email Verified */
             is_email_verified: boolean;
             role: components["schemas"]["RoleEnum"];
@@ -1857,6 +1913,39 @@ export interface operations {
             };
         };
     };
+    update_nickname_auth_me_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NicknameUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     verify_email_auth_verify_email_post: {
         parameters: {
             query?: never;
@@ -1900,6 +1989,72 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["ResendVerificationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_avatar_auth_me_profile_image_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_update_avatar_auth_me_profile_image_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    change_password_auth_me_password_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordChangeRequest"];
             };
         };
         responses: {

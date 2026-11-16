@@ -17,6 +17,7 @@ from src.lib.auth import (
     TOTP_PENDING,
     TOTP_SETUP_PENDING,
     TRUSTED_DEVICE_COOKIE_NAME,
+    admin_pending_matches_credentials,
     clear_admin_pending_cookie,
     clear_trusted_device_cookie,
     read_admin_pending,
@@ -58,12 +59,13 @@ async def _setup_pending_owner(request: Request, session: AsyncSession) -> User:
         user_id = uuid.UUID(sub)
     except ValueError as exc:
         raise _PENDING_UNAUTHORIZED from exc
-    user = await session.get(User, user_id)
+    user = await auth_service.lock_user(user_id, session)
     if (
         user is None
         or user.deleted_at is not None
         or user.role != RoleEnum.OWNER
         or user.totp_confirmed_at is not None
+        or not admin_pending_matches_credentials(request, TOTP_SETUP_PENDING, user)
     ):
         raise _PENDING_UNAUTHORIZED
     return user
@@ -82,13 +84,14 @@ async def _totp_pending_owner(request: Request, session: AsyncSession) -> User:
         user_id = uuid.UUID(sub)
     except ValueError as exc:
         raise _PENDING_UNAUTHORIZED from exc
-    user = await session.get(User, user_id)
+    user = await auth_service.lock_user(user_id, session)
     if (
         user is None
         or user.deleted_at is not None
         or user.role != RoleEnum.OWNER
         or user.totp_confirmed_at is None
         or user.totp_secret is None
+        or not admin_pending_matches_credentials(request, TOTP_PENDING, user)
     ):
         raise _PENDING_UNAUTHORIZED
     return user
@@ -162,7 +165,7 @@ async def admin_login(
 
     if user.totp_confirmed_at is None:
         # 미등록 owner는 2FA 등록부터 강제(B1 부트스트랩 결정) - setup 게이트 쿠키 발급.
-        set_admin_pending_cookie(response, str(user.id), TOTP_SETUP_PENDING)
+        set_admin_pending_cookie(response, str(user.id), TOTP_SETUP_PENDING, user.hashed_password)
         logger.info(
             "auth.admin_login", outcome="setup_required", user_id=str(user.id), ip=client_ip
         )
@@ -181,7 +184,7 @@ async def admin_login(
         # 에러 없이 TOTP 단계로 폴백한다.
         clear_trusted_device_cookie(response)
 
-    set_admin_pending_cookie(response, str(user.id), TOTP_PENDING)
+    set_admin_pending_cookie(response, str(user.id), TOTP_PENDING, user.hashed_password)
     logger.info("auth.admin_login", outcome="totp_pending", user_id=str(user.id), ip=client_ip)
     return AdminLoginResponse(stage="totp")
 

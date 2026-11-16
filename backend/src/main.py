@@ -12,6 +12,7 @@ from src.config import settings
 from src.lib.logging import configure_logging
 from src.lib.scheduler import create_scheduler
 from src.routers import (
+    account,
     admin_auth,
     admin_commission,
     admin_episodes,
@@ -70,12 +71,13 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type"],
 )
 
 
 app.include_router(auth.router)
+app.include_router(account.router)
 app.include_router(oauth.router)
 app.include_router(admin_auth.router)
 app.include_router(admin_works.router)

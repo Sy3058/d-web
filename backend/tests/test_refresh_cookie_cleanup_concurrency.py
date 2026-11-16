@@ -25,13 +25,14 @@ async def test_concurrent_loser_preserves_successful_refresh_cookies(
     raw = await auth_service.create_refresh_token(user.id, db_session)
     await db_session.commit()
     barrier = asyncio.Barrier(2)
-    real_claim = auth_service._claim_refresh_token
+    real_read = auth_service.get_refresh_token
 
-    async def claim_after_both_reads(record, session):
+    async def read_before_either_lock(raw, session):
+        record = await real_read(raw, session)
         await barrier.wait()
-        return await real_claim(record, session)
+        return record
 
-    monkeypatch.setattr(auth_service, "_claim_refresh_token", claim_after_both_reads)
+    monkeypatch.setattr(auth_service, "get_refresh_token", read_before_either_lock)
 
     async def independent_session():
         async with session_factory() as session:

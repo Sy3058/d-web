@@ -1,7 +1,7 @@
 """CORS 미들웨어 설정 검증 (M1 I3).
 
 allow_methods/allow_headers 와일드카드(`*`)를 공유 api.ts 래퍼가 쓰는
-메서드(GET/POST/PUT/DELETE/OPTIONS) + Content-Type으로 좁힌 뒤, 실제로
+메서드(GET/POST/PUT/PATCH/DELETE/OPTIONS) + Content-Type으로 좁힌 뒤, 실제로
 좁혀졌는지(목록 밖 메서드/헤더 거부)와 credentials+origin 동작이 유지되는지
 회귀 방지한다. 미들웨어만 검증하므로 DB/async 픽스처 불필요.
 """
@@ -34,10 +34,9 @@ def test_preflight_allowed_origin_narrowed():
     assert resp.status_code == 200
 
     allow_methods = resp.headers["access-control-allow-methods"]
-    for method in ("GET", "POST", "PUT", "DELETE"):
-        assert method in allow_methods
+    assert set(allow_methods.split(", ")) == {"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"}
     assert "*" not in allow_methods
-    assert "PATCH" not in allow_methods  # 목록 밖 메서드는 노출 안 됨
+    assert "TRACE" not in allow_methods
 
     allow_headers = resp.headers["access-control-allow-headers"]
     assert "content-type" in allow_headers.lower()
@@ -48,12 +47,12 @@ def test_preflight_allowed_origin_narrowed():
 
 
 def test_preflight_disallowed_method_rejected():
-    """PATCH preflight는 400 - allow_methods가 ["*"]였다면 200이었을 직접 증거."""
+    """TRACE preflight는 400 - allow_methods가 ["*"]였다면 200이었을 직접 증거."""
     resp = client.options(
         "/",
         headers={
             "Origin": ALLOWED_ORIGIN,
-            "Access-Control-Request-Method": "PATCH",
+            "Access-Control-Request-Method": "TRACE",
         },
     )
     assert resp.status_code == 400

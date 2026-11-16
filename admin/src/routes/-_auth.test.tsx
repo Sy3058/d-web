@@ -19,6 +19,7 @@ const user = (role: UserRead['role']): UserRead => ({
   email: 'x@example.com',
   nickname: '아무개',
   profile_image: null,
+  has_password: true,
   is_email_verified: true,
   role,
   created_at: '2026-07-14T00:00:00Z',

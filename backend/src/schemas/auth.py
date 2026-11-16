@@ -19,6 +19,19 @@ _HAS_DIGIT = re.compile(r"[0-9]")
 _HAS_SPECIAL = re.compile(r"[^A-Za-z0-9]")
 
 
+def validate_password_policy(value: str) -> str:
+    """회원가입과 비밀번호 변경에 동일한 비밀번호 정책을 적용한다."""
+    if not PASSWORD_MIN_LENGTH <= len(value) <= PASSWORD_MAX_LENGTH:
+        raise ValueError("비밀번호는 8자 이상 128자 이하여야 합니다")
+    if not _HAS_LETTER.search(value):
+        raise ValueError("영문을 1자 이상 포함해야 합니다")
+    if not _HAS_DIGIT.search(value):
+        raise ValueError("숫자를 1자 이상 포함해야 합니다")
+    if not _HAS_SPECIAL.search(value):
+        raise ValueError("특수문자를 1자 이상 포함해야 합니다")
+    return value
+
+
 class SignupRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=PASSWORD_MIN_LENGTH, max_length=PASSWORD_MAX_LENGTH)
@@ -27,13 +40,7 @@ class SignupRequest(BaseModel):
     @field_validator("password")
     @classmethod
     def _password_policy(cls, v: str) -> str:
-        if not _HAS_LETTER.search(v):
-            raise ValueError("영문을 1자 이상 포함해야 합니다")
-        if not _HAS_DIGIT.search(v):
-            raise ValueError("숫자를 1자 이상 포함해야 합니다")
-        if not _HAS_SPECIAL.search(v):
-            raise ValueError("특수문자를 1자 이상 포함해야 합니다")
-        return v
+        return validate_password_policy(v)
 
 
 class LoginRequest(BaseModel):
