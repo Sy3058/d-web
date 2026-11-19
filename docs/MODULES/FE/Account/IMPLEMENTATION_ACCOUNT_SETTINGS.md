@@ -43,6 +43,14 @@ Frontend lint·Astro check(오류0, 기존 hint1)·전체352 tests·build를 통
 
 재시작 후 실제 dev `/my/profile`과 `/my/password`는 익명 요청에 정상302 로그인 이동, ProfileEditor/ProfileImageCropper/NoticeDialog 모듈은200으로 복구됐다. 로그인된 사용자의 화면 조작까지 자동 확인한 것은 아니다. 이후 새 모듈을 연결할 때는 파일을 먼저 생성하고 import를 추가하며, build/SSR 검사와 별도로 실행 중인 dev 경로도 확인한다.
 
+## 뷰어 개발 의존성 캐시 격리 보완
+
+2026-11-16 사용자의 구매 회차 진입에서 TipTap 세 모듈과 개발 툴바가504 Outdated Optimize Dep로 실패했다. 구매 권한 조회가 아니라 뷰어 hydration 모듈 로딩 실패였다. 실행 중 dev가 변환한 Viewer.tsx의 hash와 디스크 캐시 hash가 달랐고, 디스크의 캐시 변경 시각은 astro check 실행과 일치했다. 설치된 Astro check→sync→임시 Vite 서버 경로도 확인했다.
+
+astro.config.mjs의 로컬 integration에서 astro:config:setup command에 따라 Vite cacheDir을 node_modules/.vite/dev·sync·build 등으로 분리했다. 원고/권한/결제 코드는 바꾸지 않았다. 개발 서버 정상 재시작과 캐시 최적화 뒤 Viewer·extensions·React·TipTap 세 파일·개발 툴바를 실제 URL로 조회해200을 확인했다. 실행 중 dev에 check와 build를 적용해도 같은 TipTap URL이200으로 유지되고 sync/build가 별도 metadata를 쓰는 것을 확인했다. 기존 탭은 이전 경로를 캐시했으므로 강력 새로고침이 필요하다.
+
+Frontend lint·Astro check·328 tests·build를 통과했다. 실제 브라우저의 구매 에피소드 표시·버튼 조작 확인은 사용자에게 남긴다. 개발 캐시 문제의 복구를 실제 결제·구매 권한 성공의 증거로 대체하지 않는다.
+
 ## 세션 복구와 메뉴 동기화 (2026-11-19)
 
 계정 요약·프로필·비밀번호·설정 SSR은 getMeOnServer로 access만 조회한다. 페이지 요청에 refresh 전용 쿠키가 없으므로 서버에서 자동 갱신하지 않는다. 인증된 SSR의 개인 내용과 no-store/noindex는 유지하고, 401에는 개인정보 없는 AccountSessionRecovery를 렌더한다. 브라우저의 기존 getMe와 공용 wrapper로 갱신한 뒤 해당 페이지 내용을 표시한다. 최종 401은 로그인 안내, 서버·네트워크 장애는 재시도로 구분한다. 로그인 페이지로 잘못 이동하거나 새로고침을 반복하지 않는다. 계정 요약은 AccountOverview를 SSR과 복구 화면이 공유한다.
