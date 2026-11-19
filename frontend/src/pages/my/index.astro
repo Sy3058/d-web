@@ -1,7 +1,10 @@
 ---
 export const prerender = false;
 import BaseLayout from '../../layouts/BaseLayout.astro';
-import { getMe, type User } from '../../lib/auth';
+import { getMeOnServer } from '../../lib/auth.server';
+import type { User } from '../../lib/auth';
+import AccountOverview from '../../components/account/AccountOverview';
+import AccountSessionRecovery from '../../components/account/AccountSessionRecovery';
 
 Astro.response.headers.set('Cache-Control', 'no-store');
 Astro.response.headers.set('X-Robots-Tag', 'noindex');
@@ -11,55 +14,26 @@ const cookie = Astro.request.headers.get('cookie') ?? undefined;
 let user: User | null = null;
 let loadError = false;
 try {
-  user = await getMe(cookie);
+  user = await getMeOnServer(cookie);
 } catch {
-  // 401은 getMe가 null로 반환(→ 아래 로그인 리다이렉트). 여기로 오는 건 5xx·SSR 네트워크
-  // 실패 등 알 수 없는 에러 → 로그인 유저를 로그아웃으로 오분류하지 않고 일시 오류 UI로
-  // 표시한다 (보호 콘텐츠는 미노출, fail-closed).
   loadError = true;
-}
-
-if (!loadError && !user) {
-  return Astro.redirect('/auth/login');
 }
 ---
 
-<BaseLayout title="마이페이지">
-  <div class="max-w-[720px] mx-auto px-6 py-16">
-    <h1 class="text-2xl font-semibold tracking-tight text-ink mb-8">마이페이지</h1>
+<BaseLayout title="계정">
+  <div class="max-w-[720px] mx-auto px-6 py-8">
+    <h1 class="text-2xl font-semibold tracking-tight text-ink mb-8">계정</h1>
 
-    {loadError || !user ? (
+    {loadError ? (
       <section class="rounded-control border border-line p-6">
         <p class="text-sm text-muted">
           일시적인 오류로 정보를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.
         </p>
       </section>
+    ) : user ? (
+      <AccountOverview user={user} />
     ) : (
-      <>
-        <section class="rounded-control border border-line p-6 mb-6">
-          <h2 class="text-sm font-medium tracking-wide text-muted uppercase mb-4">계정 정보</h2>
-          <dl class="space-y-3">
-            <div class="flex gap-4">
-              <dt class="text-sm text-muted w-20 shrink-0">닉네임</dt>
-              <dd class="text-sm text-ink">{user.nickname}</dd>
-            </div>
-            <div class="flex gap-4">
-              <dt class="text-sm text-muted w-20 shrink-0">이메일</dt>
-              <dd class="text-sm text-ink flex items-center gap-2">
-                {user.email}
-                {!user.is_email_verified && (
-                  <a
-                    href="/auth/verify-email"
-                    class="text-xs text-muted underline underline-offset-4"
-                  >
-                    인증 필요
-                  </a>
-                )}
-              </dd>
-            </div>
-          </dl>
-        </section>
-      </>
+      <AccountSessionRecovery page="overview" client:load />
     )}
   </div>
 </BaseLayout>

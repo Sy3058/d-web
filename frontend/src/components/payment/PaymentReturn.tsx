@@ -63,7 +63,7 @@ export default function PaymentReturn() {
       }}>결제 상태 다시 확인</button>}
       {(state.kind === 'result' || state.kind === 'error') && state.returnPath
         && <a href={state.returnPath} data-astro-reload className={ghostControl}>회차로 돌아가기</a>}
-      <a href="/my" data-astro-reload className={ghostControl}>마이페이지</a>
+      <a href="/my" data-astro-reload className={ghostControl}>계정</a>
     </div>
   </section>;
 }

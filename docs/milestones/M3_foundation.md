@@ -479,7 +479,7 @@ cancel_pending 실패 확정 ─→ paid (사용자 환불) | review_required (�
 - [x] 닉네임 드롭다운: 일반 메뉴·뷰어에서 마이페이지·구매내역·설정·로그아웃을 공통 메뉴로 제공한다. 메뉴 호버를 회색 배경으로 통일하고 중복 이동을 제거한다. 설정은 기존 알림 준비 안내를 별도 경로로 옮긴 상태이며 계정 편집은 아래 후속 작업이다.
 - [x] U1 독자 공통 UI: 페이지네이션·ghost 버튼·동작형 이동을 회색 hover·focus·disabled 기준으로 통일한다. [구현·검증](../MODULES/FE/UI/IMPLEMENTATION_UI_CONSISTENCY.md).
 - [x] U2 관리자 UI: 보존한 로그아웃 빨간 글씨를 포함해 주요 탐색·버튼·메뉴의 상태·최소 크기를 통일하고 Base UI 키보드 메뉴와 회차 표 배치를 보완했다. [구현·검증](../MODULES/ADMIN/UI/IMPLEMENTATION_UI_CONSISTENCY.md), Admin lint·123 tests·build 통과.
-- [ ] 계정 설정: 비밀번호 수정·프로필 이미지·닉네임 변경을 구현한다. U3 BE의 본인 편집 API·세션/이미지 경계와 회귀를 구현했으며 [검증 기록](../MODULES/BE/Auth/IMPLEMENTATION_ACCOUNT_SETTINGS.md)을 정리한다. FE 편집 화면과 사용자 확인은 아직 미완료다. 이후 댓글은 같은 계정의 공개 닉네임·프로필 이미지를 사용하며 이메일·비밀번호 등 비공개 계정 정보는 공개 프로필에 넣지 않는다.
+- [ ] 계정 설정: 비밀번호 수정·프로필 이미지·닉네임 변경을 구현한다. U3 BE의 본인 편집 API·세션/이미지 경계와 회귀를 구현했으며 [검증 기록](../MODULES/BE/Auth/IMPLEMENTATION_ACCOUNT_SETTINGS.md)을 정리한다. FE는 계정 요약·프로필 수정·비밀번호 변경 페이지로 분리했고 메뉴 명칭을 계정으로 통일했다. 프로필은 선택/제거 초안을 보관한 뒤 통합 PUT 한 번으로 저장하며 미저장 이탈은 폐기한다. 비밀번호는 별도 변경 후 재로그인한다. 프로필 이미지 위치·확대·자르기와 공통 저장 성공 알림을 추가했고 FE lint/check·373 tests·build·SSR16을 검증했다. 2026-11-19 계정 SSR의 access 만료는 브라우저 복구로 연결하고 메뉴의 실제 인증 대조 및 공유 갱신·세션 변경 순서를 보완했다(Admin139 tests·lint/build 포함). BE 통합 저장 099e0d2는 Backend1243·Ruff 및 Admin123·lint/build를 통과했다. [FE 구현·검증](../MODULES/FE/Account/IMPLEMENTATION_ACCOUNT_SETTINGS.md). 자동 검증까지 완료했으며 실제 브라우저/R2 업로드 확인은 남아 있다. 이후 댓글은 같은 계정의 공개 닉네임·프로필 이미지를 사용하며 이메일·비밀번호 등 비공개 계정 정보는 공개 프로필에 넣지 않는다.
 
 ### 남은 구매 내역·환불 구현 전: 오류와 상태 계약
 

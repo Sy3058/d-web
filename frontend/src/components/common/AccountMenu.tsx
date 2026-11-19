@@ -1,6 +1,7 @@
 import { Menu } from '@base-ui/react/menu';
-import { useLayoutEffect, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { api } from '../../lib/api';
+import { getMe } from '../../lib/auth';
 
 interface Props {
   compact?: boolean;
@@ -10,35 +11,79 @@ interface Props {
 const itemClass =
   'flex min-h-11 cursor-pointer items-center rounded-control px-3 text-sm outline-none data-highlighted:bg-hover data-disabled:pointer-events-none data-disabled:opacity-50';
 
+function readLoginHint(): string {
+  const hint = document.cookie.split(';').map((entry) => entry.trim())
+    .find((entry) => entry.startsWith('login_hint='));
+  try {
+    return hint ? decodeURIComponent(hint.slice('login_hint='.length)) : '';
+  } catch {
+    return '';
+  }
+}
+
 export default function AccountMenu({ compact = false, visible = true }: Props) {
   const [nickname, setNickname] = useState('');
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [previousVisible, setPreviousVisible] = useState(visible);
+  const revision = useRef(0);
+  const lastHint = useRef('');
+  const logoutLock = useRef(false);
+  const syncVisibleHint = useRef<(() => void) | null>(null);
+  if (previousVisible !== visible) {
+    setPreviousVisible(visible);
+    if (!visible) setOpen(false);
+  }
 
   useLayoutEffect(() => {
     const updateLoginHint = () => {
-      const hint = document.cookie.split(';').map((entry) => entry.trim())
-        .find((entry) => entry.startsWith('login_hint='));
-      try {
-        setNickname(hint ? decodeURIComponent(hint.slice('login_hint='.length)) : '');
-      } catch {
-        setNickname('');
-      }
+      if (logoutLock.current) return;
+      const currentRevision = ++revision.current;
+      const name = readLoginHint();
+      if (lastHint.current !== name || !name) setNickname(name);
+      lastHint.current = name;
       setOpen(false);
+      if (!name) return;
+      void getMe().then((user) => {
+        if (currentRevision !== revision.current) return;
+        setNickname(user?.nickname ?? '');
+      }).catch(() => {
+        // 일시 장애는 세션 종료가 아니다. 다음 포커스/복원에서 다시 확인한다.
+      });
+    };
+    const pageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) updateLoginHint();
     };
     updateLoginHint();
+    syncVisibleHint.current = () => {
+      if (readLoginHint() !== lastHint.current) updateLoginHint();
+    };
     window.addEventListener('focus', updateLoginHint);
-    return () => window.removeEventListener('focus', updateLoginHint);
-  }, [visible]);
+    window.addEventListener('pageshow', pageShow);
+    window.addEventListener('dweb:account-updated', updateLoginHint);
+    return () => {
+      revision.current += 1;
+      syncVisibleHint.current = null;
+      window.removeEventListener('focus', updateLoginHint);
+      window.removeEventListener('pageshow', pageShow);
+      window.removeEventListener('dweb:account-updated', updateLoginHint);
+    };
+  }, []);
+
+  useLayoutEffect(() => { syncVisibleHint.current?.(); }, [visible]);
 
   async function handleLogout() {
-    if (loading) return;
+    if (logoutLock.current) return;
+    logoutLock.current = true;
+    revision.current += 1;
     setLoading(true);
     try {
       await api.post('/auth/logout', {});
     } catch {
       // 기존 로그아웃 버튼과 같이 실패한 요청 뒤에도 홈으로 이동한다.
     } finally {
+      logoutLock.current = false;
+      setLoading(false);
       window.location.href = '/';
     }
   }
@@ -62,7 +107,7 @@ export default function AccountMenu({ compact = false, visible = true }: Props) 
         <Menu.Positioner align="end" sideOffset={6} className="z-[60]">
           <Menu.Popup className="min-w-40 rounded-control border border-line bg-paper p-1 shadow-lg outline-none">
             <Menu.LinkItem href="/my" className={`${itemClass} text-ink`} data-astro-reload closeOnClick>
-              마이페이지
+              계정
             </Menu.LinkItem>
             <Menu.LinkItem href="/my/purchases" className={`${itemClass} text-ink`} data-astro-reload closeOnClick>
               구매내역

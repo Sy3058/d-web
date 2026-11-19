@@ -1,0 +1,34 @@
+---
+export const prerender = false;
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { getMeOnServer } from '../../lib/auth.server';
+import type { User } from '../../lib/auth';
+import ProfileEditor from '../../components/account/ProfileEditor';
+import AccountSessionRecovery from '../../components/account/AccountSessionRecovery';
+
+Astro.response.headers.set('Cache-Control', 'no-store');
+Astro.response.headers.set('X-Robots-Tag', 'noindex');
+
+const cookie = Astro.request.headers.get('cookie') ?? undefined;
+
+let user: User | null = null;
+let loadError = false;
+try {
+  user = await getMeOnServer(cookie);
+} catch {
+  loadError = true;
+}
+---
+
+<BaseLayout title="프로필 수정">
+  <div class="mx-auto max-w-[720px] px-6 py-12 sm:py-16">
+    <h1 class="mb-8 text-2xl font-semibold tracking-tight text-ink">프로필 수정</h1>
+    {loadError ? (
+      <p class="text-sm text-muted">일시적인 오류로 정보를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.</p>
+    ) : user ? (
+      <ProfileEditor initialUser={user} client:load />
+    ) : (
+      <AccountSessionRecovery page="profile" client:load />
+    )}
+  </div>
+</BaseLayout>

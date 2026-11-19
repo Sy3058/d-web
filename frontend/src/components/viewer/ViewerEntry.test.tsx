@@ -68,7 +68,13 @@ async function mount() {
 function authorizeThenLoad() {
   fetchMock
     .mockResolvedValueOnce(response(200, { id: 'reader' }))
-    .mockResolvedValueOnce(response(200, bootstrap))
+    .mockResolvedValueOnce(response(200, bootstrap));
+  loadAuthorizedContent();
+}
+
+function loadAuthorizedContent() {
+  fetchMock
+    .mockResolvedValueOnce(response(200, { id: 'reader', nickname: '독자' })) // AccountMenu 마운트 시 세션 확인
     .mockResolvedValueOnce(response(200, fullContent))
     .mockResolvedValueOnce(response(404)); // 진행도 없음
 }
@@ -86,9 +92,8 @@ it('일반 구매자의 세션 복구와 bootstrap 인가 뒤에만 실제 Viewe
   let resolveBootstrap!: (value: Response) => void;
   fetchMock
     .mockResolvedValueOnce(response(200, { id: 'reader' }))
-    .mockReturnValueOnce(new Promise<Response>((resolve) => { resolveBootstrap = resolve; }))
-    .mockResolvedValueOnce(response(200, fullContent))
-    .mockResolvedValueOnce(response(404));
+    .mockReturnValueOnce(new Promise<Response>((resolve) => { resolveBootstrap = resolve; }));
+  loadAuthorizedContent();
   await mount();
   expect(paths()).toEqual(['/auth/me', '/works/work-a/episodes/12345678/viewer-bootstrap']);
   expect(container.querySelector('img')).toBeNull();
@@ -97,8 +102,9 @@ it('일반 구매자의 세션 복구와 bootstrap 인가 뒤에만 실제 Viewe
   await act(async () => resolveBootstrap(response(200, bootstrap)));
   expect(paths()).toEqual([
     '/auth/me', '/works/work-a/episodes/12345678/viewer-bootstrap',
-    '/episodes/episode-a/content', '/episodes/episode-a/progress',
+    '/auth/me', '/episodes/episode-a/content', '/episodes/episode-a/progress',
   ]);
+  expect(container.querySelector('button[aria-label="독자 계정 메뉴"]')).not.toBeNull();
   expect([...container.querySelectorAll('img')].map((image) => image.src)).toEqual([
     'https://images.test/free.webp', 'https://images.test/paid-full.webp',
   ]);
@@ -116,7 +122,7 @@ it('access 만료는 refresh 한 번과 me 재조회 뒤 bootstrap 및 full cont
   expect(paths()).toEqual([
     '/auth/me', '/auth/refresh', '/auth/me',
     '/works/work-a/episodes/12345678/viewer-bootstrap',
-    '/episodes/episode-a/content', '/episodes/episode-a/progress',
+    '/auth/me', '/episodes/episode-a/content', '/episodes/episode-a/progress',
   ]);
   expect(container.querySelector('img[src$="paid-full.webp"]')).not.toBeNull();
 });
@@ -166,7 +172,7 @@ it('refresh 장애는 메타와 본문을 막고 오류 UI의 재시도로 다�
   expect(paths()).toEqual([
     '/auth/me', '/auth/refresh', '/auth/me', '/auth/refresh', '/auth/me',
     '/works/work-a/episodes/12345678/viewer-bootstrap',
-    '/episodes/episode-a/content', '/episodes/episode-a/progress',
+    '/auth/me', '/episodes/episode-a/content', '/episodes/episode-a/progress',
   ]);
   expect(container.querySelector('img[src$="paid-full.webp"]')).not.toBeNull();
 });
@@ -265,7 +271,7 @@ it('bootstrap 후 최초 content만 세션 재조회를 생략하고 이미지 �
   await act(async () => container.querySelector('img')!.dispatchEvent(new Event('error')));
   expect(paths()).toEqual([
     '/auth/me', '/works/work-a/episodes/12345678/viewer-bootstrap',
-    '/episodes/episode-a/content', '/episodes/episode-a/progress',
+    '/auth/me', '/episodes/episode-a/content', '/episodes/episode-a/progress',
     '/auth/me', '/episodes/episode-a/content',
   ]);
 });

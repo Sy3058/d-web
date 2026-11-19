@@ -24,6 +24,12 @@
 - production build 통과. 기존 Sentry token 미설정 및 transitions sourcemap 경고는 유지한다.
 - SSR/DOM 13 tests 통과. 검증은 작품 첫/중간/마지막 페이지의 태그·페이지 링크·비활성 이전/다음·현재 페이지 의미와 기존 공개 캐시·계정 표시·구매 권한 셸을 확인한다. 브라우저 E2E나 실제 포인터·키보드 조작을 실행한 것으로 보지 않는다.
 
+## 공통 알림 모달 (2026-11-16)
+
+`components/ui/NoticeDialog.tsx`는 shadcn Base UI Dialog 구성을 참고한 알림 전용 컴포넌트다. `open`, `onOpenChange`, `message`를 전달하고 `title`(기본 알림), `confirmLabel`(기본 확인), `returnFocus`를 필요에 따라 바꾼다. 확인과 우상단 X, 바깥 클릭, Escape가 같은 닫기 경로를 사용한다. React 문자열로 본문을 렌더하고 포커스 제한·배경 비활성·복원은 기존 @base-ui/react 1.9.0에 맡긴다.
+
+프로필 저장 성공에 연결했으며 닫힌 뒤 입력란으로 포커스를 복원한다. 독립6개 회귀로 모든 닫기 동작·내용 클릭 유지·다른 메시지 재개방·HTML 비삽입·초기/복원 포커스를 검증했다. 기존 결제/관리자 모달을 이 알림 컴포넌트로 대체하는 변경은 포함하지 않는다.
+
 ## 근거
 
 - [UI 결정](../../../DECISIONS.md)
