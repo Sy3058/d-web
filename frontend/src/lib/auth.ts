@@ -5,7 +5,8 @@ export interface User {
   email: string;
   nickname: string;
   profile_image: string | null;
-  is_admin: boolean;
+  role: 'reader' | 'owner' | 'moderator';
+  has_password: boolean;
   is_email_verified: boolean;
   created_at: string;
 }

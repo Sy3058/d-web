@@ -1,15 +1,17 @@
 ---
 export const prerender = false;
 import BaseLayout from '../../layouts/BaseLayout.astro';
-import { getMe } from '../../lib/auth';
+import { getMeOnServer } from '../../lib/auth.server';
+import type { User } from '../../lib/auth';
+import AccountSessionRecovery, { AccountSettings } from '../../components/account/AccountSessionRecovery';
 
 Astro.response.headers.set('Cache-Control', 'no-store');
 Astro.response.headers.set('X-Robots-Tag', 'noindex');
 
+let user: User | null = null;
 let loadError = false;
 try {
-  const user = await getMe(Astro.request.headers.get('cookie') ?? undefined);
-  if (!user) return Astro.redirect('/auth/login');
+  user = await getMeOnServer(Astro.request.headers.get('cookie') ?? undefined);
 } catch {
   loadError = true;
 }
@@ -21,11 +23,10 @@ try {
     <section class="rounded-control border border-line p-6">
       {loadError ? (
         <p class="text-sm text-muted">일시적인 오류로 정보를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.</p>
+      ) : user ? (
+        <AccountSettings />
       ) : (
-        <>
-          <h2 class="text-sm font-medium mb-2">알림 설정</h2>
-          <p class="text-sm text-muted">알림 설정 기능은 준비 중이에요.</p>
-        </>
+        <AccountSessionRecovery page="settings" client:load />
       )}
     </section>
   </div>

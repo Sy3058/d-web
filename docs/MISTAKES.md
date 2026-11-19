@@ -97,6 +97,9 @@ docs/MISTAKES.md 참고해서 FastAPI 라우터 작성해줘
   → `me 401 → refresh 503/네트워크 실패`를 삼키면 optional bootstrap은 비구매 404, 공개 content는 preview로 진행해 유효한 구매자를 막는다. refresh의 최종 401만 세션 종료로 처리하고 그 외 오류는 전파한다.
   → 최초 me 요청 실패뿐 아니라 refresh 단계 실패도 raw fetch로 재현한다. 장애 중 bootstrap·content 요청 0과 오류 UI, 실패 뒤 in-flight 해제 및 명시적 재시도 성공을 함께 확인한다.
 
+- **계정 SSR의 401은 브라우저 세션 만료를 확정하지 못한다** (2026-11-19)
+  → refresh 쿠키는 Path=/auth/refresh라 /my 요청에 없다. SSR에서 쿠키 없는 refresh를 시도하고 로그인으로 보내면 유효한 refresh와 표시용 닉네임이 남아 상태가 어긋난다. SSR은 access 조회만 하고 브라우저에서 복구한다. 메뉴도 힌트만으로 로그인 상태를 확정하지 않는다. 서버 조회의 refresh 호출 0, 브라우저 갱신 성공/최종401/장애 구분과 늦은 메뉴 응답 무시를 검사한다.
+
 - **Promise 성공 경로만 렌더 상태를 바꾸면 rejection이 영구 로딩으로 굳는다** (#116, 2026-08-17)
   → 실제 사고: 회차 콘텐츠 초기 요청과 이미지 URL 재발급 요청이 `then`만 사용했다. `getEpisodeContent`가 의도대로 네트워크 오류와 5xx를 throw하자 rejection은 처리되지 않았고, `content=undefined`가 계속 loading을 뜻해 오류 안내 없이 무한 로딩됐다
   → 요청 상태를 `loading / success / notFound / error`로 명시하고, 404 `null`과 그 외 rejection이 각각 종료 상태에 도달하게 한다. 수동 재시도와 `onError` 재요청도 같은 요청 effect를 통과시켜 별도 fire-and-forget Promise를 남기지 않는다
@@ -133,6 +136,9 @@ docs/MISTAKES.md 참고해서 FastAPI 라우터 작성해줘
 
 - **같은 프로젝트의 데모·일반 config가 Vite 최적화 캐시를 공유하면 열린 브라우저가 이전 청크를 요청할 수 있다** (2026-11-13 구매내역 사용자 확인)
   → 별도 모의 결제 SDK alias config로 빌드한 뒤 일반 개발 서버에서 TipTap 의존성 요청이 `504 (Outdated Optimize Dep)`로 실패했다. config 전환에 따른 재최적화 로그를 확인했다. 개발 서버를 정상 종료하고 기존 `frontend/node_modules/.vite`를 백업한 뒤 재시작했으며, 변환된 뷰어 모듈이 실제 참조하는 최신 TipTap 파일 URL의 200을 확인했다. 브라우저의 이전 URL은 강력 새로고침으로 교체한다. 임시 config에는 별도 `vite.cacheDir`을 지정해 일반 dev 캐시와 분리했다. 메타데이터의 전역 hash를 임의로 붙이지 말고 실제 변환 모듈에 출력된 의존성 URL로 확인한다. [Vite cacheDir](https://vite.dev/config/shared-options.html#cachedir).
+
+- **실행 중인 dev와 astro check가 Vite 캐시를 공유하면 뷰어 의존성이504로 실패할 수 있다** (2026-11-16)
+  -> Astro7.2.4의 check는 production NODE_ENV로 sync의 임시 Vite 서버를 띄웠고, 실행 중인 dev가 참조하는 캐시를 다른 hash와 작은 의존성 목록으로 교체했다. live Viewer.tsx는200이지만 그 안의 TipTap core/starter-kit/link와 dev toolbar는504인 상태를 재현했다. astro:config:setup의 command로 `.vite/dev`, `.vite/sync`, `.vite/build`를 분리한다. dev를 켠 채 check/build 실행 전후 실제 변환 모듈의 의존성 URL이200인지 확인하고 브라우저의 이전 경로는 강력 새로고침으로 교체한다. 캐시 hash를 임의로 붙이거나 ignoreOutdatedRequests로 오류만 숨기지 않는다.
 
 - **SSR 컨테이너와 브라우저에 같은 API base URL을 쓰면 `localhost`의 주체가 달라진다** (M2 G, 2026-08-13)
   -> 브라우저의 `http://localhost:8000`은 호스트에 바인딩된 API를 가리키지만, frontend 컨테이너의 같은 주소는 frontend 자신을 가리킨다. Astro 페이지를 SSR로 전환하면 정적 빌드에서 숨어 있던 이 차이가 런타임 장애로 드러난다.

@@ -37,7 +37,11 @@ test('뷰어 SSR의 공개 캐시·메타 없는 진입 셸·장애 구분', { t
       res.writeHead(401).end('{}');
     } else if (req.url === '/auth/me') {
       if (req.headers.cookie?.includes('access_token=VALID_ACCOUNT')) {
-        res.end(JSON.stringify({ nickname: 'PRIVATE_ACCOUNT', email: 'private@example.com' }));
+        res.end(JSON.stringify({
+          id: 'private-reader', nickname: 'PRIVATE_ACCOUNT', email: 'private@example.com',
+          profile_image: null, role: 'reader', has_password: true, is_email_verified: true,
+          created_at: '2026-11-16T00:00:00Z',
+        }));
       } else if (req.headers.cookie?.includes('access_token=TEMP_ERROR')) {
         res.writeHead(503).end('{}');
       } else {
@@ -264,26 +268,86 @@ test('뷰어 SSR의 공개 캐시·메타 없는 진입 셸·장애 구분', { t
       assert.ok(!html.includes(nickname));
     });
 
-    await t.test('설정은 인증 후 접근하고 no-store이며 계정 API 장애는 오류로 표시한다', async () => {
-      const guest = await fetch(`${siteUrl}/my/settings`, { redirect: 'manual' });
-      assert.equal(guest.status, 302);
-      assert.equal(guest.headers.get('location'), '/auth/login');
-      for (const token of ['VALID_ACCOUNT', 'TEMP_ERROR']) {
-        const response = await fetch(`${siteUrl}/my/settings`, {
-          headers: { Cookie: `access_token=${token}` },
-        });
-        const html = await response.text();
-        assert.equal(response.status, 200);
-        assert.equal(response.headers.get('cache-control'), 'no-store');
-        assert.equal(response.headers.get('x-robots-tag'), 'noindex');
-        assert.ok(html.includes(token === 'VALID_ACCOUNT' ? '알림 설정 기능은 준비 중' : '일시적인 오류'));
-        assert.ok(!html.includes('PRIVATE_ACCOUNT'));
-        assert.ok(!html.includes('private@example.com'));
-      }
-      const authRequests = requests.filter((req) => req.url === '/auth/me');
-      assert.equal(authRequests.length, 3);
-      assert.equal(authRequests[1].cookie, 'access_token=VALID_ACCOUNT');
-    });
+    for (const [path, title, component] of [
+      ['/my', '계정', null],
+      ['/my/profile', '프로필 수정', 'ProfileEditor'],
+      ['/my/password', '비밀번호 변경', 'PasswordEditor'],
+      ['/my/settings', '설정', null],
+    ]) {
+      await t.test(`${title} 페이지는 인증·개인 캐시·장애 경계를 유지한다`, async () => {
+        const firstRequest = requests.length;
+        for (const cookie of [undefined, 'access_token=EXPIRED_ACCOUNT; login_hint=STALE_HINT']) {
+          const recovery = await fetch(`${siteUrl}${path}`, {
+            redirect: 'manual',
+            headers: cookie ? { Cookie: cookie } : undefined,
+          });
+          assert.equal(recovery.status, 200);
+          assert.equal(recovery.headers.get('location'), null);
+          assert.equal(recovery.headers.get('cache-control'), 'no-store');
+          assert.equal(recovery.headers.get('x-robots-tag'), 'noindex');
+          const html = await recovery.text();
+          const dom = new JSDOM(html);
+          try {
+            assert.equal(dom.window.document.querySelector('h1')?.textContent, title);
+            assert.ok(html.includes('AccountSessionRecovery'));
+            assert.ok(html.includes('로그인 확인 중...'));
+            assert.equal(dom.window.document.querySelector('form'), null);
+            for (const marker of ['private@example.com', 'PRIVATE_ACCOUNT', 'STALE_HINT', 'EXPIRED_ACCOUNT', '알림 설정 기능은 준비 중']) {
+              assert.ok(!html.includes(marker));
+            }
+          } finally { dom.window.close(); }
+        }
+        for (const token of ['VALID_ACCOUNT', 'TEMP_ERROR']) {
+          const response = await fetch(`${siteUrl}${path}`, {
+            headers: { Cookie: `access_token=${token}` },
+          });
+          const html = await response.text();
+          assert.equal(response.status, 200);
+          assert.equal(response.headers.get('cache-control'), 'no-store');
+          assert.equal(response.headers.get('x-robots-tag'), 'noindex');
+          if (token === 'VALID_ACCOUNT') {
+            const dom = new JSDOM(html);
+            try {
+              assert.equal(dom.window.document.querySelector('h1')?.textContent, title);
+              if (component) {
+                assert.ok(html.includes(component));
+                assert.equal(dom.window.document.querySelector('form')?.getAttribute('method'), 'post');
+                assert.ok(dom.window.document.querySelector('a[href="/my"]'));
+                assert.ok(html.includes(path.endsWith('profile') ? '변경 내용 저장' : '현재 비밀번호'));
+              } else if (path === '/my/settings') {
+                assert.ok(html.includes('알림 설정 기능은 준비 중'));
+                assert.ok(!html.includes('PRIVATE_ACCOUNT'));
+                assert.ok(!html.includes('private@example.com'));
+              } else {
+                assert.ok(html.includes('private@example.com'));
+                assert.ok(html.includes('PRIVATE_ACCOUNT'));
+                assert.ok(dom.window.document.querySelector('a[href="/my/profile"]'));
+                assert.ok(dom.window.document.querySelector('a[href="/my/password"]'));
+                assert.equal(dom.window.document.querySelector('form'), null);
+                for (const unwanted of ['passkey', '패스키', '2단계 인증', '이메일 관리']) {
+                  assert.ok(!html.includes(unwanted));
+                }
+              }
+            } finally { dom.window.close(); }
+            assert.ok(!html.includes('access_token=VALID_ACCOUNT'));
+          } else {
+            assert.ok(html.includes('일시적인 오류'));
+            assert.ok(!html.includes('private@example.com'));
+            assert.ok(!html.includes('profile-nickname'));
+            assert.ok(!html.includes('current-password'));
+            assert.ok(!html.includes('PRIVATE_ACCOUNT'));
+          }
+        }
+        const authRequests = requests.slice(firstRequest).filter((req) => req.url.startsWith('/auth/'));
+        assert.deepEqual(authRequests, [
+          { url: '/auth/me', cookie: undefined },
+          { url: '/auth/me', cookie: 'access_token=EXPIRED_ACCOUNT; login_hint=STALE_HINT' },
+          { url: '/auth/me', cookie: 'access_token=VALID_ACCOUNT' },
+          { url: '/auth/me', cookie: 'access_token=TEMP_ERROR' },
+        ]);
+      });
+    }
+
   } finally {
     if (site && site.exitCode === null && site.signalCode === null) {
       const exit = once(site, 'exit');

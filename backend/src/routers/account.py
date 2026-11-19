@@ -3,11 +3,12 @@
 from collections.abc import Callable, Coroutine
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
+from pydantic import ValidationError
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.lib.auth import (
@@ -104,6 +105,48 @@ async def update_avatar(
         raise HTTPException(401, "인증이 필요합니다") from exc
     finally:
         await file.close()
+
+
+@router.put(
+    "/me/profile",
+    response_model=UserRead,
+    dependencies=[Depends(RateLimit("5/minute", scope="account_profile"))],
+)
+async def update_profile(
+    response: Response,
+    current_user: CurrentUser,
+    session: SessionDep,
+    nickname: Annotated[str, Form()],
+    file: Annotated[UploadFile | None, File()] = None,
+    remove_image: Annotated[bool, Form()] = False,
+) -> User:
+    try:
+        try:
+            validated = NicknameUpdateRequest(nickname=nickname)
+        except ValidationError as exc:
+            raise RequestValidationError(
+                [
+                    {**error, "loc": ("body", *error["loc"])}
+                    for error in exc.errors(include_input=False, include_context=False)
+                ]
+            ) from exc
+        if file is not None and remove_image:
+            raise HTTPException(422, "이미지 업로드와 삭제를 함께 요청할 수 없습니다")
+        data = await file.read(avatar_service.MAX_AVATAR_BYTES + 1) if file is not None else None
+        user = await account_service.update_profile(
+            current_user.id, validated.nickname, session, data=data, remove_image=remove_image
+        )
+    except ImageValidationError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    except R2NotConfiguredError as exc:
+        raise HTTPException(503, "프로필 이미지 저장소를 사용할 수 없습니다") from exc
+    except InvalidCredentialsError as exc:
+        raise HTTPException(401, "인증이 필요합니다") from exc
+    finally:
+        if file is not None:
+            await file.close()
+    set_login_hint_cookie(response, user.nickname)
+    return user
 
 
 @router.post(
