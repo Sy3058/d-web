@@ -486,6 +486,11 @@ async def rotate_refresh(raw: str, session: AsyncSession) -> tuple[User, str, st
     # 제출된 토큰 자체가 이미 죽음(stale): 회전이 지난 토큰의 재제출 = 탈취 신호.
     # (아래 _claim 패자와 구분 - 패자는 SELECT 땐 살아있던 토큰을 찰나에 남이 회전시킨 정상 경우)
     if record.revoked_at is not None:
+        # User 잠금 대기 중 비밀번호 변경으로 삭제됐으면 새 세션을 폐기하지 않는다.
+        token_id = await session.exec(select(RefreshToken.id).where(RefreshToken.id == record.id))
+        if token_id.first() is None:
+            await session.rollback()
+            raise RefreshRotationConflictError
         await revoke_all_refresh_tokens(record.user_id, session)
         await session.commit()
         raise TokenReuseError

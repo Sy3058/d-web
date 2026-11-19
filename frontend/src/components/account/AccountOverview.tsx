@@ -30,7 +30,9 @@ export default function AccountOverview({ user }: { user: User }) {
         </div>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h3 className="text-sm font-medium text-ink">비밀번호</h3>
-          {user.has_password ? (
+          {user.role === 'owner' ? (
+            <p className="text-sm text-muted">관리자 계정은 이 화면에서 비밀번호를 변경할 수 없어요.</p>
+          ) : user.has_password ? (
             <a href="/my/password" className={`${ghostControl} border border-line`} data-astro-reload>비밀번호 변경</a>
           ) : <p className="text-sm text-muted">소셜 로그인으로 관리 중</p>}
         </div>

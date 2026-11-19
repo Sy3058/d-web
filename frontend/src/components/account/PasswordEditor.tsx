@@ -36,6 +36,7 @@ export default function PasswordEditor({ initialUser }: { initialUser: User }) {
   });
   const { reset } = form;
   const disabled = busy || needsLogin || restoreFailed;
+  const canChangePassword = user.has_password && user.role !== 'owner';
 
   useEffect(() => {
     mounted.current = true;
@@ -62,7 +63,7 @@ export default function PasswordEditor({ initialUser }: { initialUser: User }) {
       setBusy(true);
       setRestoring(true);
       try {
-        // A completed password change may have cleared the session cookie.
+        // Wait for the password change's new session cookies before checking the account.
         if (pending) await pending.catch(() => undefined);
         if (!mounted.current || restoreGeneration !== generation.current) return;
         const currentUser = await getMe();
@@ -101,7 +102,7 @@ export default function PasswordEditor({ initialUser }: { initialUser: User }) {
   }, [reset]);
 
   async function savePassword(values: PasswordInput) {
-    if (!mounted.current || lock.current || needsLogin || restoreFailed || !user.has_password) return;
+    if (!mounted.current || lock.current || needsLogin || restoreFailed || !canChangePassword) return;
     const requestGeneration = generation.current;
     lock.current = true;
     setBusy(true);
@@ -114,8 +115,8 @@ export default function PasswordEditor({ initialUser }: { initialUser: User }) {
       await request;
       if (!mounted.current || requestGeneration !== generation.current) return;
       form.reset();
-      setNeedsLogin(true);
-      setNotice('비밀번호를 변경했어요. 다시 로그인해 주세요.');
+      setNeedsLogin(false);
+      setNotice('비밀번호를 변경했어요.');
       window.dispatchEvent(new Event('dweb:account-updated'));
     } catch (cause) {
       if (!mounted.current || requestGeneration !== generation.current) return;
@@ -128,7 +129,7 @@ export default function PasswordEditor({ initialUser }: { initialUser: User }) {
           setError(extractDetail(cause) ?? '변경하지 못했어요. 잠시 후 다시 시도해 주세요.');
         }
       } else {
-        setError('통신 오류로 변경 결과를 확인하지 못했어요. 다시 로그인해 변경 여부를 확인해 주세요.');
+        setError('통신 오류로 변경 결과를 확인하지 못했어요. 계정 상태를 확인한 뒤 다시 시도해 주세요.');
       }
     } finally {
       if (pendingRequest.current === request) pendingRequest.current = null;
@@ -139,7 +140,7 @@ export default function PasswordEditor({ initialUser }: { initialUser: User }) {
     }
   }
 
-  if (!user.has_password && !needsLogin) return <div className="space-y-4">{error && <FormError message={error} />}{restoring && <p role="status" className="text-sm text-muted">정보 확인 중...</p>}<p className="text-sm text-muted">소셜 로그인 계정은 로그인한 서비스에서 비밀번호를 관리해 주세요.</p><a href="/my" className={ghostControl} data-astro-reload>계정으로 돌아가기</a></div>;
+  if (!canChangePassword && !needsLogin) return <div className="space-y-4">{error && <FormError message={error} />}{restoring && <p role="status" className="text-sm text-muted">정보 확인 중...</p>}<p className="text-sm text-muted">{user.role === 'owner' ? '관리자 계정은 이 화면에서 비밀번호를 변경할 수 없어요.' : '소셜 로그인 계정은 로그인한 서비스에서 비밀번호를 관리해 주세요.'}</p><a href="/my" className={ghostControl} data-astro-reload>계정으로 돌아가기</a></div>;
 
   return (
     <form method="post" noValidate onSubmit={(event) => { void form.handleSubmit(savePassword)(event); }} className="space-y-6">
@@ -148,9 +149,9 @@ export default function PasswordEditor({ initialUser }: { initialUser: User }) {
       {needsLogin && <a href="/auth/login" className={ghostControl} data-astro-reload>다시 로그인</a>}
       <fieldset disabled={disabled} className="space-y-5">
         <TextField id="current-password" label="현재 비밀번호" type="password" autoComplete="current-password" maxLength={128} error={form.formState.errors.current_password?.message} {...form.register('current_password')} />
-        <TextField id="new-password" label="새 비밀번호" type="password" autoComplete="new-password" maxLength={128} helper="8~128자, 영문·숫자·특수문자를 각각 포함하세요." error={form.formState.errors.new_password?.message} {...form.register('new_password')} />
+        <TextField id="new-password" label="새 비밀번호" type="password" autoComplete="new-password" maxLength={128} helper="8~128자, 영문, 숫자, 특수문자를 각각 포함하세요." error={form.formState.errors.new_password?.message} {...form.register('new_password')} />
         <TextField id="confirm-password" label="새 비밀번호 확인" type="password" autoComplete="new-password" maxLength={128} error={form.formState.errors.confirm_password?.message} {...form.register('confirm_password')} />
-        <p className="text-xs text-muted">변경하면 다시 로그인해야 하며, 다른 기기의 로그인도 순차적으로 만료돼요.</p>
+        <p className="text-xs text-muted">다른 기기에서는 로그아웃됩니다.</p>
         <div className="flex flex-wrap items-center gap-2 border-t border-line pt-6">
           <button type="submit" disabled={disabled} className={`${controlBase} bg-ink px-5 py-2.5 text-paper hover:bg-ink-strong`}>{restoring ? '정보 확인 중...' : busy ? '변경 중...' : '비밀번호 변경'}</button>
           <a href="/my" className={ghostControl} aria-disabled={busy || undefined} onClick={(event) => { if (lock.current) event.preventDefault(); }} data-astro-reload>취소</a>
