@@ -67,10 +67,10 @@
 
 ### Vite 버전: 8로 workspace 통일, Astro 7 migration 완료
 
-**현재 상태 (2026-08-24)**
-- frontend는 `astro@^7.2.4`, `@astrojs/node@^11.1.4`, `@astrojs/react@^6.0.4`를 사용한다. Astro가 제공하는 Vite는 잠금 파일 기준 `8.2.2`다.
-- admin은 `vite@^8.2.2`, `@vitejs/plugin-react@^6.1.0`을 사용한다.
-- Astro 6 시기의 frontend `vite@^7` 직접 고정은 제거했다. `pnpm why`로 frontend와 admin의 Astro, Tailwind, TanStack Router, Vitest가 모두 `vite@8.2.2`를 해석함을 확인했다.
+**현재 상태 (2026-11-19 보안 수정 반영)**
+- frontend는 `astro@^7.2.4`, `@astrojs/node@^11.1.4`, `@astrojs/react@^6.0.4`를 사용한다. Astro가 제공하는 Vite는 잠금 파일 기준 `8.2.6`이다.
+- admin은 `vite@^8.2.6`, `@vitejs/plugin-react@^6.1.0`을 사용한다.
+- Astro 6 시기의 frontend `vite@^7` 직접 고정은 제거했다. `pnpm why`로 frontend와 admin의 Astro, Tailwind, TanStack Router, Vitest가 모두 `vite@8.2.6`을 해석함을 확인했다.
 - 프로젝트에 `build.rollupOptions`가 없어 `build.rolldownOptions` 전환은 필요하지 않았다. `@tailwindcss/vite@4.3.0`도 Vite 8 peer 범위를 지원하고 양쪽 빌드를 통과해 유지한다.
 - Astro 7의 Rust 컴파일러, `compressHTML: 'jsx'` 기본값, `src/fetch.ts` 예약, Sätteri 기본 Markdown 처리기를 공식 migration 문서와 대조했다. 현재 소스에는 충돌하는 실험 플래그, `src/fetch.ts`, Markdown/MDX, 제거 API가 없다.
 - 인증과 상태는 FastAPI의 HttpOnly 쿠키로 관리하며 Astro 세션을 사용하지 않으므로 `session: false`로 Node adapter의 기본 파일시스템 세션을 끈다.
@@ -84,7 +84,7 @@
 - Node 20은 2026-04-30 EOL (이미 만료)
 - Node 22 (LTS, 2027-04까지) / Node 24 (Active LTS, 더 긴 지원 + npm 11 + 최신 V8) 중 새 프로젝트는 24 권장
 - 26은 2026-10에 LTS 승격 예정이므로 현 시점 선택 X
-- frontend lint 도구의 하한에 맞춰 `frontend.engines.node`는 `>=24.16.0`으로 둔다. CI의 Node 24 채널과 `node:24-alpine`은 이 하한 이상의 최신 24.x를 사용한다.
+- 2026-11-19 보안 수정으로 `frontend.engines.node`는 `>=24.22.3`으로 올렸다. 로컬 nvm 기본 버전과 FE·Admin Docker builder/FE runtime은 24.22.3을 사용하며 CI는 Node 24 채널을 유지한다.
 
 ### 관리자 라우터: TanStack Router
 
@@ -135,6 +135,8 @@
 - PostgreSQL: 안정적, FastAPI 궁합 좋음, VPS 안에서 직접 운영
 
 ### Python 버전: 3.12
+
+2026-11-19 보안 수정으로 로컬 `.python-version`과 Backend Docker base를 3.12.16으로 갱신했다. Pillow는 13.0.0, uv는 0.13.9를 사용하며 PostgreSQL 개발·CI 이미지는 16.16으로 고정한다. 변경 범위와 검증은 [의존성 보안 수정 기록](MODULES/INFRA/Security/IMPLEMENTATION_DEPENDENCY_SECURITY_UPDATES.md#2026-11-19-pillowvite-업데이트)을 따른다.
 
 **이유**
 - 3.13도 안정화됐지만 일부 C 확장(asyncpg, pydantic-core 등) 휠 배포·호환성이 3.12가 더 안전

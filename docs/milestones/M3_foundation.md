@@ -608,6 +608,8 @@ pnpm --filter admin lint && pnpm --filter admin test && pnpm --filter admin buil
 
 ### M3 완료
 
+2026-11-19 보안 유지보수: Pillow 13.0.0·Vite 8.2.6·Python 3.12.16·Node 24.22.3·PostgreSQL 16.16을 반영하고 Backend 1,243개, Frontend 352개, Admin 123개 테스트와 앱별 정적 검사·빌드를 확인했다. DB 백업 복원과 Docker 빌드도 검증했다. [상세 적용 기록](../MODULES/INFRA/Security/IMPLEMENTATION_DEPENDENCY_SECURITY_UPDATES.md#런타임db-적용과-추가-검증). 이는 아래 M3 완료 항목이나 브라우저 확인의 완료 판정이 아니다.
+
 - [ ] 코드 품질 후속 Q5 신규 가격 기본값 계약과 Q6 운영 API 주소 검증 완료 ([완료조건](#m3-quality-followups))
 - [ ] 기존·신규 이미지 metadata 100%와 공간 예약
 - [ ] 로그인·게스트 완독, 작품 진행률·CTA 의미 통일
