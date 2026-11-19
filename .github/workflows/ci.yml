@@ -29,7 +29,7 @@ jobs:
       # 통합 테스트용 Postgres. conftest.py가 SQLModel.metadata.create_all로
       # 스키마를 직접 만들므로 alembic 없이 '빈 DB'만 있으면 된다.
       postgres:
-        image: postgres:16
+        image: postgres:16.16
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -99,7 +99,7 @@ jobs:
         with:
           version: 10
 
-      - name: Install Node (frontend engines >=24.16.0)
+      - name: Install Node (frontend engines >=24.22.3)
         uses: actions/setup-node@v7
         with:
           node-version: '24'

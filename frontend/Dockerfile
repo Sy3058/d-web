@@ -1,4 +1,4 @@
-FROM node:24-alpine AS builder
+FROM node:24.22.3-alpine AS builder
 
 WORKDIR /app
 
@@ -13,7 +13,7 @@ COPY admin/ ./admin/
 RUN pnpm install --frozen-lockfile
 RUN pnpm --filter frontend build
 
-FROM node:24-alpine
+FROM node:24.22.3-alpine
 
 WORKDIR /app
 
