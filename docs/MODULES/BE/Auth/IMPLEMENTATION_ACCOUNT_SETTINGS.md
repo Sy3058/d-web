@@ -2,7 +2,7 @@
 
 ## 범위와 인계
 
-본인 계정의 닉네임·프로필 이미지·비밀번호를 변경하는 BE 전달 단위다. User의 기존 nickname/profile_image/hashed_password 필드를 사용하며 DB 컬럼·migration을 추가하지 않는다. UserRead.has_password는 저장 필드가 아닌 파생 읽기 값으로, 소셜 전용 계정의 비밀번호 편집 가능 여부만 본인 계정 화면에 알린다. 해시와 TOTP 시크릿은 응답하지 않으며 이 DTO를 공개 댓글 프로필에 재사용하지 않는다.
+본인 계정의 닉네임·프로필 이미지·비밀번호를 변경하는 BE 전달 단위다. User의 기존 nickname/profile_image/hashed_password 필드를 사용하며 DB 컬럼·migration을 추가하지 않는다. UserRead.has_password는 로컬 비밀번호 보유 여부를 알리는 파생 bool이며 편집 허용 여부는 역할도 함께 확인한다. 해시와 TOTP 시크릿은 응답하지 않으며 이 DTO를 공개 댓글 프로필에 재사용하지 않는다.
 
 BE main 반영 뒤 최신 main 기반 별도 FE 브랜치에서 마이페이지 편집 화면을 연결한다. 현재 BE 완료를 계정 편집 UI 완료로 표시하지 않는다. 댓글·비밀번호 재설정·소셜 계정 연결·결제·소장본 정책은 이 작업에 포함하지 않는다.
 
@@ -19,6 +19,8 @@ BE main 반영 뒤 최신 main 기반 별도 FE 브랜치에서 마이페이지 
 닉네임 변경은 표시 전용 login_hint만 URL 인코딩해 갱신하며 access/refresh 쿠키를 다시 발급하거나 본문으로 반환하지 않는다. Cookie Secure·SameSite·Path·수명은 기존 공통 설정을 사용한다. 로그인·refresh·OAuth의 기존 세 쿠키 발급은 같은 공용 helper를 계속 사용한다.
 
 현재 비밀번호 불일치는 400으로 구분해 공용 API wrapper의 401 자동 refresh/재전송을 유발하지 않는다. 소셜 전용 계정은 409, 동일한 새 비밀번호·정책/HIBP/확인 불일치는 422다. 소셜 계정에 로컬 비밀번호를 새로 설정하는 기능을 우회 추가하지 않는다.
+
+owner는 잠근 최신 역할을 확인해403으로 거부하고 비밀번호·세션을 변경하지 않는다. 일반 계정의 잔여 access로 승격된 owner의 새 세션을 발급해 TOTP를 우회할 수 없도록 한다. 관리자 전용 비밀번호 변경 기능을 이 경로에 새로 구현하지 않는다.
 
 브라우저 PATCH preflight를 위해 기존 CORS origin allowlist를 유지하면서 PATCH 메서드만 추가했다. 인증 쿠키를 쓰는 임의 origin을 허용하지 않는다.
 
@@ -40,12 +42,15 @@ BE main 반영 뒤 최신 main 기반 별도 FE 브랜치에서 마이페이지 
 
 - 새 비밀번호 정책과 HIBP, bcrypt는 기존 함수와 공유한다. HIBP 장애 처리도 기존 fail-open 계약을 유지한다.
 - 새 해시 계산·외부 HIBP는 사용자 잠금 밖에서 수행하고, 현재 비밀번호는 잠근 최신 User 행으로 검증한다.
-- 해시 갱신과 모든 refresh·trusted device 폐기를 한 트랜잭션으로 처리한다. 실패 시 변경을 되돌리며 성공 후 access/refresh/login_hint/admin pending/trusted device 쿠키를 실제 설정과 같은 범위로 삭제한다.
+- 2026-11-20 현재 기기 로그인 유지: 해시 갱신·이전 refresh 행 삭제·trusted device 폐기·현재 기기용 새 refresh 발급을 한 트랜잭션으로 처리한다. 실패 시 모두 되돌리며 성공 commit 뒤 access/refresh/login_hint 쿠키를 새로 설정한다. admin pending/trusted device 쿠키는 기존 범위로 삭제한다. 응답은 MessageResponse를 유지하고 토큰을 JSON에 넣지 않는다.
+- 비밀번호 변경 전의 refresh 행은 남겨두지 않는다. 폐기 표시만 하면 다른 기기의 정상적인 오래된 토큰 재요청이 재사용 탐지로 분류되어 방금 발급한 현재 기기 세션까지 끊기 때문이다. 일반 회전에서 살아 있는 행의 폐기·재사용 탐지는 유지한다. 이미 폐기된 행을 읽고 User 잠금을 기다리던 요청은 잠금 획득 후 그 행이 삭제됐다면 RefreshRotationConflictError의401/no Set-Cookie로 처리하며 새 세션을 정리하지 않는다. 최초 조회부터 없는 예전 토큰은 기존 InvalidTokenError로 해당 요청 쿠키를 정리한다.
 - 로그인·refresh·owner 세션 발급은 User → refresh/trusted 행 잠금 순서로 직렬화한다. 로그인은 잠금 대기 중 바뀐 비밀번호를 다시 확인한다. User는 populate_existing으로 다시 읽어 오래된 identity-map 값을 쓰지 않는다.
 - refresh는 최초 조회 당시 살아 있던 토큰과 기존 stale 재사용을 구분한다. 정상 회전 경쟁 패자는 기존 RefreshRotationConflictError의 401/no Set-Cookie를 유지해 승자의 쿠키를 지우지 않는다.
 - owner pending 토큰은 목적·사용자·기존 비밀번호 해시를 TOKEN_PEPPER HMAC으로 결합한다. 원문 해시는 JWT에 넣지 않는다. 소비 시 잠긴 최신 계정과 비교하므로 변경 전 1차 인증을 변경 후 재사용할 수 없다. 기존 태그 없는 pending은 재로그인을 요구한다.
 
 기존 stateless access 계약을 유지한다. 변경 전 발급된 다른 access는 기본 15분과 leeway 10초까지 유효할 수 있으므로 모든 기기에서 즉시 접근을 차단한다고 설명하지 않는다. 해당 refresh는 폐기되어 추가 세션 연장은 실패한다. auth_version 컬럼이나 별도 access denylist를 새로 도입하지 않았다.
+
+2026-11-20 후속 검증: 비밀번호 집중32개와 Backend 전체1248개·Ruff format126개·Ruff check를 통과했다. 독립 쿠키 jar 두 개로 현재 기기의 본인 조회·새 토큰 회전200과 다른 기기의 이전 토큰401을 확인했다. 실제 승격과 요청의 경합은403·쿠키 미변경을 검증하고, 삭제 전 읽은 refresh의 늦은401 헤더를 현재 jar에 적용해도 본인 조회·회전200임을 확인했다. 발급·commit 실패의 전체 rollback과 기존 일반 회전 재사용 탐지도 유지했다. 독립 코드 검토에서 추가 차단 문제는 발견되지 않았다. Web Locks 미지원의 다중 탭에서 지연 요청의 최초 조회부터 토큰이 없는 경우에는 기존 무효 토큰의 쿠키 정리 동작이 적용된다.
 
 ## 아바타 검증·저장 수명
 

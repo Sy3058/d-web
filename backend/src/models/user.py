@@ -118,7 +118,7 @@ class User(SQLModel, table=True):
 
     @property
     def has_password(self) -> bool:
-        """본인 계정 화면의 비밀번호 편집 가능 여부. 해시는 응답에 넣지 않는다."""
+        """본인 계정의 로컬 비밀번호 보유 여부. 해시는 응답에 넣지 않는다."""
         return self.hashed_password is not None
 
 

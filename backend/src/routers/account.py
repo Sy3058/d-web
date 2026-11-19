@@ -13,9 +13,9 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.lib.auth import (
     clear_admin_pending_cookie,
-    clear_auth_cookies,
     clear_trusted_device_cookie,
     get_current_user,
+    set_auth_cookies,
     set_login_hint_cookie,
 )
 from src.lib.db import get_session
@@ -161,7 +161,7 @@ async def change_password(
     session: SessionDep,
 ) -> MessageResponse:
     try:
-        await account_password_service.change_password(
+        user, access, refresh = await account_password_service.change_password(
             current_user.id, body.current_password, body.new_password, session
         )
     except account_password_service.CurrentPasswordMismatchError as exc:
@@ -172,7 +172,7 @@ async def change_password(
         raise HTTPException(
             422, "유출 이력이 있는 비밀번호입니다. 다른 비밀번호를 사용하세요"
         ) from exc
-    clear_auth_cookies(response)
+    set_auth_cookies(response, access, refresh, user.nickname)
     clear_admin_pending_cookie(response)
     clear_trusted_device_cookie(response)
-    return MessageResponse(message="비밀번호가 변경되었습니다. 다시 로그인해 주세요")
+    return MessageResponse(message="비밀번호가 변경되었습니다")

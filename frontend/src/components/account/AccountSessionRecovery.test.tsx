@@ -40,6 +40,13 @@ afterEach(async () => {
 });
 
 describe('계정 세션 복구', () => {
+  it('관리자 계정 복구 뒤 요약에서는 비밀번호 변경 진입을 제공하지 않는다', async () => {
+    fetchMock.mockResolvedValueOnce(Response.json({ ...user, role: 'owner' }));
+    await act(async () => root.render(<AccountSessionRecovery page="overview" />));
+    expect(container.querySelector('a[href="/my/password"]')).toBeNull();
+    expect(container.querySelector('a[href="/my/profile"]')).not.toBeNull();
+    expect(container.textContent).toContain('관리자 계정은 이 화면에서 비밀번호를 변경할 수 없어요.');
+  });
   it.each([
     ['overview', 'reader@example.com', 'a[href="/my/profile"]'],
     ['profile', '변경 내용 저장', '#profile-nickname'],

@@ -464,11 +464,12 @@ bcrypt( base64( hmac_sha384(password, key=PASSWORD_PEPPER) ), gensalt(cost=12) )
 - **프로필 한 번 저장 보완**: 계정 요약과 프로필 편집 페이지를 분리하며, 닉네임과 이미지 유지/교체/제거는 PUT /auth/me/profile multipart 요청 한 번과 User 단일 commit으로 함께 반영한다. 업로드 실패는 닉네임을 바꾸지 않고 commit 실패는 두 DB 필드를 함께 rollback한다. commit 응답 유실은 재조회 대상으로 남긴다. 기존 개별 API는 현재 FE 연결을 유지하는 동안 공통 서비스 래퍼로 제공한다. FE는 `/my` 계정 요약, `/my/profile` 프로필 편집, `/my/password` 비밀번호 변경으로 분리하고 프로필 미저장 이탈은 폐기한다. 2026-11-17 BFCache 보존·복원에서도 pagehide/pageshow로 초안·이미지 URL·비밀번호를 정리하고, 이탈 전 비동기 응답이 복원 후 화면을 바꾸지 않도록 요청 세대를 검증한다.
 
 - 본인 인증 계정만 닉네임·아바타·비밀번호를 변경한다. 닉네임 변경은 표시용 login_hint만 갱신하며, 기존 로그인/refresh/OAuth의 인증 쿠키 발급 계약은 유지한다.
-- 현재 비밀번호를 검증하고 새 비밀번호에 가입 정책과 HIBP를 적용한다. 소셜 전용 계정의 비밀번호 설정/연결은 별도 기능으로 둔다. 성공 후 모든 refresh·신뢰 기기를 폐기하고 현재 쿠키를 제거해 재로그인을 요구한다.
+- 현재 비밀번호를 검증하고 새 비밀번호에 가입 정책과 HIBP를 적용한다. 소셜 전용 계정의 비밀번호 설정/연결은 별도 기능으로 둔다. 2026-11-20 사용자 요청에 따라 성공 후 현재 기기는 새 세션으로 로그인을 유지한다. 비밀번호 갱신·이전 refresh 행 삭제·신뢰 기기 폐기·현재 기기의 새 refresh 발급을 한 트랜잭션으로 처리하고 commit 뒤 인증 쿠키를 설정한다. 관리자 pending·신뢰 기기 쿠키는 제거한다. 화면 안내는 “다른 기기에서는 로그아웃됩니다.”로 표시한다. owner는 일반 계정 화면과 이 API의 변경 대상에서 제외하고 잠근 최신 User 역할로 거부한다. 잔여 reader access가 승격 후 TOTP 없는 owner refresh 발급에 쓰이는 일을 막는다.
+- 비밀번호 변경 전에 발급된 refresh는 이후 재사용돼도 새 세션을 폐기하지 않도록 삭제한다. 일반 회전에서 폐기한 refresh의 재사용 탐지는 유지하되, 이미 읽은 행이 User 잠금 대기 중 비밀번호 변경으로 삭제됐다면 정상 경합401로 처리하고 쿠키를 지우지 않는다. 최초 조회에서 이미 없는 토큰은 기존 무효 토큰 처리로 해당 요청의 쿠키를 정리한다. 기존 stateless access의 잔여 수명 계약은 아래와 같이 유지한다.
 - User 우선 잠금과 최신 비밀번호 재검증으로 변경과 세션 발급을 직렬화한다. owner pending은 목적·계정·비밀번호 해시의 HMAC 태그로 결합해 변경 전 인증을 재사용하지 못하게 한다. 원문 해시는 JWT/응답/로그에 넣지 않는다.
 - 기존 access는 기본 15분과 leeway 10초까지 유효할 수 있다. 즉시 모든 access를 폐기한다고 주장하지 않으며, 신규 DB auth_version/denylist를 도입하지 않는다.
 - 아바타는 제한 형식·크기와 no-draft 경로에서 변환해 본인 전용 공개 namespace에 저장한다. COMMIT 결과가 불확실하면 현재 참조할 수 있는 객체를 보존한다. 기존 owner 이미지 변환의 알려진 Pillow 취약점이 해결됐다는 뜻은 아니다.
-- `/my` 계정 요약에는 프로필·이메일·비밀번호 진입만 둔다. 별도 프로필·비밀번호 페이지는 no-store 인증 SSR의 초기 계정을 각각 React 편집 화면에 전달한다. 프로필은 통합 PUT 저장 한 번으로 확정하고 비밀번호 성공 후 입력을 지우고 재로그인을 안내한다. 기존 API refresh와 서버 최종 검증을 유지한다. [FE 구현·검증](MODULES/FE/Account/IMPLEMENTATION_ACCOUNT_SETTINGS.md).
+- `/my` 계정 요약에는 프로필·이메일·비밀번호 진입만 둔다. 별도 프로필·비밀번호 페이지는 no-store 인증 SSR의 초기 계정을 각각 React 편집 화면에 전달한다. 프로필은 통합 PUT 저장 한 번으로 확정하고 비밀번호 성공 후 입력을 지우고 현재 로그인과 편집을 유지한다. 기존 API refresh와 서버 최종 검증을 유지한다. [FE 구현·검증](MODULES/FE/Account/IMPLEMENTATION_ACCOUNT_SETTINGS.md).
 - UserRead.has_password는 본인 계정용 파생 bool이며 공개 댓글 프로필 DTO로 재사용하지 않는다. [구현·검증](MODULES/BE/Auth/IMPLEMENTATION_ACCOUNT_SETTINGS.md).
 
 ### 관리자 권한 분리: 3-역할 RBAC (reader/owner/moderator) - M1.5 owner 단독 빌드 (2026-07-01 확정)
