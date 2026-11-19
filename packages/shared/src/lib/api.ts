@@ -11,6 +11,10 @@ export class ApiError extends Error {
 }
 
 const REFRESH_PATH = '/auth/refresh';
+const LOGIN_PATH = '/auth/login';
+const LOGOUT_PATH = '/auth/logout';
+const PASSWORD_PATH = '/auth/me/password';
+const SESSION_MUTATION_PATHS = [LOGIN_PATH, LOGOUT_PATH, PASSWORD_PATH];
 
 /** 401이 "access 만료"가 아니라 자격 증명 거부·로그인 단계 만료를 뜻하는 경로(prefix).
  *
@@ -18,7 +22,7 @@ const REFRESH_PATH = '/auth/refresh';
  * refresh 자신이 401일 때 재귀한다. 로그인 계열의 401은 그대로 호출자에게 전달돼야
  * 폼이 에러 문구를 보여줄 수 있다.
  */
-const NO_RETRY_PREFIXES = [REFRESH_PATH, '/auth/login', '/admin/login', '/admin/2fa'];
+const NO_RETRY_PREFIXES = [REFRESH_PATH, LOGIN_PATH, '/admin/login', '/admin/2fa'];
 
 async function rawRequest<T>(
   baseUrl: string,
@@ -69,7 +73,7 @@ export function extractDetail(err: ApiError): string | undefined {
   return undefined;
 }
 
-/** refresh를 같은 오리진의 다른 탭과 직렬화한다.
+/** 세션 쿠키를 바꾸는 요청을 같은 오리진의 다른 탭과 직렬화한다.
  *
  * 아래 in-flight 공유(refreshPromise)는 탭 하나 안에서만 유효하다 - 탭마다 JS 컨텍스트가
  * 따로라서, 두 탭이 동시에 401을 받으면 각자 refresh를 쏘고 둘 다 같은 refresh 토큰
@@ -88,26 +92,62 @@ export function createApi(baseUrl: string) {
   // 나가도록 in-flight promise를 공유한다. refresh 토큰은 회전식이라 중복 호출하면
   // 나중 호출이 이미 회전된 토큰을 재제출하게 돼 401로 튕긴다(_claim 패자).
   let refreshPromise: Promise<boolean> | null = null;
+  let sessionMutation: { path: string; promise: Promise<unknown> } | null = null;
+  let sessionGeneration = 0;
+
+  async function refresh(): Promise<boolean> {
+    try {
+      await rawRequest(baseUrl, REFRESH_PATH, { method: 'POST' });
+      return true;
+    } catch (error) {
+      // 토큰 만료/무효만 원요청의 401로 돌려보낸다. 장애는 인증 실패와 구분한다.
+      if (error instanceof ApiError && error.status === 401) return false;
+      throw error;
+    }
+  }
 
   function refreshSession(): Promise<boolean> {
-    refreshPromise ??= withCrossTabLock(() =>
-      rawRequest<unknown>(baseUrl, REFRESH_PATH, { method: 'POST' }),
-    )
-      .then(
-        () => true,
-        (error: unknown) => {
-          // 토큰 만료/무효만 원요청의 401로 돌려보낸다. 장애는 인증 실패와 구분한다.
-          if (error instanceof ApiError && error.status === 401) return false;
-          throw error;
-        },
-      )
-      .finally(() => {
-        refreshPromise = null;
-      });
+    refreshPromise ??= withCrossTabLock(refresh).finally(() => {
+      refreshPromise = null;
+    });
     return refreshPromise;
   }
 
+  async function mutateSession<T>(path: string, options: RequestOptions): Promise<T> {
+    try {
+      return await rawRequest<T>(baseUrl, path, options);
+    } catch (error) {
+      // 비밀번호 변경의 access 만료만 같은 락 안에서 갱신하고 한 번 재시도한다.
+      if (path === PASSWORD_PATH && error instanceof ApiError && error.status === 401 && await refresh()) {
+        return rawRequest<T>(baseUrl, path, options);
+      }
+      throw error;
+    }
+  }
+
+  function queueSessionMutation<T>(path: string, options: RequestOptions): Promise<T> {
+    if (path === LOGOUT_PATH && sessionMutation?.path === LOGOUT_PATH) {
+      return sessionMutation.promise as Promise<T>;
+    }
+    sessionGeneration += 1;
+    // 먼저 시작한 요청이 쿠키를 바꾸는 순서를 지키고, 락이 필요한 요청을 기다린 뒤 락을 잡는다.
+    const previous = sessionMutation?.promise ?? refreshPromise;
+    const promise = Promise.resolve(previous)
+      .catch(() => undefined)
+      .then(() => withCrossTabLock(() => mutateSession<T>(path, options)))
+      .finally(() => {
+        if (sessionMutation?.promise === promise) sessionMutation = null;
+      });
+    sessionMutation = { path, promise };
+    return promise;
+  }
+
   async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+    if (options.method?.toUpperCase() === 'POST' && SESSION_MUTATION_PATHS.includes(path)) {
+      return queueSessionMutation<T>(path, options);
+    }
+    const generation = sessionMutation ? null : sessionGeneration;
+    const canRefresh = () => generation === sessionGeneration && !sessionMutation;
     try {
       return await rawRequest<T>(baseUrl, path, options);
     } catch (err) {
@@ -115,7 +155,7 @@ export function createApi(baseUrl: string) {
         err instanceof ApiError &&
         err.status === 401 &&
         !NO_RETRY_PREFIXES.some((prefix) => path.startsWith(prefix));
-      if (accessExpired && (await refreshSession())) {
+      if (accessExpired && canRefresh() && (await refreshSession()) && canRefresh()) {
         // 재시도는 1회뿐: 이 rawRequest가 또 401이면 catch 없이 그대로 전파된다.
         return rawRequest<T>(baseUrl, path, options);
       }
