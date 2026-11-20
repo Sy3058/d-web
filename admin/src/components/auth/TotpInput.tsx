@@ -1,6 +1,6 @@
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { totpSchema, type TotpInput as TotpInputValue } from '../../lib/validation';
+import { totpSchema, type TotpInput as TotpInputValue } from '@/lib/validation';
 
 interface TotpInputProps {
   onSubmit: (data: TotpInputValue) => void;

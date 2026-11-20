@@ -3,9 +3,9 @@ import {
   useDeleteEpisode,
   useReorderEpisodes,
   useUnpublishEpisode,
-} from '../../hooks/useEpisodes';
-import { describeAuthError } from '../../lib/api';
-import type { Episode } from '../../types';
+} from '@/hooks/useEpisodes';
+import { describeAuthError } from '@/lib/api';
+import type { Episode } from '@/types/index';
 import { EpisodeActionsMenu } from './EpisodeActionsMenu';
 
 interface EpisodeListProps {

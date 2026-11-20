@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EpisodeList } from './EpisodeList';
-import type { Episode } from '../../types';
+import type { Episode } from '@/types/index';
 
 // 목록은 라우터에서 Link만 쓴다 - 렌더 검증에 라우터 전체가 필요 없다.
 vi.mock('@tanstack/react-router', () => ({
@@ -12,12 +12,12 @@ vi.mock('@tanstack/react-router', () => ({
   ),
 }));
 
-vi.mock('../../lib/api', async () => ({
-  ...(await vi.importActual<typeof import('../../lib/api')>('../../lib/api')),
+vi.mock('@/lib/api', async () => ({
+  ...(await vi.importActual<typeof import('@/lib/api')>('@/lib/api')),
   api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() },
 }));
 
-const { api } = await import('../../lib/api');
+const { api } = await import('@/lib/api');
 
 function makeEpisode(overrides: Partial<Episode>): Episode {
   return {

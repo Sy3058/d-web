@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { EpisodeEditor } from '../../../../../components/episodes/EpisodeEditor';
-import { useEpisodes } from '../../../../../hooks/useEpisodes';
-import { describeAuthError } from '../../../../../lib/api';
+import { EpisodeEditor } from '@/components/episodes/EpisodeEditor';
+import { useEpisodes } from '@/hooks/useEpisodes';
+import { describeAuthError } from '@/lib/api';
 
 export const Route = createFileRoute('/_auth/works/$workId/episodes/$episodeId')({
   component: EditEpisodePage,

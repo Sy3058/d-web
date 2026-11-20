@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
-import { describeAuthError } from '../../lib/api';
-import { useLogout, useMe } from '../../hooks/useAuth';
+import { describeAuthError } from '@/lib/api';
+import { useLogout, useMe } from '@/hooks/useAuth';
 
 export const Route = createFileRoute('/_auth/')({
   component: Dashboard,

@@ -1,8 +1,8 @@
 import { Link, useNavigate } from '@tanstack/react-router';
-import type { Work } from '../../types';
-import { useDeleteWork } from '../../hooks/useWorks';
-import { describeAuthError } from '../../lib/api';
-import { WORK_STATUS_BADGE_CLASS, WORK_STATUS_LABEL } from '../../lib/workStatus';
+import type { Work } from '@/types/index';
+import { useDeleteWork } from '@/hooks/useWorks';
+import { describeAuthError } from '@/lib/api';
+import { WORK_STATUS_BADGE_CLASS, WORK_STATUS_LABEL } from '@/lib/workStatus';
 import { WorkActionsMenu } from './WorkActionsMenu';
 
 // 배지 3종(연재 상태·공개 여부·태그)의 공통 모양. 색만 갈아끼운다.

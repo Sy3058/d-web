@@ -2,12 +2,12 @@
 // 뷰어 셸(M2 F1). 회차 메타·이전/다음 네비만 SSR - 본문(presigned 포함)은 결정 1·6에 따라
 // 아일랜드가 client:only로 fetch한다(no-store, SSR 응답에 안 실림).
 export const prerender = false;
-import BaseLayout from '../../../layouts/BaseLayout.astro';
-import Viewer from '../../../components/viewer/Viewer';
-import ViewerEntry from '../../../components/viewer/ViewerEntry';
-import { ghostControl } from '../../../components/ui/controlStyles';
-import { getWorkDetail } from '../../../lib/catalog';
-import { applyCatalogCache } from '../../../lib/http';
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import Viewer from '@/components/viewer/Viewer';
+import ViewerEntry from '@/components/viewer/ViewerEntry';
+import { ghostControl } from '@/components/ui/controlStyles';
+import { getWorkDetail } from '@/lib/catalog';
+import { applyCatalogCache } from '@/lib/http';
 
 const { id, publicId: publicIdParam } = Astro.params;
 

@@ -1,6 +1,6 @@
 import { Menu } from '@base-ui/react/menu';
-import type { Episode } from '../../types';
-import { ACTION_ITEM_CLASS, ActionsMenu } from '../common/ActionsMenu';
+import type { Episode } from '@/types/index';
+import { ACTION_ITEM_CLASS, ActionsMenu } from '@/components/common/ActionsMenu';
 
 interface EpisodeActionsMenuProps {
   episode: Episode;

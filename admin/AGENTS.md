@@ -1,6 +1,8 @@
 # Admin 지침
 
 - 이 디렉터리 작업에는 루트 `AGENTS.md`와 이 파일을 함께 적용한다.
+- `src` 안의 다른 폴더를 참조할 때는 `@/` 별칭을, 같은 폴더의 파일은 `./`를 사용한다. 테스트 mock·동적 import에도 같은 규칙을 적용한다. 원본은 `tsconfig.app.json`의 `paths`이며 Vite·Vitest도 이를 읽는다. 자동 생성된 `routeTree.gen.ts`·`api.gen.ts`는 수동으로 경로를 고치지 않고 패키지 import는 유지한다.
+- CSS 내부 `@import`·자산 URL과 `src` 밖의 설정 경로는 해당 파일 기준 상대경로를 유지한다.
 - 인증 상태는 HttpOnly 쿠키와 메모리 상태로 처리한다. JWT나 TOTP를 localStorage 등 영속 클라이언트 저장소에 넣지 않는다.
 - 클라이언트 라우트 가드는 UX 보조일 뿐이다. 실제 owner 권한과 상태 전이는 백엔드가 검증해야 한다.
 - API 타입의 진실은 `src/types/api.gen.ts`이며 직접 편집하지 않는다. 백엔드 스키마 변경 후 `pnpm --filter admin generate:types`로 재생성한다.

@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from '@tanstack/react-router';
-import { ArtistProfileEditor } from '../../components/commission/ArtistProfileEditor';
+import { ArtistProfileEditor } from '@/components/commission/ArtistProfileEditor';
 
 export const Route = createFileRoute('/_auth/artist-profile')({
   component: ArtistProfilePage,

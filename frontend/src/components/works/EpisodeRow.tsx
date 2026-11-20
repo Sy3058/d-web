@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { formatEpisodeDate, formatPrice, type EpisodeSummary } from '../../lib/catalog';
+import { formatEpisodeDate, formatPrice, type EpisodeSummary } from '@/lib/catalog';
 
 interface Props {
   workId: string;

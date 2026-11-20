@@ -2,15 +2,15 @@ import { QueryClient } from '@tanstack/react-query';
 import { isRedirect } from '@tanstack/react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '@d-web/shared';
-import { ME_QUERY_KEY } from '../hooks/useAuth';
-import type { UserRead } from '../types';
+import { ME_QUERY_KEY } from '@/hooks/useAuth';
+import type { UserRead } from '@/types/index';
 
-vi.mock('../lib/api', async () => ({
-  ...(await vi.importActual<typeof import('../lib/api')>('../lib/api')),
+vi.mock('@/lib/api', async () => ({
+  ...(await vi.importActual<typeof import('@/lib/api')>('@/lib/api')),
   api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() },
 }));
 
-const { api } = await import('../lib/api');
+const { api } = await import('@/lib/api');
 const { Route } = await import('./_auth');
 const mockGet = vi.mocked(api.get);
 

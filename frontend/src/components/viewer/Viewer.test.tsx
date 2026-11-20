@@ -19,17 +19,17 @@ const {
   putProgress: vi.fn(),
 }));
 
-vi.mock('../../lib/guestProgress', () => ({
+vi.mock('@/lib/guestProgress', () => ({
   getBrowserGuestProgress,
   putBrowserGuestProgress,
 }));
 
-vi.mock('../../lib/viewerSession', () => ({
+vi.mock('@/lib/viewerSession', () => ({
   restoreViewerSession: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('../../lib/viewer', async (importOriginal) => {
-  const original = await importOriginal<typeof import('../../lib/viewer')>();
+vi.mock('@/lib/viewer', async (importOriginal) => {
+  const original = await importOriginal<typeof import('@/lib/viewer')>();
   return {
     ...original,
     getEpisodeContent,

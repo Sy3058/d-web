@@ -7,14 +7,14 @@ import {
   useUpdateCommissionItem,
   useUploadCommissionSample,
 } from './useCommissionItems';
-import type { CommissionItem } from '../types';
+import type { CommissionItem } from '@/types/index';
 
-vi.mock('../lib/api', async () => ({
-  ...(await vi.importActual<typeof import('../lib/api')>('../lib/api')),
+vi.mock('@/lib/api', async () => ({
+  ...(await vi.importActual<typeof import('@/lib/api')>('@/lib/api')),
   api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() },
 }));
 
-const { api } = await import('../lib/api');
+const { api } = await import('@/lib/api');
 
 const ITEM_ID = 'c1';
 const OTHER_ITEM_ID = 'c2';

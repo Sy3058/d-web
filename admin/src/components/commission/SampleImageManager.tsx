@@ -1,12 +1,12 @@
 import { useRef, useState } from 'react';
-import type { CommissionItem } from '../../types';
+import type { CommissionItem } from '@/types/index';
 import {
   useUpdateCommissionItem,
   useUploadCommissionSample,
-} from '../../hooks/useCommissionItems';
-import { describeAuthError } from '../../lib/api';
-import { MAX_SAMPLES_PER_ITEM } from '../../lib/validation';
-import { validateImageFile } from '../episodes/imageUpload';
+} from '@/hooks/useCommissionItems';
+import { describeAuthError } from '@/lib/api';
+import { MAX_SAMPLES_PER_ITEM } from '@/lib/validation';
+import { validateImageFile } from '@/components/episodes/imageUpload';
 
 interface SampleImageManagerProps {
   item: CommissionItem;

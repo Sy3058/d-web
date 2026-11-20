@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import Cropper, { type Area } from 'react-easy-crop';
-import { getCroppedImageFile } from '../../lib/cropImage';
+import { getCroppedImageFile } from '@/lib/cropImage';
 
 // 서버에 올라가는 건 크롭된 결과물이지 이 원본이 아니다(cropImage가 1600px로 캡한다).
 // 그래서 이 상한은 백엔드 용량 제한의 미러가 아니라, 브라우저가 거대한 이미지를 디코드하다

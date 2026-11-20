@@ -4,10 +4,10 @@ import { createRoot, type Root } from 'react-dom/client';
 import { renderToString } from 'react-dom/server';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import PaymentReturn from './PaymentReturn';
-import { goToPurchasedEpisode } from '../../lib/paymentReturn';
+import { goToPurchasedEpisode } from '@/lib/paymentReturn';
 
-vi.mock('../../lib/paymentReturn', async (original) => ({
-  ...await original<typeof import('../../lib/paymentReturn')>(), goToPurchasedEpisode: vi.fn(),
+vi.mock('@/lib/paymentReturn', async (original) => ({
+  ...await original<typeof import('@/lib/paymentReturn')>(), goToPurchasedEpisode: vi.fn(),
 }));
 const path = '/works/11111111-1111-4111-8111-111111111111/12345678';
 let root: Root;

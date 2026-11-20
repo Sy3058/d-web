@@ -10,15 +10,15 @@ const { getBrowserGuestWorkProgress, getWorkProgress, isLoggedIn } = vi.hoisted(
   isLoggedIn: vi.fn(),
 }));
 
-vi.mock('../../lib/guestProgress', () => ({ getBrowserGuestWorkProgress }));
+vi.mock('@/lib/guestProgress', () => ({ getBrowserGuestWorkProgress }));
 
-vi.mock('../../lib/workProgress', async (importOriginal) => {
-  const original = await importOriginal<typeof import('../../lib/workProgress')>();
+vi.mock('@/lib/workProgress', async (importOriginal) => {
+  const original = await importOriginal<typeof import('@/lib/workProgress')>();
   return { ...original, getWorkProgress };
 });
 
-vi.mock('../../lib/viewer', async (importOriginal) => {
-  const original = await importOriginal<typeof import('../../lib/viewer')>();
+vi.mock('@/lib/viewer', async (importOriginal) => {
+  const original = await importOriginal<typeof import('@/lib/viewer')>();
   return { ...original, isLoggedIn };
 });
 

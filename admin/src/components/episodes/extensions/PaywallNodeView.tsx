@@ -1,6 +1,6 @@
 import { NodeViewWrapper, type NodeViewProps } from '@tiptap/react';
 import { useEffect, useReducer } from 'react';
-import { summarizeContent, type ContentStats } from '../contentSummary';
+import { summarizeContent, type ContentStats } from '@/components/episodes/contentSummary';
 
 function statLabel(stats: ContentStats): string {
   const parts: string[] = [];

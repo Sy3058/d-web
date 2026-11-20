@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { getMe, type User } from '../../lib/auth';
-import { ghostControl } from '../ui/controlStyles';
+import { getMe, type User } from '@/lib/auth';
+import { ghostControl } from '@/components/ui/controlStyles';
 import AccountOverview from './AccountOverview';
 import PasswordEditor from './PasswordEditor';
 import ProfileEditor from './ProfileEditor';

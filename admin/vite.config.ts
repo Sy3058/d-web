@@ -5,6 +5,7 @@ import tailwindcss from '@tailwindcss/vite'
 
 // https://vite.dev/config/
 export default defineConfig({
+  resolve: { tsconfigPaths: true },
   plugins: [
     // router 플러그인은 react 플러그인보다 먼저 와야 함 (TanStack 문서)
     tanstackRouter({ target: 'react', autoCodeSplitting: true }),

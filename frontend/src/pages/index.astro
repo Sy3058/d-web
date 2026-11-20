@@ -1,19 +1,19 @@
 ---
 export const prerender = false;
 
-import BaseLayout from '../layouts/BaseLayout.astro';
-import Button from '../components/ui/Button.astro';
-import ArtistProfile from '../components/landing/ArtistProfile.astro';
-import WorkCarousel from '../components/works/WorkCarousel';
-import CommissionCard from '../components/commission/CommissionCard.astro';
-import { getWorks, type WorkListResponse } from '../lib/catalog';
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import Button from '@/components/ui/Button.astro';
+import ArtistProfile from '@/components/landing/ArtistProfile.astro';
+import WorkCarousel from '@/components/works/WorkCarousel';
+import CommissionCard from '@/components/commission/CommissionCard.astro';
+import { getWorks, type WorkListResponse } from '@/lib/catalog';
 import {
   getArtistProfile,
   getCommissionItems,
   getSiteText,
   selectLandingCommissions,
-} from '../lib/commission';
-import { applyCatalogCache } from '../lib/http';
+} from '@/lib/commission';
+import { applyCatalogCache } from '@/lib/http';
 
 const [worksResult, introResult, profileResult, commissionResult] = await Promise.allSettled([
   getWorks(1),

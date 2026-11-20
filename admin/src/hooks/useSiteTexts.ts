@@ -1,6 +1,6 @@
 import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api } from '../lib/api';
-import type { SiteText, SiteTextKey, SiteTextUpdate } from '../types';
+import { api } from '@/lib/api';
+import type { SiteText, SiteTextKey, SiteTextUpdate } from '@/types/index';
 
 const siteTextKey = (key: SiteTextKey) => ['admin', 'site-texts', key] as const;
 const siteTextUrl = (key: SiteTextKey) => `/admin/site-texts/${key}`;

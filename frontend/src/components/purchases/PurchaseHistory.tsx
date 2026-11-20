@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { ghostControl, paginationList, paginationCurrent } from '../ui/controlStyles';
-import { ApiError } from '../../lib/api';
-import { getPurchaseHistory, MAX_PURCHASE_PAGE, parsePurchasePage, safeReceiptUrl, safeViewerPath, type PurchaseHistoryRead } from '../../lib/purchases';
+import { ghostControl, paginationList, paginationCurrent } from '@/components/ui/controlStyles';
+import { ApiError } from '@/lib/api';
+import { getPurchaseHistory, MAX_PURCHASE_PAGE, parsePurchasePage, safeReceiptUrl, safeViewerPath, type PurchaseHistoryRead } from '@/lib/purchases';
 
 type State = { kind: 'loading' } | { kind: 'success'; data: PurchaseHistoryRead } | { kind: 'login' } | { kind: 'error' };
 const money = (amount: number, currency: string) => `${amount.toLocaleString('ko-KR')}${currency === 'KRW' ? '원' : ` ${currency}`}`;

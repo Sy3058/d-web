@@ -1,6 +1,6 @@
 import { NodeViewWrapper, type NodeViewProps } from '@tiptap/react';
 import { useSyncExternalStore } from 'react';
-import type { ImageUrlStore } from '../imageUrlStore';
+import type { ImageUrlStore } from '@/components/episodes/imageUrlStore';
 
 const NOOP_SUBSCRIBE = () => () => {};
 

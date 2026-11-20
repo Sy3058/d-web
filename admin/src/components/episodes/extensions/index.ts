@@ -1,6 +1,6 @@
 import StarterKit from '@tiptap/starter-kit';
 import type { Extensions } from '@tiptap/core';
-import type { ImageUrlStore } from '../imageUrlStore';
+import type { ImageUrlStore } from '@/components/episodes/imageUrlStore';
 import { EpisodeImage } from './image';
 import { Paywall } from './paywall';
 import { WhitelistLink } from './link';

@@ -1,18 +1,18 @@
 ---
 export const prerender = false;
-import BaseLayout from '../../layouts/BaseLayout.astro';
-import CoverImage from '../../components/works/CoverImage.astro';
-import WorkExperience from '../../components/works/WorkExperience';
-import Badge from '../../components/ui/Badge.astro';
-import Chip from '../../components/ui/Chip.astro';
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import CoverImage from '@/components/works/CoverImage.astro';
+import WorkExperience from '@/components/works/WorkExperience';
+import Badge from '@/components/ui/Badge.astro';
+import Chip from '@/components/ui/Chip.astro';
 import {
   getWorkDetail,
   statusLabel,
   buildWorksUrl,
   parseOrder,
   type WorkDetail,
-} from '../../lib/catalog';
-import { applyCatalogCache } from '../../lib/http';
+} from '@/lib/catalog';
+import { applyCatalogCache } from '@/lib/http';
 
 const { id } = Astro.params;
 if (!id) {

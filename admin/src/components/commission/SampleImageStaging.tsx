@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { MAX_SAMPLES_PER_ITEM } from '../../lib/validation';
-import { validateImageFile } from '../episodes/imageUpload';
+import { MAX_SAMPLES_PER_ITEM } from '@/lib/validation';
+import { validateImageFile } from '@/components/episodes/imageUpload';
 
 interface SampleImageStagingProps {
   files: File[];

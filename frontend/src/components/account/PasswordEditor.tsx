@@ -2,11 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { api, ApiError, extractDetail } from '../../lib/api';
-import { getMe, type User } from '../../lib/auth';
-import { signupSchema } from '../../lib/validation';
-import { FormError, TextField } from '../ui/forms';
-import { controlBase, ghostControl } from '../ui/controlStyles';
+import { api, ApiError, extractDetail } from '@/lib/api';
+import { getMe, type User } from '@/lib/auth';
+import { signupSchema } from '@/lib/validation';
+import { FormError, TextField } from '@/components/ui/forms';
+import { controlBase, ghostControl } from '@/components/ui/controlStyles';
 
 export const passwordChangeSchema = z.object({
   current_password: z.string().min(1, '현재 비밀번호를 입력해 주세요.').max(128),

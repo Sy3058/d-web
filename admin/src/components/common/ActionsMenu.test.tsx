@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { WorkActionsMenu } from '../works/WorkActionsMenu';
-import { CommissionActionsMenu } from '../commission/CommissionActionsMenu';
+import { WorkActionsMenu } from '@/components/works/WorkActionsMenu';
+import { CommissionActionsMenu } from '@/components/commission/CommissionActionsMenu';
 
 describe('ActionsMenu', () => {
   it('키보드로 항목을 이동하고 Escape로 닫으면 트리거로 포커스를 돌린다', async () => {

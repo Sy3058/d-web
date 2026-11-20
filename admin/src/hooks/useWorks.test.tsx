@@ -3,14 +3,14 @@ import { renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useDeleteWork, useUpdateWork, useUploadCover } from './useWorks';
-import type { Work } from '../types';
+import type { Work } from '@/types/index';
 
-vi.mock('../lib/api', async () => ({
-  ...(await vi.importActual<typeof import('../lib/api')>('../lib/api')),
+vi.mock('@/lib/api', async () => ({
+  ...(await vi.importActual<typeof import('@/lib/api')>('@/lib/api')),
   api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() },
 }));
 
-const { api } = await import('../lib/api');
+const { api } = await import('@/lib/api');
 
 const WORK_ID = 'w1';
 const OTHER_WORK_ID = 'w2';

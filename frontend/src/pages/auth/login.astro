@@ -1,8 +1,8 @@
 ---
 export const prerender = false;
-import BaseLayout from '../../layouts/BaseLayout.astro';
-import LoginForm from '../../components/auth/LoginForm';
-import GoogleButton from '../../components/auth/GoogleButton.astro';
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import LoginForm from '@/components/auth/LoginForm';
+import GoogleButton from '@/components/auth/GoogleButton.astro';
 
 const ERROR_MESSAGES: Record<string, string> = {
   oauth_failed: '구글 로그인에 실패했어요. 다시 시도해 주세요.',

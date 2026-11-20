@@ -1,8 +1,8 @@
 import { Link, createFileRoute } from '@tanstack/react-router';
-import { EpisodeList } from '../../../../../components/episodes/EpisodeList';
-import { useEpisodes } from '../../../../../hooks/useEpisodes';
-import { useWork } from '../../../../../hooks/useWorks';
-import { describeAuthError } from '../../../../../lib/api';
+import { EpisodeList } from '@/components/episodes/EpisodeList';
+import { useEpisodes } from '@/hooks/useEpisodes';
+import { useWork } from '@/hooks/useWorks';
+import { describeAuthError } from '@/lib/api';
 
 export const Route = createFileRoute('/_auth/works/$workId/episodes/')({
   component: EpisodesPage,

@@ -4,7 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { renderToString } from 'react-dom/server';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import PurchaseHistory from './PurchaseHistory';
-import { MAX_PURCHASE_PAGE, type PurchaseHistoryItem } from '../../lib/purchases';
+import { MAX_PURCHASE_PAGE, type PurchaseHistoryItem } from '@/lib/purchases';
 const item: PurchaseHistoryItem = {
   id: 'purchase', payment_id: 'payment', item_title: '구매 당시 제목', order_name: '[LOCAL FIXTURE] viewer abcd', work_title: '작품 제목', thumbnail_url: 'https://images.example/public/cover.webp', amount: 1500, currency: 'KRW', paid_at: '2026-11-01T00:00:00Z', status: 'active', first_viewed_at: null, refund_amount: null, refunded_at: null,
   receipt_url: 'https://receipt.example/pay', viewer_path: '/works/12345678-1234-1234-1234-123456789abc/12345678',

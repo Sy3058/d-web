@@ -1,11 +1,11 @@
 import { useEffect, useState, type KeyboardEvent } from 'react';
-import { statusLabel, type WorkListItem } from '../../lib/catalog';
+import { statusLabel, type WorkListItem } from '@/lib/catalog';
 import {
   getCarouselTransitionSlides,
   wrapCarouselIndex,
   type CarouselDirection,
   type CarouselOffset,
-} from '../../lib/workCarousel';
+} from '@/lib/workCarousel';
 
 interface Props {
   works: WorkListItem[];

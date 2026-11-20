@@ -1,13 +1,13 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { CommissionForm } from '../../../components/commission/CommissionForm';
-import { SampleImageManager } from '../../../components/commission/SampleImageManager';
+import { CommissionForm } from '@/components/commission/CommissionForm';
+import { SampleImageManager } from '@/components/commission/SampleImageManager';
 import {
   commissionItemDetailKey,
   useCommissionItems,
   useUpdateCommissionItem,
-} from '../../../hooks/useCommissionItems';
-import { describeAuthError } from '../../../lib/api';
-import type { CommissionItemInput } from '../../../lib/validation';
+} from '@/hooks/useCommissionItems';
+import { describeAuthError } from '@/lib/api';
+import type { CommissionItemInput } from '@/lib/validation';
 import { useQueryClient } from '@tanstack/react-query';
 
 export const Route = createFileRoute('/_auth/commission/$itemId')({

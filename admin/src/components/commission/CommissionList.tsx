@@ -1,11 +1,11 @@
 import { useNavigate } from '@tanstack/react-router';
-import type { CommissionItem } from '../../types';
+import type { CommissionItem } from '@/types/index';
 import {
   useDeleteCommissionItem,
   useReorderCommissionItems,
   useUpdateCommissionItem,
-} from '../../hooks/useCommissionItems';
-import { describeAuthError } from '../../lib/api';
+} from '@/hooks/useCommissionItems';
+import { describeAuthError } from '@/lib/api';
 import { CommissionActionsMenu } from './CommissionActionsMenu';
 
 const BADGE_CLASS = 'rounded px-2 py-0.5 text-xs';

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { getViewerBootstrap, type ViewerBootstrap } from '../../lib/viewerBootstrap';
+import { getViewerBootstrap, type ViewerBootstrap } from '@/lib/viewerBootstrap';
 import Viewer from './Viewer';
-import { ghostControl } from '../ui/controlStyles';
+import { ghostControl } from '@/components/ui/controlStyles';
 
 interface Props {
   workId: string;

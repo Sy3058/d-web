@@ -1,10 +1,10 @@
 ---
 export const prerender = false;
-import BaseLayout from '../../layouts/BaseLayout.astro';
-import { getMeOnServer } from '../../lib/auth.server';
-import type { User } from '../../lib/auth';
-import ProfileEditor from '../../components/account/ProfileEditor';
-import AccountSessionRecovery from '../../components/account/AccountSessionRecovery';
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import { getMeOnServer } from '@/lib/auth.server';
+import type { User } from '@/lib/auth';
+import ProfileEditor from '@/components/account/ProfileEditor';
+import AccountSessionRecovery from '@/components/account/AccountSessionRecovery';
 
 Astro.response.headers.set('Cache-Control', 'no-store');
 Astro.response.headers.set('X-Robots-Tag', 'noindex');

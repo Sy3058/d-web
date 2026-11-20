@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { z } from 'zod';
-import { api, ApiError, extractDetail } from '../../lib/api';
-import { getMe, type User } from '../../lib/auth';
-import { FormError, TextField } from '../ui/forms';
-import { controlBase, ghostControl } from '../ui/controlStyles';
+import { api, ApiError, extractDetail } from '@/lib/api';
+import { getMe, type User } from '@/lib/auth';
+import { FormError, TextField } from '@/components/ui/forms';
+import { controlBase, ghostControl } from '@/components/ui/controlStyles';
 import { safeProfileImageUrl } from './profileUtils';
-import NoticeDialog from '../ui/NoticeDialog';
+import NoticeDialog from '@/components/ui/NoticeDialog';
 import ProfileImageCropper from './ProfileImageCropper';
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;

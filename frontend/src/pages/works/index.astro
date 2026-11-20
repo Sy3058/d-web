@@ -1,10 +1,10 @@
 ---
 // ?page=/?tag=를 서버에서 읽어야 해서 SSR 강제(GUIDE_ASTRO 델타 4, M2 결정 3).
 export const prerender = false;
-import BaseLayout from '../../layouts/BaseLayout.astro';
-import TagFilterBar from '../../components/works/TagFilterBar.astro';
-import WorkCard from '../../components/works/WorkCard.astro';
-import Pagination from '../../components/works/Pagination.astro';
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import TagFilterBar from '@/components/works/TagFilterBar.astro';
+import WorkCard from '@/components/works/WorkCard.astro';
+import Pagination from '@/components/works/Pagination.astro';
 import {
   getWorks,
   getTags,
@@ -12,8 +12,8 @@ import {
   buildWorksUrl,
   type WorkListResponse,
   type PublicTag,
-} from '../../lib/catalog';
-import { applyCatalogCache } from '../../lib/http';
+} from '@/lib/catalog';
+import { applyCatalogCache } from '@/lib/http';
 
 // isSafeInteger로 거른다: isInteger(1e21)는 true라 통과하지만 String(1e21)='1e+21'가
 // 백엔드 int 파싱에서 422를 내 fallback이 안 먹는다. 1e21은 safe integer가 아니라 여기서 걸린다.

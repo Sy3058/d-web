@@ -1,5 +1,5 @@
 import { Menu } from '@base-ui/react/menu';
-import { ACTION_ITEM_CLASS, ActionsMenu } from '../common/ActionsMenu';
+import { ACTION_ITEM_CLASS, ActionsMenu } from '@/components/common/ActionsMenu';
 
 interface WorkActionsMenuProps {
   onEdit: () => void;

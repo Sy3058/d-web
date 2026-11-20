@@ -2,16 +2,16 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { EditorContent, useEditor } from '@tiptap/react';
 import type { JSONContent } from '@tiptap/core';
 import { useNavigate } from '@tanstack/react-router';
-import { describeAuthError } from '../../lib/api';
-import type { ContentDoc, Episode, EpisodeUpdate } from '../../types';
+import { describeAuthError } from '@/lib/api';
+import type { ContentDoc, Episode, EpisodeUpdate } from '@/types/index';
 import {
   useCreateEpisode,
   useEpisodeImageUrls,
   useUpdateEpisode,
   useUploadEpisodeImage,
-} from '../../hooks/useEpisodes';
-import { useWorks } from '../../hooks/useWorks';
-import { buildEditorExtensions } from './extensions';
+} from '@/hooks/useEpisodes';
+import { useWorks } from '@/hooks/useWorks';
+import { buildEditorExtensions } from '@/components/episodes/extensions/index';
 import { createImageUrlStore } from './imageUrlStore';
 import { contentImageKeys, summarizeContent } from './contentSummary';
 import { MAX_IMAGES_PER_EPISODE, validateImageFile } from './imageUpload';

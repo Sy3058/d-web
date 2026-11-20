@@ -1,7 +1,7 @@
 import { Menu } from '@base-ui/react/menu';
 import { useLayoutEffect, useRef, useState } from 'react';
-import { api } from '../../lib/api';
-import { getMe } from '../../lib/auth';
+import { api } from '@/lib/api';
+import { getMe } from '@/lib/auth';
 
 interface Props {
   compact?: boolean;

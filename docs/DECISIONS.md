@@ -669,6 +669,12 @@ main (항상 배포 가능 상태)
 
 ## 프론트엔드 도구 결정
 
+### FE·Admin import 경로 별칭 (2026-11-20)
+
+각 앱의 `@/`는 해당 앱의 `src/`를 가리킨다. 다른 폴더의 내부 모듈은 `@/`, 같은 폴더의 파일은 `./`를 사용한다. 정적·동적 import, 타입 import와 테스트 mock에도 같은 규칙을 적용한다. `@d-web/shared` 등 패키지 이름과 자동 생성 파일의 경로는 유지한다.
+
+FE는 `tsconfig.json`, Admin은 `tsconfig.app.json`의 `compilerOptions.paths`를 원본으로 삼는다. Astro는 기본 경로 해석을 사용하고, FE Vitest 및 Admin Vite·Vitest는 기존 Vite 8의 `resolve.tsconfigPaths: true`로 설정을 읽는다. 별도 경로 플러그인이나 중복 alias 매핑은 추가하지 않는다. 향후 작업에도 적용하도록 각 앱 `AGENTS.md`에 규칙을 기록한다. [설정과 검증](MODULES/COMMON/Tooling/IMPLEMENTATION_IMPORT_ALIASES.md)을 따른다.
+
 ### admin API 타입: openapi-typescript codegen 도입 (M1.5 F2 선행, 2026-07-14 확정)
 
 **결정: `admin/src/types/index.ts`(수기 미러링)를 폐기하고, 백엔드 `app.openapi()` → `openapi-typescript` → `admin/src/types/api.gen.ts`(생성물, 커밋됨) 파이프라인으로 교체. `index.ts`는 그 위 얇은 별칭 레이어(`UserRead` 등 짧은 이름 재수출)만 남긴다.**

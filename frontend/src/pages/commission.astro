@@ -1,10 +1,10 @@
 ---
 export const prerender = false;
 
-import BaseLayout from '../layouts/BaseLayout.astro';
-import CommissionCard from '../components/commission/CommissionCard.astro';
-import { commissionAvailability, getCommissionItems, getSiteText } from '../lib/commission';
-import { applyCatalogCache } from '../lib/http';
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import CommissionCard from '@/components/commission/CommissionCard.astro';
+import { commissionAvailability, getCommissionItems, getSiteText } from '@/lib/commission';
+import { applyCatalogCache } from '@/lib/http';
 
 const [itemsResult, notesResult] = await Promise.allSettled([
   getCommissionItems(),

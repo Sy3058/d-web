@@ -3,14 +3,14 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SampleImageManager } from './SampleImageManager';
-import type { CommissionItem } from '../../types';
+import type { CommissionItem } from '@/types/index';
 
-vi.mock('../../lib/api', async () => ({
-  ...(await vi.importActual<typeof import('../../lib/api')>('../../lib/api')),
+vi.mock('@/lib/api', async () => ({
+  ...(await vi.importActual<typeof import('@/lib/api')>('@/lib/api')),
   api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() },
 }));
 
-const { api } = await import('../../lib/api');
+const { api } = await import('@/lib/api');
 
 function makeItem(overrides: Partial<CommissionItem> = {}): CommissionItem {
   const keys = overrides.sample_image_keys ?? ['a.webp', 'b.webp'];

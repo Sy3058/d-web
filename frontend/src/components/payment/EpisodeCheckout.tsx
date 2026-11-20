@@ -1,8 +1,8 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { getMe } from '../../lib/auth';
-import { controlBase, ghostControl } from '../ui/controlStyles';
-import { CHECKOUT_NOTICE, CHECKOUT_NOTICE_VERSION, createEpisodeIntent, getEpisodeCheckoutInfo, isCheckoutAmount, parseCheckoutChanged, paymentRequest, paymentReturnPath, type EpisodeCheckoutInfo, type PaymentMethod } from '../../lib/payments';
+import { getMe } from '@/lib/auth';
+import { controlBase, ghostControl } from '@/components/ui/controlStyles';
+import { CHECKOUT_NOTICE, CHECKOUT_NOTICE_VERSION, createEpisodeIntent, getEpisodeCheckoutInfo, isCheckoutAmount, parseCheckoutChanged, paymentRequest, paymentReturnPath, type EpisodeCheckoutInfo, type PaymentMethod } from '@/lib/payments';
 
 interface Props { episodeId: string; workId?: string; title: string; amount: number | null; returnPath: string }
 type CheckoutProps = Omit<Props, 'amount'> & { amount: number };

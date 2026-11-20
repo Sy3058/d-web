@@ -8,7 +8,7 @@ import ProfileImageCropper from './ProfileImageCropper';
 
 const state = vi.hoisted(() => ({ cropper: null as ComponentProps<typeof Cropper> | null, crop: vi.fn() }));
 vi.mock('react-easy-crop', () => ({ default: (props: ComponentProps<typeof Cropper>) => { state.cropper = props; return <div data-cropper />; } }));
-vi.mock('../../lib/profileCrop', () => ({ getProfileCroppedFile: state.crop }));
+vi.mock('@/lib/profileCrop', () => ({ getProfileCroppedFile: state.crop }));
 let root: Root;
 let container: HTMLDivElement;
 const onApply = vi.fn();

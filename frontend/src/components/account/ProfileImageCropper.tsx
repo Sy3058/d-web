@@ -1,8 +1,8 @@
 import { Dialog } from '@base-ui/react/dialog';
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import Cropper, { type Area } from 'react-easy-crop';
-import { getProfileCroppedFile } from '../../lib/profileCrop';
-import { controlBase, ghostControl } from '../ui/controlStyles';
+import { getProfileCroppedFile } from '@/lib/profileCrop';
+import { controlBase, ghostControl } from '@/components/ui/controlStyles';
 
 interface Props {
   imageSrc: string;

@@ -2,16 +2,16 @@
 import { act, StrictMode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ApiError } from '../../lib/api';
-import type { User } from '../../lib/auth';
+import { ApiError } from '@/lib/api';
+import type { User } from '@/lib/auth';
 import PasswordEditor, { passwordChangeSchema } from './PasswordEditor';
 
 const { post, getMe } = vi.hoisted(() => ({ post: vi.fn(), getMe: vi.fn() }));
-vi.mock('../../lib/api', async (original) => {
-  const module = await original<typeof import('../../lib/api')>();
+vi.mock('@/lib/api', async (original) => {
+  const module = await original<typeof import('@/lib/api')>();
   return { ...module, api: { ...module.api, post } };
 });
-vi.mock('../../lib/auth', () => ({ getMe }));
+vi.mock('@/lib/auth', () => ({ getMe }));
 const user: User = {
   id: 'reader-1', email: 'reader@example.com', nickname: '독자', profile_image: null,
   role: 'reader', has_password: true, is_email_verified: true, created_at: '2026-11-16T00:00:00Z',

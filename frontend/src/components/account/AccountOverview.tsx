@@ -1,5 +1,5 @@
-import type { User } from '../../lib/auth';
-import { ghostControl } from '../ui/controlStyles';
+import type { User } from '@/lib/auth';
+import { ghostControl } from '@/components/ui/controlStyles';
 import { safeProfileImageUrl } from './profileUtils';
 
 export default function AccountOverview({ user }: { user: User }) {

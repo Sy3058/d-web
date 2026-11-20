@@ -1,7 +1,7 @@
 ---
 export const prerender = false;
-import BaseLayout from '../../layouts/BaseLayout.astro';
-import PaymentReturn from '../../components/payment/PaymentReturn';
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import PaymentReturn from '@/components/payment/PaymentReturn';
 
 Astro.response.headers.set('Cache-Control', 'no-store');
 Astro.response.headers.set('Referrer-Policy', 'no-referrer');

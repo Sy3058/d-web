@@ -2,17 +2,17 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { EpisodeEditor } from './EpisodeEditor';
-import type { Episode, Work } from '../../types';
+import type { Episode, Work } from '@/types/index';
 
 const navigateMock = vi.fn();
 vi.mock('@tanstack/react-router', () => ({ useNavigate: () => navigateMock }));
 
-vi.mock('../../lib/api', async () => ({
-  ...(await vi.importActual<typeof import('../../lib/api')>('../../lib/api')),
+vi.mock('@/lib/api', async () => ({
+  ...(await vi.importActual<typeof import('@/lib/api')>('@/lib/api')),
   api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() },
 }));
 
-const { api } = await import('../../lib/api');
+const { api } = await import('@/lib/api');
 
 function makeWork(): Work {
   return {
