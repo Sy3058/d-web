@@ -3,14 +3,14 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CommissionList } from './CommissionList';
-import type { CommissionItem } from '../../types';
+import type { CommissionItem } from '@/types/index';
 
-vi.mock('../../lib/api', async () => ({
-  ...(await vi.importActual<typeof import('../../lib/api')>('../../lib/api')),
+vi.mock('@/lib/api', async () => ({
+  ...(await vi.importActual<typeof import('@/lib/api')>('@/lib/api')),
   api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() },
 }));
 
-const { api, ApiError } = await import('../../lib/api');
+const { api, ApiError } = await import('@/lib/api');
 
 function makeItem(id: string, sortOrder: number): CommissionItem {
   return {

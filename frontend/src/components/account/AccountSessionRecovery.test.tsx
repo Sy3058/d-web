@@ -2,7 +2,7 @@
 import { act, StrictMode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { User } from '../../lib/auth';
+import type { User } from '@/lib/auth';
 import AccountSessionRecovery from './AccountSessionRecovery';
 
 const user: User = {

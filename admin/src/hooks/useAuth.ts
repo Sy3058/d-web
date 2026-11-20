@@ -1,6 +1,6 @@
 import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api } from '../lib/api';
-import type { AdminLoginResponse, TotpSetupResponse, UserRead } from '../types';
+import { api } from '@/lib/api';
+import type { AdminLoginResponse, TotpSetupResponse, UserRead } from '@/types/index';
 
 export const ME_QUERY_KEY = ['auth', 'me'] as const;
 const TOTP_SETUP_QUERY_KEY = ['admin', '2fa', 'setup'] as const;

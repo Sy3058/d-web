@@ -1,6 +1,6 @@
 import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api } from '../lib/api';
-import type { ArtistProfile, ArtistProfileUpdate } from '../types';
+import { api } from '@/lib/api';
+import type { ArtistProfile, ArtistProfileUpdate } from '@/types/index';
 
 const artistProfileKey = ['admin', 'artist-profile'] as const;
 

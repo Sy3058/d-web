@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from '@tanstack/react-router';
-import { useWorks } from '../../../hooks/useWorks';
-import { WorkList } from '../../../components/works/WorkList';
-import { describeAuthError } from '../../../lib/api';
+import { useWorks } from '@/hooks/useWorks';
+import { WorkList } from '@/components/works/WorkList';
+import { describeAuthError } from '@/lib/api';
 
 export const Route = createFileRoute('/_auth/works/')({
   component: WorksPage,

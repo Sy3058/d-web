@@ -6,7 +6,7 @@ import {
   COMMISSION_TITLE_MAX,
   commissionItemSchema,
   type CommissionItemInput,
-} from '../../lib/validation';
+} from '@/lib/validation';
 
 const SELECT_CLASS = 'w-full appearance-none rounded border border-gray-300 py-2 pl-3 pr-10';
 

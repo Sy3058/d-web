@@ -3,14 +3,14 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SiteTextEditor } from './SiteTextEditor';
-import type { SiteText } from '../../types';
+import type { SiteText } from '@/types/index';
 
-vi.mock('../../lib/api', async () => ({
-  ...(await vi.importActual<typeof import('../../lib/api')>('../../lib/api')),
+vi.mock('@/lib/api', async () => ({
+  ...(await vi.importActual<typeof import('@/lib/api')>('@/lib/api')),
   api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() },
 }));
 
-const { api } = await import('../../lib/api');
+const { api } = await import('@/lib/api');
 
 function renderWithClient(ui: ReactNode) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });

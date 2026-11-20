@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { PRICE_MAX, episodePublishSchema, type EpisodePublishInput } from '../../lib/validation';
-import type { EpisodeImageUrl } from '../../types';
+import { PRICE_MAX, episodePublishSchema, type EpisodePublishInput } from '@/lib/validation';
+import type { EpisodeImageUrl } from '@/types/index';
 
 interface PublishModalProps {
   /** 발행 대상 작품(시리즈) 이름 - 선택은 에디터 상단에서 하고 여기선 확인만. */

@@ -1,14 +1,14 @@
 import { useRef, useState } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { CommissionForm } from '../../../components/commission/CommissionForm';
-import { SampleImageStaging } from '../../../components/commission/SampleImageStaging';
+import { CommissionForm } from '@/components/commission/CommissionForm';
+import { SampleImageStaging } from '@/components/commission/SampleImageStaging';
 import {
   useCreateCommissionItem,
   useUpdateCommissionItem,
   useUploadCommissionSample,
-} from '../../../hooks/useCommissionItems';
-import { describeAuthError } from '../../../lib/api';
-import type { CommissionItemInput } from '../../../lib/validation';
+} from '@/hooks/useCommissionItems';
+import { describeAuthError } from '@/lib/api';
+import type { CommissionItemInput } from '@/lib/validation';
 
 export const Route = createFileRoute('/_auth/commission/new')({
   component: NewCommissionItemPage,

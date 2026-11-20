@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { ApiError } from '../../lib/api';
-import { ghostControl } from '../ui/controlStyles';
-import { completePayment, type PaymentStatus } from '../../lib/payments';
-import { goToPurchasedEpisode, readPaymentReturn } from '../../lib/paymentReturn';
+import { ApiError } from '@/lib/api';
+import { ghostControl } from '@/components/ui/controlStyles';
+import { completePayment, type PaymentStatus } from '@/lib/payments';
+import { goToPurchasedEpisode, readPaymentReturn } from '@/lib/paymentReturn';
 
 type State =
   | { kind: 'loading' }

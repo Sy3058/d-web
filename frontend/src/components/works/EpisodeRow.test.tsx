@@ -3,7 +3,7 @@ import { act } from 'react';
 import { createRoot, hydrateRoot, type Root } from 'react-dom/client';
 import { renderToString } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { EpisodeSummary } from '../../lib/catalog';
+import type { EpisodeSummary } from '@/lib/catalog';
 import EpisodeRow from './EpisodeRow';
 
 const episode: EpisodeSummary = {

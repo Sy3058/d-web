@@ -8,6 +8,14 @@ BE·FE 브랜치는 분리한다. 이 작업은 `fe/feat/m3-viewer-entry-f3`이�
 
 ## SSR과 개인 메타 경계
 
+### 2026-11-20 에피소드 머리말
+
+본문 위에 작품명·회차 h1·선택 부제·공개일을 표시한다. 공개 회차는 Astro 셸에서 렌더하고, 비공개 구매 회차는 `ViewerEntry`가 인가된 bootstrap을 받은 뒤 같은 형태로 표시한다. `ViewerBootstrap.first_published_at`을 기존 DB 컬럼에서 추가로 조회하며 공개 catalog와 같은 KST `YYYY.MM.DD` 형식을 쓴다. null이면 날짜 줄을 생략한다. 날짜는 최초 공개일이며 수정·재공개 시각으로 대체하지 않는다. Admin 생성 타입도 OpenAPI로 재생성했다.
+
+머리말은 `Viewer`의 본문 관측 블록 밖에 두어 블록 인덱스를 바꾸지 않는다. 진행도 복원 시 DOM의 본문 위치를 기준으로 계산하는 기존 로직과 고정 컨트롤을 유지한다. 비공개 SSR에는 여전히 제목·날짜를 넣지 않고, bootstrap 404에서는 머리말과 본문을 모두 마운트하지 않는다.
+
+검증: Frontend lint, Astro check(오류·경고 0, 기존 hint 1), 377개 테스트, build와 production SSR HTTP 16개 검증이 통과했다. 기존 테스트에 공개 머리말 SSR과 비공개 인가 전 미노출·인가 후 KST 날짜 표시를 추가하고 null 날짜의 본문 표시를 검증했다. Admin 생성 타입 갱신 후 lint·139개 테스트·build도 통과했다. SSR 검증은 sandbox의 loopback 제한으로 재실행 권한을 받아 통과했다. 기존 Sentry 토큰 미설정·transitions sourcemap 빌드 경고는 유지된다. 브라우저 화면·실기능 확인은 사용자에게 남긴다.
+
 `works/[id]/[publicId].astro`는 공개 조회에 성공한 회차의 기존 Viewer 셸을 유지한다. 회차를 찾지 못하면 `work`를 비우고 generic 제목과 `ViewerEntry`의 경로 식별자만 직렬화한다. 이 셸은 존재나 구매 여부를 확정하지 않는 HTTP 200/no-store다. 비공개 작품·회차·이웃 제목, 내부 episode UUID, 구매 여부와 presigned URL은 SSR HTML에 넣지 않는다.
 
 SSR은 쿠키를 공개 catalog로 전달하지 않으며 bootstrap·인증·본문 API도 호출하지 않는다. `ViewerEntry`의 `useEffect`가 브라우저에서만 `document.cookie`의 힌트를 읽고 세션 복구 후 no-store bootstrap을 호출한다. bootstrap의 404는 메타 없는 찾을 수 없음 UI로 끝나며 Viewer와 content 요청을 시작하지 않는다. 셸 200을 구매 인가 성공으로 사용하지 않는다.

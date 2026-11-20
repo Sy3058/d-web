@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { EpisodeEditor } from '../../../components/episodes/EpisodeEditor';
+import { EpisodeEditor } from '@/components/episodes/EpisodeEditor';
 
 export const Route = createFileRoute('/_auth/episodes/new')({
   component: NewEpisodeGlobalPage,

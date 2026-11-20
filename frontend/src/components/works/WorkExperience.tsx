@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import EpisodeRow from './EpisodeRow';
-import { orderEpisodes, type EpisodeSummary, type EpisodeOrder } from '../../lib/catalog';
-import { getBrowserGuestWorkProgress } from '../../lib/guestProgress';
-import { isLoggedIn } from '../../lib/viewer';
+import { orderEpisodes, type EpisodeSummary, type EpisodeOrder } from '@/lib/catalog';
+import { getBrowserGuestWorkProgress } from '@/lib/guestProgress';
+import { isLoggedIn } from '@/lib/viewer';
 import {
   getWorkProgress,
   selectReadingCta,
   summarizeWorkProgress,
   type WorkProgressRead,
-} from '../../lib/workProgress';
+} from '@/lib/workProgress';
 
 interface Props {
   workId: string;

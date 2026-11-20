@@ -5,8 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { post } = vi.hoisted(() => ({ post: vi.fn() }));
 
-vi.mock('../../lib/api', async (importOriginal) => {
-  const original = await importOriginal<typeof import('../../lib/api')>();
+vi.mock('@/lib/api', async (importOriginal) => {
+  const original = await importOriginal<typeof import('@/lib/api')>();
   return { ...original, api: { ...original.api, post } };
 });
 

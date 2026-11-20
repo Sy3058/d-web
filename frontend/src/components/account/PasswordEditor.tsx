@@ -2,11 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { api, ApiError, extractDetail } from '../../lib/api';
-import { getMe, type User } from '../../lib/auth';
-import { signupSchema } from '../../lib/validation';
-import { FormError, TextField } from '../ui/forms';
-import { controlBase, ghostControl } from '../ui/controlStyles';
+import { api, ApiError, extractDetail } from '@/lib/api';
+import { getMe, type User } from '@/lib/auth';
+import { signupSchema } from '@/lib/validation';
+import { FormError, TextField } from '@/components/ui/forms';
+import { controlBase, ghostControl } from '@/components/ui/controlStyles';
 
 export const passwordChangeSchema = z.object({
   current_password: z.string().min(1, '현재 비밀번호를 입력해 주세요.').max(128),
@@ -150,8 +150,7 @@ export default function PasswordEditor({ initialUser }: { initialUser: User }) {
       <fieldset disabled={disabled} className="space-y-5">
         <TextField id="current-password" label="현재 비밀번호" type="password" autoComplete="current-password" maxLength={128} error={form.formState.errors.current_password?.message} {...form.register('current_password')} />
         <TextField id="new-password" label="새 비밀번호" type="password" autoComplete="new-password" maxLength={128} helper="8~128자, 영문, 숫자, 특수문자를 각각 포함하세요." error={form.formState.errors.new_password?.message} {...form.register('new_password')} />
-        <TextField id="confirm-password" label="새 비밀번호 확인" type="password" autoComplete="new-password" maxLength={128} error={form.formState.errors.confirm_password?.message} {...form.register('confirm_password')} />
-        <p className="text-xs text-muted">다른 기기에서는 로그아웃됩니다.</p>
+        <TextField id="confirm-password" label="새 비밀번호 확인" type="password" autoComplete="new-password" maxLength={128} helper="다른 기기에서는 로그아웃됩니다." error={form.formState.errors.confirm_password?.message} {...form.register('confirm_password')} />
         <div className="flex flex-wrap items-center gap-2 border-t border-line pt-6">
           <button type="submit" disabled={disabled} className={`${controlBase} bg-ink px-5 py-2.5 text-paper hover:bg-ink-strong`}>{restoring ? '정보 확인 중...' : busy ? '변경 중...' : '비밀번호 변경'}</button>
           <a href="/my" className={ghostControl} aria-disabled={busy || undefined} onClick={(event) => { if (lock.current) event.preventDefault(); }} data-astro-reload>취소</a>

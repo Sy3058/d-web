@@ -1,4 +1,4 @@
-import type { WorkStatus } from '../types';
+import type { WorkStatus } from '@/types/index';
 
 // 연재 상태의 단일 출처. 목록(뱃지)·폼(select)·zod enum이 전부 여기서 파생된다.
 // Record<WorkStatus, string>이라 백엔드가 상태 값을 추가하면 codegen 타입이 바뀌면서

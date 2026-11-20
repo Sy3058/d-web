@@ -1,6 +1,6 @@
 import { createFileRoute, Outlet, redirect } from '@tanstack/react-router';
-import { meQueryOptions } from '../hooks/useAuth';
-import type { UserRead } from '../types';
+import { meQueryOptions } from '@/hooks/useAuth';
+import type { UserRead } from '@/types/index';
 
 export const Route = createFileRoute('/_auth')({
   beforeLoad: async ({ context }) => {

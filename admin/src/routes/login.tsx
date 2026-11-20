@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router';
 import type { LoginInput } from '@d-web/shared';
-import { LoginForm } from '../components/auth/LoginForm';
-import { TotpEnroll } from '../components/auth/TotpEnroll';
-import { TotpInput } from '../components/auth/TotpInput';
-import { describeAuthError, isSessionExpired } from '../lib/api';
-import { meQueryOptions, useAdminLogin, useAdminLoginTotp } from '../hooks/useAuth';
-import type { TotpInput as TotpInputValue } from '../lib/validation';
-import type { UserRead } from '../types';
+import { LoginForm } from '@/components/auth/LoginForm';
+import { TotpEnroll } from '@/components/auth/TotpEnroll';
+import { TotpInput } from '@/components/auth/TotpInput';
+import { describeAuthError, isSessionExpired } from '@/lib/api';
+import { meQueryOptions, useAdminLogin, useAdminLoginTotp } from '@/hooks/useAuth';
+import type { TotpInput as TotpInputValue } from '@/lib/validation';
+import type { UserRead } from '@/types/index';
 
 export const Route = createFileRoute('/login')({
   beforeLoad: async ({ context }) => {

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { TAG_NAME_MAX } from '../../lib/validation';
+import { TAG_NAME_MAX } from '@/lib/validation';
 
 interface TagInputProps {
   value: string[];

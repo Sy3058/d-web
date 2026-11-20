@@ -2,14 +2,14 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode }
 import { generateHTML, type Extensions } from '@tiptap/core';
 import { buildViewerExtensions } from './extensions';
 import ViewerControls, { type ViewerEpisodeLink } from './ViewerControls';
-import { getBrowserGuestProgress, putBrowserGuestProgress } from '../../lib/guestProgress';
-import { restoreViewerSession } from '../../lib/viewerSession';
-import EpisodeCheckout from '../payment/EpisodeCheckout';
+import { getBrowserGuestProgress, putBrowserGuestProgress } from '@/lib/guestProgress';
+import { restoreViewerSession } from '@/lib/viewerSession';
+import EpisodeCheckout from '@/components/payment/EpisodeCheckout';
 import {
   createViewerControlsScrollState,
   syncViewerControlsScrollState,
   updateViewerControlsScrollState,
-} from '../../lib/viewerControls';
+} from '@/lib/viewerControls';
 import {
   calculateBlockOffsetBp,
   calculateBlockRestoreY,
@@ -21,7 +21,7 @@ import {
   putProgress,
   type ContentDocNode,
   type EpisodeContentResponse,
-} from '../../lib/viewer';
+} from '@/lib/viewer';
 
 interface Props {
   episodeId: string;

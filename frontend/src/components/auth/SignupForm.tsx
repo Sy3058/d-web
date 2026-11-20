@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { signupSchema, type SignupInput } from '../../lib/validation';
-import { api, ApiError, extractDetail } from '../../lib/api';
-import { TextField, SubmitButton, FormError } from '../ui/forms';
+import { signupSchema, type SignupInput } from '@/lib/validation';
+import { api, ApiError, extractDetail } from '@/lib/api';
+import { TextField, SubmitButton, FormError } from '@/components/ui/forms';
 
 export default function SignupForm() {
   const {

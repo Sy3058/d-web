@@ -5,15 +5,15 @@ import {
   useArtistProfile,
   useUpdateArtistProfile,
   useUploadArtistProfileImage,
-} from '../../hooks/useArtistProfile';
-import { describeAuthError } from '../../lib/api';
+} from '@/hooks/useArtistProfile';
+import { describeAuthError } from '@/lib/api';
 import {
   ARTIST_NAME_MAX,
   artistProfileSchema,
   type ArtistProfileInput,
-} from '../../lib/validation';
-import type { ArtistProfile, ArtistProfileUpdate } from '../../types';
-import { ImageCropModal } from '../common/ImageCropModal';
+} from '@/lib/validation';
+import type { ArtistProfile, ArtistProfileUpdate } from '@/types/index';
+import { ImageCropModal } from '@/components/common/ImageCropModal';
 
 export function ArtistProfileEditor() {
   const { data, isLoading, isError, error } = useArtistProfile();

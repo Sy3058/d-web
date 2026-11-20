@@ -1,0 +1,25 @@
+---
+import type { HTMLAttributes } from 'astro/types';
+
+interface Props extends HTMLAttributes<'header'> {
+  title: string;
+  titleId?: string;
+  variant?: 'page' | 'reader';
+}
+
+const { title, titleId, variant = 'page', class: className, ...attributes } = Astro.props;
+// 조건부 자식이 비어도 슬롯은 존재하므로 실제 출력이 있을 때만 여백을 만든다.
+const [eyebrow, description, meta] = await Promise.all(
+  ['eyebrow', 'description', 'meta'].map((name) => Astro.slots.render(name)),
+);
+---
+
+<header {...attributes} class:list={['page-header', className]} data-variant={variant}>
+  {eyebrow?.trim() && <p class="page-eyebrow" set:html={eyebrow} />}
+  <div class="page-header-row">
+    <h1 id={titleId} class="page-title"><slot name="title">{title}</slot></h1>
+    <slot name="actions" />
+  </div>
+  {description?.trim() && <div class="page-description" set:html={description} />}
+  {meta?.trim() && <div class="page-meta" set:html={meta} />}
+</header>

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { api, ApiError } from '../../lib/api';
+import { api, ApiError } from '@/lib/api';
 
 export default function LogoutButton() {
   const [loading, setLoading] = useState(false);

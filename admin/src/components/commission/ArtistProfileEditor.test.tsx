@@ -2,15 +2,15 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ArtistProfile } from '../../types';
+import type { ArtistProfile } from '@/types/index';
 import { ArtistProfileEditor } from './ArtistProfileEditor';
 
-vi.mock('../../lib/api', async () => ({
-  ...(await vi.importActual<typeof import('../../lib/api')>('../../lib/api')),
+vi.mock('@/lib/api', async () => ({
+  ...(await vi.importActual<typeof import('@/lib/api')>('@/lib/api')),
   api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() },
 }));
 
-vi.mock('../common/ImageCropModal', () => ({
+vi.mock('@/components/common/ImageCropModal', () => ({
   ImageCropModal: ({ onComplete }: { onComplete: (file: File) => void }) => (
     <button
       type="button"
@@ -21,7 +21,7 @@ vi.mock('../common/ImageCropModal', () => ({
   ),
 }));
 
-const { api } = await import('../../lib/api');
+const { api } = await import('@/lib/api');
 
 function renderWithClient(ui: ReactNode) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });

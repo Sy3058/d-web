@@ -21,7 +21,7 @@ vi.mock('react-easy-crop', () => {
   return { default: MockCropper };
 });
 
-vi.mock('../../lib/cropImage', () => ({
+vi.mock('@/lib/cropImage', () => ({
   getCroppedImageFile: vi.fn(() =>
     Promise.resolve(new File(['cropped'], 'profile.jpg', { type: 'image/jpeg' })),
   ),

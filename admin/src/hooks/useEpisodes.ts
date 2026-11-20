@@ -1,6 +1,6 @@
 import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ApiError, api } from '../lib/api';
-import type { Episode, EpisodeCreate, EpisodeImageUrl, EpisodeUpdate } from '../types';
+import { ApiError, api } from '@/lib/api';
+import type { Episode, EpisodeCreate, EpisodeImageUrl, EpisodeUpdate } from '@/types/index';
 import { workDetailKey, worksListKey } from './useWorks';
 
 // useWorks와 같은 규칙: 키를 세그먼트로 분리해 서로 prefix가 되지 않게 한다

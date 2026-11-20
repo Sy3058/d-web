@@ -2,16 +2,16 @@
 import { act, StrictMode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ApiError } from '../../lib/api';
-import type { User } from '../../lib/auth';
+import { ApiError } from '@/lib/api';
+import type { User } from '@/lib/auth';
 import ProfileEditor from './ProfileEditor';
 
 const { put, getMe, cropCallbacks } = vi.hoisted(() => ({ put: vi.fn(), getMe: vi.fn(), cropCallbacks: [] as Array<(file: File) => void> }));
-vi.mock('../../lib/api', async (original) => {
-  const module = await original<typeof import('../../lib/api')>();
+vi.mock('@/lib/api', async (original) => {
+  const module = await original<typeof import('@/lib/api')>();
   return { ...module, api: { ...module.api, put } };
 });
-vi.mock('../../lib/auth', () => ({ getMe }));
+vi.mock('@/lib/auth', () => ({ getMe }));
 vi.mock('./ProfileImageCropper', () => ({
   default: ({ onApply, onCancel }: { onApply: (file: File) => void; onCancel: () => void }) => {
     cropCallbacks.push(onApply);

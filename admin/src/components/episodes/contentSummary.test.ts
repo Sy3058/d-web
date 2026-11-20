@@ -1,6 +1,6 @@
 import { getSchema } from '@tiptap/core';
 import { describe, expect, it } from 'vitest';
-import { buildEditorExtensions } from './extensions';
+import { buildEditorExtensions } from '@/components/episodes/extensions/index';
 import { contentImageKeys, summarizeContent } from './contentSummary';
 
 const schema = getSchema(buildEditorExtensions(null));

@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { PRICE_MAX, TAG_NAME_MAX, workSchema, type WorkInput } from '../../lib/validation';
-import { WORK_STATUS_OPTIONS } from '../../lib/workStatus';
-import type { WorkStatus } from '../../types';
+import { PRICE_MAX, TAG_NAME_MAX, workSchema, type WorkInput } from '@/lib/validation';
+import { WORK_STATUS_OPTIONS } from '@/lib/workStatus';
+import type { WorkStatus } from '@/types/index';
 import { TagInput } from './TagInput';
-import { ImageCropModal } from '../common/ImageCropModal';
+import { ImageCropModal } from '@/components/common/ImageCropModal';
 
 // Chrome은 기본 select 화살표에 padding-right를 적용하지 않아 화살표가 테두리에 딱 붙는다.
 // 기본 화살표를 끄고(appearance-none) 직접 그려 위치를 잡는다. select가 둘이라 마크업을 뺐다.

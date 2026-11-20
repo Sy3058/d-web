@@ -1,6 +1,6 @@
 import { Node, mergeAttributes } from '@tiptap/core';
 import { ReactNodeViewRenderer } from '@tiptap/react';
-import type { ImageUrlStore } from '../imageUrlStore';
+import type { ImageUrlStore } from '@/components/episodes/imageUrlStore';
 import { ImageNodeView } from './ImageNodeView';
 
 export interface EpisodeImageOptions {

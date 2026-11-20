@@ -4,12 +4,12 @@ import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '@d-web/shared';
 import { ME_QUERY_KEY, meQueryOptions, useAdminTotpConfirm, useLogout } from './useAuth';
-import type { UserRead } from '../types';
+import type { UserRead } from '@/types/index';
 
-vi.mock('../lib/api', async () => {
+vi.mock('@/lib/api', async () => {
   const shared = await vi.importActual<typeof import('@d-web/shared')>('@d-web/shared');
   return {
-    ...(await vi.importActual<typeof import('../lib/api')>('../lib/api')),
+    ...(await vi.importActual<typeof import('@/lib/api')>('@/lib/api')),
     api: {
       get: vi.fn(),
       post: vi.fn(),
@@ -20,7 +20,7 @@ vi.mock('../lib/api', async () => {
   };
 });
 
-const { api } = await import('../lib/api');
+const { api } = await import('@/lib/api');
 const mockPost = vi.mocked(api.post);
 
 const OWNER: UserRead = {

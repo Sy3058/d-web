@@ -1640,6 +1640,8 @@ export interface components {
             episode_title: string;
             /** Episode Subtitle */
             episode_subtitle: string | null;
+            /** First Published At */
+            first_published_at: string | null;
             previous_episode: components["schemas"]["ViewerEpisodeLink"] | null;
             next_episode: components["schemas"]["ViewerEpisodeLink"] | null;
         };

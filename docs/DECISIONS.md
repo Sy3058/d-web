@@ -669,6 +669,12 @@ main (항상 배포 가능 상태)
 
 ## 프론트엔드 도구 결정
 
+### FE·Admin import 경로 별칭 (2026-11-20)
+
+각 앱의 `@/`는 해당 앱의 `src/`를 가리킨다. 다른 폴더의 내부 모듈은 `@/`, 같은 폴더의 파일은 `./`를 사용한다. 정적·동적 import, 타입 import와 테스트 mock에도 같은 규칙을 적용한다. `@d-web/shared` 등 패키지 이름과 자동 생성 파일의 경로는 유지한다.
+
+FE는 `tsconfig.json`, Admin은 `tsconfig.app.json`의 `compilerOptions.paths`를 원본으로 삼는다. Astro는 기본 경로 해석을 사용하고, FE Vitest 및 Admin Vite·Vitest는 기존 Vite 8의 `resolve.tsconfigPaths: true`로 설정을 읽는다. 별도 경로 플러그인이나 중복 alias 매핑은 추가하지 않는다. 향후 작업에도 적용하도록 각 앱 `AGENTS.md`에 규칙을 기록한다. [설정과 검증](MODULES/COMMON/Tooling/IMPLEMENTATION_IMPORT_ALIASES.md)을 따른다.
+
 ### admin API 타입: openapi-typescript codegen 도입 (M1.5 F2 선행, 2026-07-14 확정)
 
 **결정: `admin/src/types/index.ts`(수기 미러링)를 폐기하고, 백엔드 `app.openapi()` → `openapi-typescript` → `admin/src/types/api.gen.ts`(생성물, 커밋됨) 파이프라인으로 교체. `index.ts`는 그 위 얇은 별칭 레이어(`UserRead` 등 짧은 이름 재수출)만 남긴다.**
@@ -756,6 +762,10 @@ main (항상 배포 가능 상태)
 이미지 높이 저장의 진짜 가치는 진행률이 아니라 **레이아웃 안정성**이다. 공간 예약이 없어 이미지가 로드될 때마다 콘텐츠가 튀고, 진행도 복원이 흔들린 이력도 있다(`50767af` 뷰어 진행도 복원 안정화). 진행률 정확도는 그 기반 작업의 부산물로 따라온다. ⚠️ **미검증**: 실제 CLS 수치는 측정하지 않았다 - 코드 구조에 근거한 추론이다.
 
 ### 뷰어 집중 모드: 스크롤 방향 반응형 상하단 컨트롤 (2026-08-20, #121)
+
+**2026-11-20 화면 보완**: 에피소드 본문 위에 작품명·회차 제목·선택 부제·공개일을 게시글 머리말로 표시한다. 날짜는 사용자 선택에 따라 최초 공개일(`first_published_at`)을 KST로 계산해 날짜 값만 표시한다. 수정 시각으로 대체하지 않고 값이 없으면 날짜 줄을 생략한다. 공개 회차는 SSR, 비공개 구매 회차는 bootstrap 인가 뒤 브라우저에서 머리말을 표시한다. 고정 컨트롤과 본문 블록 단위 진행도 계약은 유지한다. `/works`와 `/commission`의 큰 영문 라벨·소개 제목·설명 영역은 제거하고 작은 `작품 목록`·`작업 안내` h1부터 목록을 시작한다. 작품 상세의 실제 작품명은 유지한다.
+
+**2026-11-20 공통 레이아웃 보강**: 계정·구매 내역·설정·수정 화면의 바깥 여백과 제목 간격을 통일한다. 기존 `BaseLayout` 위에 Astro 슬롯으로 조합하는 `PageContainer`·`PageHeader`·`PageLayout`·`AuthLayout`을 두고, 폭·반응형 여백·섹션 간격은 `globals.css`의 의미 기반 Tailwind 토큰을 진실의 원본으로 삼는다. 공개 목록·인증·뷰어도 같은 컨테이너를 사용하되 폭과 뷰어 고정 바 공간을 명시적인 변형으로 유지한다. 페이지의 데이터 조회·인증·공유 캐시 계약은 레이아웃으로 이동하지 않는다. [상세 구현](MODULES/FE/Layout/IMPLEMENTATION_PAGE_LAYOUT.md)을 따른다.
 
 **결정: 정상 회차 뷰어에서는 전역 Navbar·Footer를 숨기고, 기존 Viewer React 아일랜드가 고정 상단 헤더와 하단 플로팅 이전·다음 화 컨트롤을 함께 소유한다. 본문 끝의 제목형 이전·다음 화 nav도 별도 이동 수단으로 유지한다.** 플로팅 컨트롤은 최초·최상단·회차 끝에서 표시하고, 하향 48px 누적 시 숨기며 상향 24px 누적 시 다시 표시한다. 방향이 바뀌면 누적 거리를 초기화한다.
 

@@ -3,12 +3,12 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { renderToString } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { api } from '../../lib/api';
-import { getMe, type User } from '../../lib/auth';
+import { api } from '@/lib/api';
+import { getMe, type User } from '@/lib/auth';
 import AccountMenu from './AccountMenu';
 
-vi.mock('../../lib/api', () => ({ api: { post: vi.fn() } }));
-vi.mock('../../lib/auth', () => ({ getMe: vi.fn() }));
+vi.mock('@/lib/api', () => ({ api: { post: vi.fn() } }));
+vi.mock('@/lib/auth', () => ({ getMe: vi.fn() }));
 
 let container: HTMLDivElement;
 let root: Root;

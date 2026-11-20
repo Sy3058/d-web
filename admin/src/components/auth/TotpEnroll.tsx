@@ -1,9 +1,9 @@
 import { useEffect } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import { describeAuthError, isSessionExpired } from '../../lib/api';
-import { useAdminTotpConfirm, useAdminTotpSetup } from '../../hooks/useAuth';
+import { describeAuthError, isSessionExpired } from '@/lib/api';
+import { useAdminTotpConfirm, useAdminTotpSetup } from '@/hooks/useAuth';
 import { TotpInput } from './TotpInput';
-import type { TotpInput as TotpInputValue } from '../../lib/validation';
+import type { TotpInput as TotpInputValue } from '@/lib/validation';
 
 interface TotpEnrollProps {
   onComplete: () => void;

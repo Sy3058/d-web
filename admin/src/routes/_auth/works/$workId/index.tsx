@@ -1,8 +1,8 @@
 import { Link, createFileRoute, useNavigate } from '@tanstack/react-router';
-import { WorkForm } from '../../../../components/works/WorkForm';
-import { useUpdateWork, useUploadCover, useWork } from '../../../../hooks/useWorks';
-import { describeAuthError } from '../../../../lib/api';
-import type { WorkInput } from '../../../../lib/validation';
+import { WorkForm } from '@/components/works/WorkForm';
+import { useUpdateWork, useUploadCover, useWork } from '@/hooks/useWorks';
+import { describeAuthError } from '@/lib/api';
+import type { WorkInput } from '@/lib/validation';
 
 export const Route = createFileRoute('/_auth/works/$workId/')({
   component: EditWorkPage,

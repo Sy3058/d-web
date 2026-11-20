@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import AccountMenu from '../common/AccountMenu';
+import AccountMenu from '@/components/common/AccountMenu';
 
 export interface ViewerEpisodeLink {
   publicId: number;

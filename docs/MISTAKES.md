@@ -131,6 +131,9 @@ docs/MISTAKES.md 참고해서 FastAPI 라우터 작성해줘
 
 ## Vite / Astro
 
+- **새 컴포넌트 추가 후 production 검증만으로 실행 중인 dev의 정상 상태를 판단하지 않는다** (2026-11-20 공통 레이아웃)
+  -> 실제 파일·import 경로가 정상이고 build·production SSR이 통과해도, 기존 dev 홈에는 `FailedToLoadModuleSSR`이 남았다. `.astro/dev.log`에 HMR route 갱신 실패가 있었고 다른 페이지는 200이었다. 해당 개발 서버만 정상 종료·재시작하여 디스크 캐시 삭제나 코드 변경 없이 복구했다. 공통 import 변경 후에는 실제 dev 홈을 포함한 적용 경로의 응답과 오류 셸 부재를 확인한다.
+
 - **로그인 메뉴를 React로 바꾸며 pre-paint 계약을 제거하면 로그인 라벨 깜빡임이 재발한다** (2026-11-14)
   -> `client:load`의 공통 로그인 SSR과 `useEffect` 닉네임 갱신 사이가 그대로 페인트됐다. 일반 메뉴는 `client:only`의 Astro fallback만 인라인 스크립트로 보정하고 React 메뉴는 layout effect로 페인트 전에 힌트를 반영한다. 공유 서버 HTML에 개인 닉네임을 넣거나 React 소유 DOM을 인라인 스크립트로 바꾸지 않는다. production SSR 셸의 실제 보정 스크립트와 한글·잘못된 인코딩·HTML 형태 닉네임을 DOM 단위 검증한다.
 

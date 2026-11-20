@@ -608,6 +608,12 @@ pnpm --filter admin lint && pnpm --filter admin test && pnpm --filter admin buil
 
 ### M3 완료
 
+2026-11-20 import 경로 정리: FE·Admin에서 앱별 `@/` 별칭과 같은 폴더 `./` 규칙을 적용하고 TypeScript·개발/빌드·Vitest 해석을 맞췄다. Frontend 377개·SSR HTTP 19개·Admin 139개 테스트와 앱별 정적 검사·빌드가 통과했다. [구현과 검증](../MODULES/COMMON/Tooling/IMPLEMENTATION_IMPORT_ALIASES.md)을 따른다.
+
+2026-11-20 공통 레이아웃 보강: 계정 영역의 폭·여백·제목 간격을 통일하고 공개 목록·인증·뷰어를 슬롯 기반 Astro 레이아웃과 의미 기반 토큰으로 조합했다. Frontend 377개·SSR HTTP 19개, lint·Astro check·build가 통과했다. [구현과 검증](../MODULES/FE/Layout/IMPLEMENTATION_PAGE_LAYOUT.md)을 따른다. 시각·실기능 확인은 사용자에게 남긴다.
+
+2026-11-20 독자 화면 보완: 에피소드 본문 위에 회차 제목·부제·최초 공개일을 추가하고 작품·커미션 목록의 큰 소개 영역을 제거했다. 비공개 구매 회차는 bootstrap 인가 뒤 같은 머리말을 표시한다. Backend 1,248개·Frontend 377개·SSR HTTP 16개·Admin 139개 테스트, 앱별 정적 검사와 Frontend·Admin 빌드가 통과했다. [뷰어 구현과 검증](../MODULES/FE/Viewer/IMPLEMENTATION_VIEWER_ENTRY.md#2026-11-20-에피소드-머리말), [목록 구현](../MODULES/FE/Catalog/IMPLEMENTATION_CATALOG_PAGES.md)을 따른다. 브라우저 화면·실기능 확인은 사용자에게 남긴다.
+
 2026-11-19 보안 유지보수: Pillow 13.0.0·Vite 8.2.6·Python 3.12.16·Node 24.22.3·PostgreSQL 16.16을 반영하고 Backend 1,243개, Frontend 352개, Admin 123개 테스트와 앱별 정적 검사·빌드를 확인했다. DB 백업 복원과 Docker 빌드도 검증했다. [상세 적용 기록](../MODULES/INFRA/Security/IMPLEMENTATION_DEPENDENCY_SECURITY_UPDATES.md#런타임db-적용과-추가-검증). 이는 아래 M3 완료 항목이나 브라우저 확인의 완료 판정이 아니다.
 
 - [ ] 코드 품질 후속 Q5 신규 가격 기본값 계약과 Q6 운영 API 주소 검증 완료 ([완료조건](#m3-quality-followups))

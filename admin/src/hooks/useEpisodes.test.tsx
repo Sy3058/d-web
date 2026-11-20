@@ -8,14 +8,14 @@ import {
   useUpdateEpisode,
   useUploadEpisodeImage,
 } from './useEpisodes';
-import type { Episode } from '../types';
+import type { Episode } from '@/types/index';
 
-vi.mock('../lib/api', async () => ({
-  ...(await vi.importActual<typeof import('../lib/api')>('../lib/api')),
+vi.mock('@/lib/api', async () => ({
+  ...(await vi.importActual<typeof import('@/lib/api')>('@/lib/api')),
   api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() },
 }));
 
-const { ApiError, api } = await import('../lib/api');
+const { ApiError, api } = await import('@/lib/api');
 
 function makeEpisode(id: string, imageKeys: string[] = []): Episode {
   return {

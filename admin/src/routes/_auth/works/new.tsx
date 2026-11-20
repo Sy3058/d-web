@@ -1,9 +1,9 @@
 import { useRef } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { WorkForm } from '../../../components/works/WorkForm';
-import { useCreateWork, useUpdateWork, useUploadCover } from '../../../hooks/useWorks';
-import { describeAuthError } from '../../../lib/api';
-import type { WorkInput } from '../../../lib/validation';
+import { WorkForm } from '@/components/works/WorkForm';
+import { useCreateWork, useUpdateWork, useUploadCover } from '@/hooks/useWorks';
+import { describeAuthError } from '@/lib/api';
+import type { WorkInput } from '@/lib/validation';
 
 export const Route = createFileRoute('/_auth/works/new')({
   component: NewWorkPage,

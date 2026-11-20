@@ -17,6 +17,29 @@
   --radius-surface: 0.75rem;
   --radius-pill: 9999px;
 
+  --container-page-wide: 71.25rem;
+  --container-page-reading: 45rem;
+  --container-page-compact: 32rem;
+  --container-auth: 25rem;
+  --spacing-page-x: calc(var(--spacing) * 5);
+  --spacing-page-x-desktop: calc(var(--spacing) * 6);
+  --spacing-page-y: calc(var(--spacing) * 8);
+  --spacing-page-y-desktop: calc(var(--spacing) * 12);
+  --spacing-title-gap: calc(var(--spacing) * 8);
+  --spacing-section-gap: calc(var(--spacing) * 12);
+  --spacing-section-gap-lg: calc(var(--spacing) * 16);
+  --spacing-header-detail: calc(var(--spacing) * 3);
+  --spacing-header-meta: calc(var(--spacing) * 4);
+  --spacing-auth-x: calc(var(--spacing) * 8);
+  --spacing-auth-y: calc(var(--spacing) * 10);
+  --spacing-footer-y: calc(var(--spacing) * 8);
+  --spacing-reader-x: calc(var(--spacing) * 4);
+  --spacing-reader-header: calc(var(--spacing) * 6);
+  --spacing-reader-header-desktop: calc(var(--spacing) * 8);
+  --spacing-reader-gap-desktop: calc(var(--spacing) * 10);
+  --spacing-viewer-top: calc(var(--spacing) * 18);
+  --spacing-viewer-bottom: calc(var(--spacing) * 22);
+
   /* 타이포그래피 스케일 (docs/DESIGN.md). Tailwind v4 컴파운드 토큰 문법
      (공식 문서 확인, 2026-07-22): --text-{name}에 --text-{name}--line-height,
      --letter-spacing, --font-weight 접미사를 붙이면 text-{name} 클래스 하나로
@@ -63,6 +86,54 @@
 }
 
 @layer components {
+  .page-container {
+    @apply mx-auto w-full;
+    max-width: var(--container-page-reading);
+    padding-inline: var(--spacing-page-x);
+    padding-block: var(--spacing-page-y);
+  }
+
+  .page-container[data-width='wide'] { max-width: var(--container-page-wide); }
+  .page-container[data-width='compact'] { max-width: var(--container-page-compact); }
+  .page-container[data-spacing='none'] { padding-block: 0; }
+
+  .page-header { margin-bottom: var(--spacing-title-gap); }
+  .page-header-row { @apply flex flex-wrap items-end justify-between gap-4; }
+  .page-title { @apply min-w-0 break-words text-headline-md text-ink; }
+  .page-eyebrow { @apply text-label-md text-muted; margin-bottom: var(--spacing-header-detail); }
+  .page-description { @apply break-words text-body-md text-muted; margin-top: var(--spacing-header-detail); }
+  .page-meta { @apply text-sm text-muted; margin-top: var(--spacing-header-meta); }
+
+  .page-header[data-variant='reader'] {
+    @apply border-b border-line;
+    padding-bottom: var(--spacing-reader-header);
+  }
+  .page-header[data-variant='reader'] .page-title { @apply text-headline-lg; }
+  .auth-panel { @apply mx-auto w-full; }
+
+  @variant sm {
+    .page-container {
+      padding-inline: var(--spacing-page-x-desktop);
+      padding-block: var(--spacing-page-y-desktop);
+    }
+    .page-header[data-variant='reader'] {
+      padding-bottom: var(--spacing-reader-header-desktop);
+      margin-bottom: var(--spacing-reader-gap-desktop);
+    }
+    .auth-panel {
+      @apply rounded-control border border-line bg-paper;
+      max-width: var(--container-auth);
+      padding-inline: var(--spacing-auth-x);
+      padding-block: var(--spacing-auth-y);
+    }
+  }
+
+  .page-container[data-spacing='viewer'] {
+    padding-inline: var(--spacing-reader-x);
+    padding-top: calc(var(--spacing-viewer-top) + var(--spacing-page-y) + env(safe-area-inset-top));
+    padding-bottom: calc(var(--spacing-viewer-bottom) + env(safe-area-inset-bottom));
+  }
+
   .work-carousel .work-carousel-slide {
     left: 50%;
     top: 50%;

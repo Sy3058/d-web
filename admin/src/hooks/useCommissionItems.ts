@@ -1,11 +1,11 @@
 import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api } from '../lib/api';
+import { api } from '@/lib/api';
 import type {
   CommissionItem,
   CommissionItemCreate,
   CommissionItemReorder,
   CommissionItemUpdate,
-} from '../types';
+} from '@/types/index';
 
 // useWorks와 같은 규칙: 키를 세그먼트로 분리해 서로 prefix가 되지 않게 한다
 // (prefix 매칭 무효화가 무관한 쿼리까지 재요청하는 F2 함정).

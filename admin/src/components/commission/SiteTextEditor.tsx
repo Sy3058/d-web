@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { useSiteText, useUpdateSiteText } from '../../hooks/useSiteTexts';
-import { describeAuthError } from '../../lib/api';
-import { SITE_TEXT_MAX } from '../../lib/validation';
-import type { SiteText, SiteTextKey } from '../../types';
+import { useSiteText, useUpdateSiteText } from '@/hooks/useSiteTexts';
+import { describeAuthError } from '@/lib/api';
+import { SITE_TEXT_MAX } from '@/lib/validation';
+import type { SiteText, SiteTextKey } from '@/types/index';
 
 interface SiteTextEditorProps {
   slotKey: SiteTextKey;

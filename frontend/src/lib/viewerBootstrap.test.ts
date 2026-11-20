@@ -8,6 +8,7 @@ const bootstrap = {
   public_id: 12345678,
   episode_title: '구매 회차',
   episode_subtitle: null,
+  first_published_at: null,
   previous_episode: null,
   next_episode: null,
 };

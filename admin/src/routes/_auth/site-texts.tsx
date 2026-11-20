@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from '@tanstack/react-router';
-import { SiteTextEditor } from '../../components/commission/SiteTextEditor';
-import type { SiteTextKey } from '../../types';
+import { SiteTextEditor } from '@/components/commission/SiteTextEditor';
+import type { SiteTextKey } from '@/types/index';
 
 export const Route = createFileRoute('/_auth/site-texts')({
   component: SiteTextsPage,

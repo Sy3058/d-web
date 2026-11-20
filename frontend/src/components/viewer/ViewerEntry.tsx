@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { getViewerBootstrap, type ViewerBootstrap } from '../../lib/viewerBootstrap';
+import { getViewerBootstrap, type ViewerBootstrap } from '@/lib/viewerBootstrap';
 import Viewer from './Viewer';
-import { ghostControl } from '../ui/controlStyles';
+import { ghostControl } from '@/components/ui/controlStyles';
+import { formatEpisodeDate } from '@/lib/catalog';
 
 interface Props {
   workId: string;
@@ -64,9 +65,19 @@ function ViewerEntryRequest({ workId, publicId }: Props) {
   const bootstrap = state.bootstrap;
   const previous = bootstrap.previous_episode;
   const next = bootstrap.next_episode;
+  const displayDate = formatEpisodeDate(bootstrap.first_published_at);
   return (
     <>
-      <h1 className="sr-only">{bootstrap.work_title} · {bootstrap.episode_title}</h1>
+      <header className="page-header" data-variant="reader">
+        <p className="page-eyebrow">{bootstrap.work_title}</p>
+        <h1 className="page-title">{bootstrap.episode_title}</h1>
+        {bootstrap.episode_subtitle && <p className="page-description">{bootstrap.episode_subtitle}</p>}
+        {displayDate && (
+          <p className="page-meta">
+            <time dateTime={bootstrap.first_published_at ?? undefined}>{displayDate}</time>
+          </p>
+        )}
+      </header>
       <Viewer
         key={bootstrap.episode_id}
         episodeId={bootstrap.episode_id}

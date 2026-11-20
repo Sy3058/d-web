@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from '@tanstack/react-router';
-import { useCommissionItems } from '../../../hooks/useCommissionItems';
-import { CommissionList } from '../../../components/commission/CommissionList';
-import { describeAuthError } from '../../../lib/api';
+import { useCommissionItems } from '@/hooks/useCommissionItems';
+import { CommissionList } from '@/components/commission/CommissionList';
+import { describeAuthError } from '@/lib/api';
 
 export const Route = createFileRoute('/_auth/commission/')({
   component: CommissionPage,
