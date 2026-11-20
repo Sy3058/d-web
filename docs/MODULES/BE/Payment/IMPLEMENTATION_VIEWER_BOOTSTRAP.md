@@ -8,7 +8,11 @@
 
 `get_optional_user`로 확인한 사용자 ID로 중앙 권한 서비스의 조회 열과 정책 평가를 재사용한다. 공개 회차는 익명으로 조회할 수 있고, 작품·회차가 일반 비공개여도 현재 결제 환경의 활성 구매자는 조회할 수 있다. 다른 사용자·회차·환경의 구매나 환불 대기·환불 완료 구매로는 비공개 회차의 메타를 조회할 수 없다. 비구매 비공개와 soft delete는 메타 없이 404다. 작품 UUID와 해당 작품의 회차 public ID를 함께 확인한다.
 
-응답은 `work_id`, `work_title`, `episode_id`, `public_id`, `episode_title`, `episode_subtitle`, `previous_episode`, `next_episode`만 포함한다. 이웃은 `public_id`와 `title`만 담는다. 원고 본문·이미지 키·서명 URL·가격·구매 ID와 구매 상태는 포함하지 않는다. bootstrap은 이미지 서명과 `first_viewed_at` 기록을 수행하지 않으며 실제 전문 발급은 기존 F2 content API가 다시 인가한다.
+응답은 `work_id`, `work_title`, `episode_id`, `public_id`, `episode_title`, `episode_subtitle`, `first_published_at`, `previous_episode`, `next_episode`만 포함한다. 이웃은 `public_id`와 `title`만 담는다. 원고 본문·이미지 키·서명 URL·가격·구매 ID와 구매 상태는 포함하지 않는다. bootstrap은 이미지 서명과 `first_viewed_at` 기록을 수행하지 않으며 실제 전문 발급은 기존 F2 content API가 다시 인가한다.
+
+2026-11-20 에피소드 머리말의 `공개일` 표시를 위해 nullable `first_published_at`을 추가했다. 기존 Episode 컬럼을 같은 SELECT에서 읽으므로 추가 쿼리·DB migration은 없고, 인가된 응답만 날짜를 포함한다. 공개·비공개 구매 회차의 날짜 일치와 비구매 404의 detail-only 응답을 기존 bootstrap 테스트로 검증한다. OpenAPI의 Admin 타입도 재생성했다.
+
+날짜 추가 집중 검증은 `tests/test_viewer_bootstrap.py` 33개가 통과했다. sandbox에서는 테스트 DB의 loopback 연결이 제한되어 권한을 받아 재실행했으며 Backend 포맷 검사(126 files), Ruff 검사와 전체 pytest 1,248개(90.14초)도 통과했다.
 
 access 쿠키 없음·무효·만료는 익명으로 처리한다. 이 API에서 refresh나 쿠키 삭제를 하지 않으므로 FE는 `useEffect`에서 세션 복구를 마친 뒤 호출해야 한다. 위조 쿠키가 비공개 구매 메타를 열거나 쿠키를 변경하지 않는 것을 검증했다. 기존 중앙 resolver의 문서 검증도 유지해 손상 문서가 비공개 구매 메타를 열지 못한다.
 

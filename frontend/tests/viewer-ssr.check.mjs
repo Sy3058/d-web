@@ -33,6 +33,13 @@ test('뷰어 SSR의 공개 캐시·메타 없는 진입 셸·장애 구분', { t
         items: [{ id: ids[0], title: 'PUBLIC_WORK', cover_image_url: null, status: 'ongoing', tags: [], episode_count: 1 }],
         total: 72, page: Number(query.get('page')), size: 24,
       }));
+    } else if (req.url === '/commission-items') {
+      res.end(JSON.stringify([{
+        id: 'commission', title: '작업 예시', description: null, price_text: '가격 문의',
+        duration_text: null, sample_image_urls: [], is_open: false,
+      }]));
+    } else if (req.url === '/site-texts/commission_notes') {
+      res.end(JSON.stringify({ key: 'commission_notes', body: '작업 전 확인', updated_at: null }));
     } else if (req.url === '/auth/refresh') {
       res.writeHead(401).end('{}');
     } else if (req.url === '/auth/me') {
@@ -126,6 +133,15 @@ test('뷰어 SSR의 공개 캐시·메타 없는 진입 셸·장애 구분', { t
       assert.ok(html.includes('PUBLIC_EPISODE'));
       assert.ok(html.includes(episodeId));
       assert.ok(!html.includes('ViewerEntry'));
+      const dom = new JSDOM(html);
+      const heading = dom.window.document.querySelector('h1');
+      assert.equal(heading?.textContent, 'PUBLIC_EPISODE');
+      assert.ok(!heading?.classList.contains('sr-only'));
+      assert.equal(dom.window.document.querySelector('time')?.getAttribute('datetime'), '2026-11-01T00:00:00Z');
+      assert.equal(dom.window.document.querySelector('time')?.textContent, '2026.11.01');
+      assert.equal(dom.window.document.querySelector('main .page-container')?.dataset.spacing, 'viewer');
+      assert.equal(dom.window.document.querySelector('.page-description'), null);
+      dom.window.close();
     });
 
     await t.test('무료 가격 셸에도 이후 유료 전환을 복구할 구매 경로를 전달한다', async () => {
@@ -242,6 +258,57 @@ test('뷰어 SSR의 공개 캐시·메타 없는 진입 셸·장애 구분', { t
           dom.window.close();
         }
       }
+    });
+
+    await t.test('계정 영역은 페이지와 인증 상태에 관계없이 같은 폭·여백·제목 구조를 사용한다', async () => {
+      let reference;
+      for (const path of ['/my', '/my/purchases', '/my/settings', '/my/profile', '/my/password']) {
+        for (const token of ['', 'VALID_ACCOUNT', 'TEMP_ERROR']) {
+          const response = await fetch(`${siteUrl}${path}`, {
+            headers: token ? { Cookie: `access_token=${token}` } : {},
+          });
+          const dom = new JSDOM(await response.text());
+          try {
+            const container = dom.window.document.querySelector('main > .page-container');
+            assert.ok(container);
+            const layout = [container.className, container.dataset.width, container.dataset.spacing];
+            reference ??= layout;
+            assert.deepEqual(layout, reference);
+            assert.equal(container.querySelectorAll('h1').length, 1);
+            assert.ok(container.querySelector('.page-header .page-title'));
+            assert.equal(container.getAttribute('style'), null);
+          } finally { dom.window.close(); }
+        }
+      }
+    });
+
+    await t.test('인증 레이아웃은 제목·폼과 로그인 오류 슬롯을 보존한다', async () => {
+      for (const [path, title] of [['login?error=oauth_failed', '로그인'], ['signup', '회원가입'], ['verify-email', '이메일 인증']]) {
+        const response = await fetch(`${siteUrl}/auth/${path}`);
+        assert.equal(response.status, 200);
+        const dom = new JSDOM(await response.text());
+        try {
+          const panel = dom.window.document.querySelector('.auth-panel');
+          assert.equal(panel?.querySelector('h1')?.textContent, title);
+          assert.ok(panel?.querySelector('astro-island'));
+          if (title === '로그인') {
+            assert.ok(panel.textContent.includes('구글 로그인에 실패했어요.'));
+            assert.ok(panel.querySelector('h1').compareDocumentPosition(panel.firstElementChild) & dom.window.Node.DOCUMENT_POSITION_PRECEDING);
+          }
+        } finally { dom.window.close(); }
+      }
+    });
+
+    await t.test('커미션은 공통 제목의 actions 슬롯과 유의사항을 표시한다', async () => {
+      const response = await fetch(`${siteUrl}/commission`);
+      assert.equal(response.status, 200);
+      const dom = new JSDOM(await response.text());
+      try {
+        assert.equal(dom.window.document.querySelector('main .page-container')?.dataset.width, 'wide');
+        assert.equal(dom.window.document.querySelector('h1')?.id, 'commission-list-title');
+        assert.ok(dom.window.document.querySelector('.page-header-row')?.textContent.includes('현재 모든 커미션이 마감되었어요.'));
+        assert.ok(dom.window.document.querySelector('#commission-notes-title'));
+      } finally { dom.window.close(); }
     });
 
     await t.test('공유 메뉴 셸은 마운트 전 fallback만 닉네임으로 보정하고 HTML을 삽입하지 않는다', async () => {

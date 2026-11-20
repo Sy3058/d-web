@@ -1,8 +1,9 @@
 ---
+import PageContainer from '@/components/layout/PageContainer.astro';
 ---
 
 <footer class="border-t border-line">
-  <div class="max-w-[1140px] mx-auto px-6 py-8">
+  <PageContainer width="wide" spacing="none" class="py-footer-y">
     <p class="text-sm text-muted">&copy; {new Date().getFullYear()} 도군</p>
-  </div>
+  </PageContainer>
 </footer>

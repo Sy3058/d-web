@@ -1,0 +1,18 @@
+---
+import type { ComponentProps } from 'astro/types';
+import BaseLayout from './BaseLayout.astro';
+import PageContainer from '@/components/layout/PageContainer.astro';
+import PageHeader from '@/components/layout/PageHeader.astro';
+
+type Props = ComponentProps<typeof BaseLayout>;
+---
+
+<BaseLayout {...Astro.props}>
+  <PageContainer width="wide">
+    <div class="auth-panel">
+      <slot name="before-header" />
+      <PageHeader title={Astro.props.title} />
+      <slot />
+    </div>
+  </PageContainer>
+</BaseLayout>

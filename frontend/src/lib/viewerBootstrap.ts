@@ -13,6 +13,7 @@ export interface ViewerBootstrap {
   public_id: number;
   episode_title: string;
   episode_subtitle: string | null;
+  first_published_at: string | null;
   previous_episode: BootstrapEpisodeLink | null;
   next_episode: BootstrapEpisodeLink | null;
 }

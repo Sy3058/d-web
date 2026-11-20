@@ -1,0 +1,14 @@
+---
+import type { HTMLAttributes } from 'astro/types';
+
+interface Props extends HTMLAttributes<'div'> {
+  width?: 'reading' | 'wide' | 'compact';
+  spacing?: 'page' | 'none' | 'viewer';
+}
+
+const { width = 'reading', spacing = 'page', class: className, ...attributes } = Astro.props;
+---
+
+<div {...attributes} class:list={['page-container', className]} data-width={width} data-spacing={spacing}>
+  <slot />
+</div>

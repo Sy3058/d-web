@@ -2,6 +2,8 @@
 // ?page=/?tag=를 서버에서 읽어야 해서 SSR 강제(GUIDE_ASTRO 델타 4, M2 결정 3).
 export const prerender = false;
 import BaseLayout from '@/layouts/BaseLayout.astro';
+import PageContainer from '@/components/layout/PageContainer.astro';
+import PageHeader from '@/components/layout/PageHeader.astro';
 import TagFilterBar from '@/components/works/TagFilterBar.astro';
 import WorkCard from '@/components/works/WorkCard.astro';
 import Pagination from '@/components/works/Pagination.astro';
@@ -52,26 +54,16 @@ applyCatalogCache(Astro.response, { error: loadError });
   description="도군의 웹툰 작품과 연재 상태를 확인하세요."
   canonicalPath={Astro.url.pathname}
 >
-  <div class="mx-auto max-w-[1140px] px-5 py-6 sm:px-6">
-    <header class="max-w-[720px]">
-      <p class="text-label-md text-muted">WORKS</p>
-      <h1 class="mt-3 text-headline-lg text-ink sm:text-display-lg">작품</h1>
-      <p class="mt-5 text-body-lg text-ink">
-        도군의 웹툰 작품과 연재 상태를 확인해 주세요.
-      </p>
-    </header>
-
-    <section class="mt-16" aria-labelledby="work-list-title">
-      <h2 id="work-list-title" class="text-headline-md text-ink">작품 목록</h2>
+  <PageContainer width="wide">
+    <section aria-labelledby="work-list-title">
+      <PageHeader title="작품 목록" titleId="work-list-title" />
 
       {
         loadError ? (
-          <p class="mt-8 text-sm text-muted">일시적인 오류로 목록을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.</p>
+          <p class="text-sm text-muted">일시적인 오류로 목록을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.</p>
         ) : (
           <>
-            <div class="mt-6">
-              <TagFilterBar tags={tags} activeTag={tag} />
-            </div>
+            <TagFilterBar tags={tags} activeTag={tag} />
             {works.items.length === 0 ? (
               <p class="mt-8 text-center text-sm text-muted">
                 {tag ? '해당 태그의 작품이 없어요.' : '아직 등록된 작품이 없어요.'}
@@ -91,5 +83,5 @@ applyCatalogCache(Astro.response, { error: loadError });
         )
       }
     </section>
-  </div>
+  </PageContainer>
 </BaseLayout>

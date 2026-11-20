@@ -68,5 +68,6 @@ class ViewerBootstrap(BaseModel):
     public_id: int
     episode_title: str
     episode_subtitle: str | None
+    first_published_at: datetime | None
     previous_episode: ViewerEpisodeLink | None
     next_episode: ViewerEpisodeLink | None

@@ -54,6 +54,7 @@ async def get_viewer_bootstrap(
                 Episode.id,
                 Episode.title,
                 Episode.subtitle,
+                Episode.first_published_at,
                 previous.c.public_id.label("previous_public_id"),
                 previous.c.title.label("previous_title"),
                 following.c.public_id.label("next_public_id"),
@@ -102,6 +103,7 @@ async def get_viewer_bootstrap(
         public_id=public_id,
         episode_title=row.title,
         episode_subtitle=row.subtitle,
+        first_published_at=row.first_published_at,
         previous_episode=previous_episode,
         next_episode=next_episode,
     )

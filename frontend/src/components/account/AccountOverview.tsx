@@ -6,7 +6,7 @@ export default function AccountOverview({ user }: { user: User }) {
   const profileImage = safeProfileImageUrl(user.profile_image);
 
   return (
-    <div className="space-y-12">
+    <div className="space-y-section-gap">
       <section aria-labelledby="profile-heading">
         <h2 id="profile-heading" className="mb-5 border-b border-line pb-3 text-sm font-medium text-ink">프로필</h2>
         <div className="flex items-center gap-3 sm:gap-5">

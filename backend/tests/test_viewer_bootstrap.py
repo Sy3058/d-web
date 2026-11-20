@@ -58,6 +58,7 @@ def after_bootstrap_read(db_session, monkeypatch):
 async def test_public_metadata_allowlist_without_content_issuance(
     async_client, db_session, user, monkeypatch
 ):
+    first_published_at = datetime(2026, 8, 4, 3, 2, 1, tzinfo=UTC)
     work = await make_work(db_session, user, title="작품")
     episode = await make_episode(
         db_session,
@@ -67,6 +68,7 @@ async def test_public_metadata_allowlist_without_content_issuance(
         content=doc(para("무료"), PAYWALL, img()),
         image_keys=["works/w/episodes/e/page.webp"],
         price=800,
+        first_published_at=first_published_at,
     )
     purchase, _ = await make_purchase(db_session, user, episode)
     login(async_client, user)
@@ -76,7 +78,9 @@ async def test_public_metadata_allowlist_without_content_issuance(
     response = await async_client.get(url(work, episode))
 
     assert_no_store(response, 200)
-    assert response.json() == {
+    body = response.json()
+    assert datetime.fromisoformat(body.pop("first_published_at")) == first_published_at
+    assert body == {
         "work_id": str(work.id),
         "work_title": "작품",
         "episode_id": str(episode.id),
@@ -97,12 +101,14 @@ async def test_public_metadata_allowlist_without_content_issuance(
 async def test_hidden_metadata_requires_active_purchase(
     async_client, db_session, user, hidden, purchased
 ):
+    first_published_at = datetime(2026, 8, 5, 4, 3, 2, tzinfo=UTC)
     work = await make_work(db_session, user, is_published=hidden == "episode")
     episode = await make_episode(
         db_session,
         work,
         is_published=hidden == "work",
         content=doc(PAYWALL, para("유료")),
+        first_published_at=first_published_at,
     )
     await make_episode(db_session, work, sort_order=0, title="공개 이웃")
     if purchased:
@@ -113,6 +119,8 @@ async def test_hidden_metadata_requires_active_purchase(
     if purchased and hidden != "episode":
         assert response.json()["previous_episode"] is None
         assert response.json()["next_episode"] is None
+    if purchased:
+        assert datetime.fromisoformat(response.json()["first_published_at"]) == first_published_at
     if not purchased:
         assert set(response.json()) == {"detail"}
 

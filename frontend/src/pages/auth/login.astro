@@ -1,6 +1,6 @@
 ---
 export const prerender = false;
-import BaseLayout from '@/layouts/BaseLayout.astro';
+import AuthLayout from '@/layouts/AuthLayout.astro';
 import LoginForm from '@/components/auth/LoginForm';
 import GoogleButton from '@/components/auth/GoogleButton.astro';
 
@@ -13,26 +13,23 @@ const errorParam = Astro.url.searchParams.get('error');
 const oauthError = errorParam ? (ERROR_MESSAGES[errorParam] ?? null) : null;
 ---
 
-<BaseLayout title="로그인">
-  <div class="bg-canvas py-16 px-5">
-    <div class="w-full mx-auto sm:max-w-[400px] sm:rounded-control sm:border sm:border-line sm:bg-paper sm:px-8 sm:py-10">
-      {oauthError && (
-        <div class="rounded-control border border-line px-4 py-3 text-sm text-ink mb-6">
-          {oauthError}
-        </div>
-      )}
-      <h1 class="text-xl font-semibold tracking-tight text-ink mb-6">로그인</h1>
-      <LoginForm client:load />
-      <div class="my-6 flex items-center gap-3">
-        <div class="flex-1 border-t border-line"></div>
-        <span class="text-xs text-muted">또는</span>
-        <div class="flex-1 border-t border-line"></div>
+<AuthLayout title="로그인">
+  <Fragment slot="before-header">
+    {oauthError && (
+      <div class="rounded-control border border-line px-4 py-3 text-sm text-ink mb-6">
+        {oauthError}
       </div>
-      <GoogleButton />
-      <p class="mt-8 text-sm text-muted text-center">
-        계정이 없나요?{' '}
-        <a href="/auth/signup" class="text-ink underline underline-offset-4">회원가입</a>
-      </p>
-    </div>
+    )}
+  </Fragment>
+  <LoginForm client:load />
+  <div class="my-6 flex items-center gap-3">
+    <div class="flex-1 border-t border-line"></div>
+    <span class="text-xs text-muted">또는</span>
+    <div class="flex-1 border-t border-line"></div>
   </div>
-</BaseLayout>
+  <GoogleButton />
+  <p class="mt-8 text-sm text-muted text-center">
+    계정이 없나요?{' '}
+    <a href="/auth/signup" class="text-ink underline underline-offset-4">회원가입</a>
+  </p>
+</AuthLayout>

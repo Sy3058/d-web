@@ -13,6 +13,7 @@ const bootstrap = {
   public_id: 12345678,
   episode_title: '구매한 비공개 회차',
   episode_subtitle: '부제',
+  first_published_at: '2026-11-19T16:00:00Z',
   previous_episode: null,
   next_episode: { public_id: 23456789, title: '공개 다음 회차' },
 };
@@ -98,8 +99,13 @@ it('일반 구매자의 세션 복구와 bootstrap 인가 뒤에만 실제 Viewe
   expect(paths()).toEqual(['/auth/me', '/works/work-a/episodes/12345678/viewer-bootstrap']);
   expect(container.querySelector('img')).toBeNull();
   expect(container.textContent).not.toContain(bootstrap.work_title);
+  expect(container.querySelector('h1, time')).toBeNull();
 
   await act(async () => resolveBootstrap(response(200, bootstrap)));
+  expect(container.querySelector('h1')?.textContent).toBe(bootstrap.episode_title);
+  expect(container.querySelector('h1')?.classList.contains('sr-only')).toBe(false);
+  expect(container.querySelector('time')?.textContent).toBe('2026.11.20');
+  expect(container.querySelector('time')?.getAttribute('datetime')).toBe(bootstrap.first_published_at);
   expect(paths()).toEqual([
     '/auth/me', '/works/work-a/episodes/12345678/viewer-bootstrap',
     '/auth/me', '/episodes/episode-a/content', '/episodes/episode-a/progress',
@@ -113,6 +119,17 @@ it('일반 구매자의 세션 복구와 bootstrap 인가 뒤에만 실제 Viewe
   expect(nextLink?.getAttribute('href')).toBe('/works/work-a/23456789');
   expect(nextLink?.hasAttribute('data-astro-reload')).toBe(true);
   expect(fetchMock.mock.calls.every(([, init]) => init.credentials === 'include')).toBe(true);
+});
+
+it('공개일이 없는 인가된 회차도 제목과 본문을 표시하고 날짜는 생략한다', async () => {
+  fetchMock
+    .mockResolvedValueOnce(response(200, { id: 'reader' }))
+    .mockResolvedValueOnce(response(200, { ...bootstrap, first_published_at: null }));
+  loadAuthorizedContent();
+  await mount();
+  expect(container.querySelector('h1')?.textContent).toBe(bootstrap.episode_title);
+  expect(container.querySelector('time')).toBeNull();
+  expect(container.querySelector('img[src$="paid-full.webp"]')).not.toBeNull();
 });
 
 it('access 만료는 refresh 한 번과 me 재조회 뒤 bootstrap 및 full content로 연결한다', async () => {

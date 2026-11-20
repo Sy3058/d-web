@@ -2,6 +2,7 @@
 export const prerender = false;
 
 import BaseLayout from '@/layouts/BaseLayout.astro';
+import PageContainer from '@/components/layout/PageContainer.astro';
 import Button from '@/components/ui/Button.astro';
 import ArtistProfile from '@/components/landing/ArtistProfile.astro';
 import WorkCarousel from '@/components/works/WorkCarousel';
@@ -44,7 +45,7 @@ applyCatalogCache(Astro.response, {
   description="도군의 웹툰 작품과 커미션 소식을 만나보세요."
   canonicalPath={Astro.url.pathname}
 >
-  <div class="mx-auto max-w-[1140px] px-5 py-6 sm:px-6">
+  <PageContainer width="wide">
     <h1 class="sr-only">도군 작품과 커미션</h1>
     {
       worksError ? (
@@ -90,5 +91,5 @@ applyCatalogCache(Astro.response, {
         )
       }
     </section>
-  </div>
+  </PageContainer>
 </BaseLayout>

@@ -1,6 +1,6 @@
 ---
 export const prerender = false;
-import BaseLayout from '@/layouts/BaseLayout.astro';
+import PageLayout from '@/layouts/PageLayout.astro';
 import { getMeOnServer } from '@/lib/auth.server';
 import type { User } from '@/lib/auth';
 import AccountOverview from '@/components/account/AccountOverview';
@@ -20,20 +20,16 @@ try {
 }
 ---
 
-<BaseLayout title="계정">
-  <div class="max-w-[720px] mx-auto px-6 py-8">
-    <h1 class="text-2xl font-semibold tracking-tight text-ink mb-8">계정</h1>
-
-    {loadError ? (
-      <section class="rounded-control border border-line p-6">
-        <p class="text-sm text-muted">
-          일시적인 오류로 정보를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.
-        </p>
-      </section>
-    ) : user ? (
-      <AccountOverview user={user} />
-    ) : (
-      <AccountSessionRecovery page="overview" client:load />
-    )}
-  </div>
-</BaseLayout>
+<PageLayout title="계정">
+  {loadError ? (
+    <section class="rounded-control border border-line p-6">
+      <p class="text-sm text-muted">
+        일시적인 오류로 정보를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.
+      </p>
+    </section>
+  ) : user ? (
+    <AccountOverview user={user} />
+  ) : (
+    <AccountSessionRecovery page="overview" client:load />
+  )}
+</PageLayout>

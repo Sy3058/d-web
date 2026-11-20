@@ -1,0 +1,22 @@
+---
+import type { ComponentProps } from 'astro/types';
+import BaseLayout from './BaseLayout.astro';
+import PageContainer from '@/components/layout/PageContainer.astro';
+import PageHeader from '@/components/layout/PageHeader.astro';
+
+type Props = ComponentProps<typeof BaseLayout> & {
+  heading?: string;
+  width?: ComponentProps<typeof PageContainer>['width'];
+};
+
+const { heading = Astro.props.title, width = 'reading', ...baseProps } = Astro.props;
+---
+
+<BaseLayout {...baseProps}>
+  <PageContainer width={width}>
+    <slot name="header">
+      {heading && <PageHeader title={heading} />}
+    </slot>
+    <slot />
+  </PageContainer>
+</BaseLayout>

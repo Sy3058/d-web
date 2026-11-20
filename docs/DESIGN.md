@@ -146,6 +146,18 @@ The layout follows a **Fixed Grid** philosophy for desktop to control line lengt
 - **Whitespace:** Use "Stack" units to create clear separation. A `stack-lg` (64px) should be used between major sections to allow the layout to "breathe."
 - **Mobile:** Transition to a fluid single-column layout with 20px side margins. Horizontal padding should be generous to maintain the feeling of a premium margin.
 
+### 공통 페이지 레이아웃 (2026-11-20)
+
+페이지의 폭과 바깥 여백은 `frontend/src/styles/globals.css`의 의미 기반 토큰으로 관리한다. 일반 페이지의 좌우 여백은 모바일 20px·sm 이상 24px, 상하 여백은 32px·sm 이상 48px이며 제목 아래는 32px이다. 계정·구매 내역·설정·프로필·비밀번호 화면은 같은 규칙을 쓴다.
+
+- `--container-page-wide`: 1140px, 홈·작품·커미션과 전역 내비게이션의 폭.
+- `--container-page-reading`: 720px, 계정 영역·뷰어의 폭.
+- `--container-page-compact`: 512px, 결제 복귀 안내의 폭.
+- `--container-auth`: 400px, 데스크톱 인증 패널의 폭.
+- `--spacing-page-*`, `--spacing-title-gap`, `--spacing-section-gap*`: 페이지 여백·제목·섹션 간격. 기본 Tailwind 간격 단위를 재사용한다.
+
+`PageContainer`는 폭·여백 변형과 본문 슬롯, `PageHeader`는 제목·보조 내용·액션 슬롯을 제공한다. `PageLayout`과 `AuthLayout`은 기존 `BaseLayout`을 조합한다. 데이터 조회·인증·캐시 정책은 각 페이지에서 유지한다. 읽기 화면은 `viewer` 여백 변형으로 고정 컨트롤과 safe area 공간을 확보한다. 상세 사용법은 [공통 레이아웃 구현](MODULES/FE/Layout/IMPLEMENTATION_PAGE_LAYOUT.md)을 따른다.
+
 ## Elevation & Depth
 
 To maintain the minimalist and flat aesthetic requested, the design system eschews traditional shadows entirely. Depth is communicated through:
