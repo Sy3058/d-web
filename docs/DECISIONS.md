@@ -67,10 +67,11 @@
 
 ### Vite 버전: 8로 workspace 통일, Astro 7 migration 완료
 
-**현재 상태 (2026-11-19 보안 수정 반영)**
-- frontend는 `astro@^7.2.4`, `@astrojs/node@^11.1.4`, `@astrojs/react@^6.0.4`를 사용한다. Astro가 제공하는 Vite는 잠금 파일 기준 `8.2.6`이다.
+**현재 상태 (2026-11-23 보안 수정 준비)**
+- frontend는 `astro@^7.4.7`, `@astrojs/node@^11.1.4`, `@astrojs/react@^6.0.4`를 사용한다. Astro 요구 범위에 맞춰 frontend Vite는 잠금 파일 기준 `8.3.8`이다.
 - admin은 `vite@^8.2.6`, `@vitejs/plugin-react@^6.1.0`을 사용한다.
-- Astro 6 시기의 frontend `vite@^7` 직접 고정은 제거했다. `pnpm why`로 frontend와 admin의 Astro, Tailwind, TanStack Router, Vitest가 모두 `vite@8.2.6`을 해석함을 확인했다.
+- Astro 6 시기의 frontend `vite@^7` 직접 고정은 제거했다. 현재 frontend는 Vite `8.3.8`, admin은 Vite `8.2.6`으로 구분한다.
+- Astro 보안 권고 GHSA-r3h5-4585-7x3w는 Astro `7.4.7`에서 수정됐다. Astro가 사용하는 `@astrojs/internal-helpers@0.13.1`과 adapter가 별도로 사용하는 `@astrojs/internal-helpers@0.10.4`가 함께 잠겨 있다는 사실만으로 해당 취약점이 잔존한다고 판정하지 않는다. [공식 권고](https://github.com/withastro/astro/security/advisories/GHSA-r3h5-4585-7x3w)
 - 프로젝트에 `build.rollupOptions`가 없어 `build.rolldownOptions` 전환은 필요하지 않았다. `@tailwindcss/vite@4.3.0`도 Vite 8 peer 범위를 지원하고 양쪽 빌드를 통과해 유지한다.
 - Astro 7의 Rust 컴파일러, `compressHTML: 'jsx'` 기본값, `src/fetch.ts` 예약, Sätteri 기본 Markdown 처리기를 공식 migration 문서와 대조했다. 현재 소스에는 충돌하는 실험 플래그, `src/fetch.ts`, Markdown/MDX, 제거 API가 없다.
 - 인증과 상태는 FastAPI의 HttpOnly 쿠키로 관리하며 Astro 세션을 사용하지 않으므로 `session: false`로 Node adapter의 기본 파일시스템 세션을 끈다.
@@ -726,6 +727,12 @@ FE는 `tsconfig.json`, Admin은 `tsconfig.app.json`의 `compilerOptions.paths`�
 ---
 
 ## CI/CD 결정
+
+### 첫 스테이징 배포 설정 준비 (2026-11-23)
+
+로컬 Compose와 분리한 `deploy/compose.yml`을 사용한다. 외부 포트는 Caddy의 TCP 80/443뿐이며, backend는 비root로 실행하고 같은 이미지의 Alembic migration 성공을 API 기동 조건으로 둔다. 브라우저 API 주소는 frontend/admin 빌드에 주입하고 Astro 내부 API 주소는 런타임에 분리한다. secret 파일은 서버의 저장소 밖에 둔다.
+
+GHCR/CD 구현에 앞서 첫 수동 배포는 CI 성공을 확인한 release의 동일 SHA로 서버에서 세 이미지를 빌드하는 초기 절차를 준비한다. 이는 develop/작업 브랜치 배포를 허용하거나 release CI 성공 조건을 없애는 결정이 아니다. Compose는 SHA의 진위와 GitHub CI 성공을 자동 검증하지 않으므로 작업자가 확인한다. 이후 자동화는 기존 release CI 성공 → 이미지 발행 → VPS 배포 계획을 유지한다. 실제 공개 배포·자동 HTTPS·백업 복구는 미완료다. [실행 절차](../deploy/README.md), [구현·검증](MODULES/INFRA/DockerCompose/IMPLEMENTATION_STAGING_DEPLOYMENT.md).
 
 ### CI: GitHub Actions 도입 이력과 현재 상태 (2026-06-22, 2026-08-23 갱신)
 

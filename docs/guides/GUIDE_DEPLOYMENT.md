@@ -8,14 +8,16 @@
 | --- | --- |
 | 도메인 | Cloudflare 서비스 도메인 구매·Active 사용자 확인(실제 값은 로컬 기록) |
 | VPS | OVHcloud VPS-1 2027 싱가포르 구매 사용자 확인, 2 vCore·4GB·40GB·Ubuntu 26.04 견적 |
-| 공인 IP·SSH | 공인 IPv4는 2026-11-22 사용자 확인, 실제 값은 로컬 세션 기록에 보관. 기본 사용자·SSH 접속은 미검증 |
-| GitHub | 공개 저장소, default main, 원격 main만 존재. main protected, merge commit 비활성·squash 활성 |
-| 전환 작업 브랜치 | 2026-11-22 사용자 확인 후 최신 origin/main에서 common/chore/develop-release 생성. 기존 미커밋 변경 보존, 원격 추적 미설정 |
+| 공인 IP·SSH | Ubuntu 26.04 VPS에서 비root 작업 사용자의 SSH 키 로그인 성공, root·비밀번호 SSH 차단 완료(2026-11-23 사용자 보고). 실제 운영값은 공개하지 않음 |
+| GitHub | 기본 브랜치 develop은 2026-11-23 원격 조회 확인. PR #163의 required CI 성공과 develop squash merge 확인. 보호 규칙 세부는 직접 미검증 |
+| 전환 작업 브랜치 | 최신 origin/develop에서 승인받아 common/feat/staging-deployment 생성 |
 | 로컬 변경 | develop/release CI·PR 경로 검사·직접 push 차단 훅 준비 |
-| 원격 전환 | develop/release 생성·기본 브랜치·merge 설정·보호 규칙 변경 미수행 |
-| 배포 | 배포용 Compose/Caddy·이미지 발행·CD·DNS·HTTPS·실서버 검증 미수행 |
+| 원격 전환 | origin/develop·origin/release 존재와 기본 develop 확인. 배포 브랜치는 PR #163 병합 커밋 afbb889를 반영했다. release 일반 merge·보호 규칙 세부는 직접 미검증 |
+| 배포 | 배포용 Compose/Caddy와 환경 예시·Dockerfile 준비. 같은 release SHA로 서버 수동 빌드 초기 부트스트랩까지 준비했으며 GHCR/CD 자동화는 미구현 |
 
 서버 비밀번호·SSH 개인키·API secret을 채팅이나 저장소에 넣지 않는다. 서버 IP와 공개 도메인만으로 준비할 수 있는 범위를 먼저 진행한다.
+
+현재 배포 파일과 환경 준비·수동 첫 배포 순서는 [deploy 안내](../../deploy/README.md)를 따른다. 자동 배포 설계와 실제 적용 완료는 구분한다.
 
 이 저장소는 public이다. 문서와 설정 예시는 example.com·환경변수 이름을 사용하고, 실제 배포 주소·SSH 사용자 등 운영값은 공개 문서에 고정하지 않는다. 도메인·공인 IP 자체는 인증 비밀이 아니지만 버전 관리할 필요가 없는 운영값은 로컬 운영 기록이나 서버·CI 설정으로 관리한다. 비밀번호·개인키·DB 접속 자격증명·JWT/TOTP/결제 secret은 로컬 학습 기록에도 넣지 않고 GitHub Secrets 또는 접근 제한된 서버 환경 파일로 관리한다. gitignore는 이미 추적된 파일이나 과거 commit에서 정보를 제거하지 않으므로 commit 전 diff를 확인한다.
 
@@ -60,9 +62,9 @@ git switch -c be/feat/example origin/develop
 ## 서버와 공개 주소 준비
 
 1. 공인 IPv4는 사용자에게 확인했다. OVHcloud 제공 완료 안내에서 기본 사용자·키 등록 또는 초기 접속 절차를 확인한다. 서버 접속·프로비저닝·재시작은 현재 상태와 대상 확인 뒤 수행한다.
-2. 작업용 비root 사용자의 SSH 키 접속을 확인한 뒤 root·비밀번호 SSH를 차단한다. 방화벽은 TCP 22(관리자 IP), 80/443(공개 요청)을 허용하고 DB 5432·API 8000을 공인 인터페이스에 노출하지 않는다. Docker 포트 공개가 호스트 방화벽 규칙을 우회할 수 있으므로 Compose 포트와 방화벽을 함께 확인한다.
-3. Docker·Compose와 배포 디렉터리, 서버 전용 환경 설정을 준비한다. 기존 로컬 compose의 기본 DB 비밀번호와 localhost URL을 공개 서버에 재사용하지 않는다. backend 컨테이너 비root 실행도 준비한다.
-4. 아래 이름은 첫 테스트용 **제안**이며 아직 DNS를 생성하지 않았다. 확인한 서버 IPv4로 A 레코드를 만들고, IPv6 제공·라우팅을 검증하기 전에는 AAAA를 만들지 않는다.
+2. 작업용 비root 사용자의 SSH 키 접속 성공과 root·비밀번호 SSH 차단을 확인했다(2026-11-23 사용자 보고). UFW는 active이며 incoming deny·outgoing allow, TCP 22는 관리자 IP 제한, 80/443은 공개 상태다. 외부 포트 스캔과 root 로그인 거부의 직접 테스트는 아직 미검증이다. DB 5432·API 8000은 공인 인터페이스에 노출하지 않는다.
+3. Docker를 공식 apt로 설치하고 Compose 설치 및 `hello-world` 실행 성공을 확인했다. 서버 `~/d-web-deploy` 디렉터리 생성과 권한 700도 사용자 확인했다. 배포용 Compose/Caddy·환경 예시와 backend 비root Dockerfile을 준비했지만 레지스트리 로그인과 GHCR 자동화는 미구현이다.
+4. Cloudflare의 `staging`, `staging-admin`, `staging-api` A 레코드가 VPS와 일치함을 2026-11-22 실제 조회로 확인했다. 실제 도메인·IP·사용자 값은 공개하지 않는다. AAAA 레코드는 IPv6 제공·라우팅 미확인으로 등록하지 않았다.
 
 | 서비스 | 공개 주소 제안 |
 | --- | --- |
@@ -92,7 +94,7 @@ git switch -c be/feat/example origin/develop
 
 - [ ] develop에서 작업 브랜치 생성 → develop PR CI 통과
 - [ ] 같은 저장소 develop → release PR CI 통과, 작업 브랜치·포크 develop → release 거부
-- [ ] GitHub 기본 브랜치·merge commit·두 통합 브랜치 보호 규칙 실제 반영
+- [ ] GitHub 기본 브랜치·merge commit·두 통합 브랜치 보호 규칙 실제 반영(2026-11-23 원격 API 미확인)
 - [ ] release의 검증된 SHA로만 배포, 실제 서버의 실행 버전 확인
 - [ ] DB 마이그레이션·healthcheck·백업 복구 확인
 - [ ] 세 공개 주소의 HTTPS와 쿠키 로그인 확인

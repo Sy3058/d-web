@@ -11,7 +11,8 @@ COPY frontend/ ./frontend/
 COPY admin/ ./admin/
 
 RUN pnpm install --frozen-lockfile
-RUN pnpm --filter frontend build
+ARG PUBLIC_API_URL=http://localhost:8000
+RUN PUBLIC_API_URL=$PUBLIC_API_URL pnpm --filter frontend build
 
 FROM node:24.22.3-alpine
 
