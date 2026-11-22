@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
 import { existsSync } from 'node:fs';
+import { mkdir, rmdir, stat, unlink, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -125,6 +127,71 @@ test('뷰어 SSR의 공개 캐시·메타 없는 진입 셸·장애 구분', { t
       assert.ok(!html.includes('PRIVATE_METADATA_MUST_NOT_LEAK'));
       return { response, html };
     }
+
+    await t.test('/_image는 대소문자만 다른 정적 디렉터리로 벗어나지 않는다', async () => {
+      const clientDir = fileURLToPath(new URL('../dist/client/', import.meta.url));
+      const privateDir = fileURLToPath(new URL('../dist/CLIENT/', import.meta.url));
+      const filename = `${randomUUID()}.svg`;
+      const publicPath = fileURLToPath(new URL(`../dist/client/${filename}`, import.meta.url));
+      const privatePath = fileURLToPath(new URL(`../dist/CLIENT/${filename}`, import.meta.url));
+      const publicSentinel = `PUBLIC_IMAGE_${randomUUID()}`;
+      const privateSentinel = `PRIVATE_IMAGE_${randomUUID()}`;
+      let createdPrivateDir = false;
+      let wrotePublicFile = false;
+      let wrotePrivateFile = false;
+
+      try {
+        try {
+          await mkdir(privateDir);
+          createdPrivateDir = true;
+        } catch (error) {
+          if (error.code !== 'EEXIST') throw error;
+        }
+
+        const [clientIdentity, privateIdentity] = await Promise.all([stat(clientDir), stat(privateDir)]);
+        assert.notDeepEqual(
+          [clientIdentity.dev, clientIdentity.ino],
+          [privateIdentity.dev, privateIdentity.ino],
+          '이 회귀 테스트는 대소문자를 구분하는 Linux 파일시스템이 필요합니다.',
+        );
+
+        await writeFile(
+          publicPath,
+          `<svg xmlns="http://www.w3.org/2000/svg"><text>${publicSentinel}</text></svg>`,
+          { flag: 'wx' },
+        );
+        wrotePublicFile = true;
+        await writeFile(
+          privatePath,
+          `<svg xmlns="http://www.w3.org/2000/svg"><text>${privateSentinel}</text></svg>`,
+          { flag: 'wx' },
+        );
+        wrotePrivateFile = true;
+
+        // 공개 정적 이미지는 정상 제공돼야 한다. 이 앱은 Sharp를 직접 설치하지
+        // 않으므로 최적화 성공 여부와 별개로 파일 경계가 처리 전에 거부되는지 검사한다.
+        const publicResponse = await fetch(`${siteUrl}/${filename}`);
+        const publicBody = await publicResponse.text();
+        assert.equal(publicResponse.status, 200, `정상 이미지 응답 실패: ${publicBody}\n${output}`);
+        assert.ok(publicBody.includes(publicSentinel));
+
+        const traversalQuery = new URLSearchParams({ href: `/../CLIENT/${filename}`, w: '32', f: 'svg' });
+        const traversalResponse = await fetch(`${siteUrl}/_image?${traversalQuery}`);
+        const traversalBody = await traversalResponse.text();
+        assert.equal(traversalResponse.status, 400, `이미지 파일 경계에서 거부되지 않았습니다: ${output}`);
+        assert.ok(!traversalBody.includes(privateSentinel));
+      } finally {
+        try {
+          if (wrotePublicFile) await unlink(publicPath);
+        } finally {
+          try {
+            if (wrotePrivateFile) await unlink(privatePath);
+          } finally {
+            if (createdPrivateDir) await rmdir(privateDir);
+          }
+        }
+      }
+    });
 
     await t.test('공개 회차는 기존 SSR 메타와 60초 공유 캐시를 유지한다', async () => {
       const { response, html } = await read(0);
