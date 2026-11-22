@@ -45,10 +45,10 @@
 
 ## Git 작업
 
-- 브랜치를 임의로 만들거나 바꾸지 않는다. 새 작업 브랜치는 사용자의 확인을 받고 항상 최신 main에서 분기한다.
+- 브랜치를 임의로 만들거나 바꾸지 않는다. 새 작업 브랜치는 사용자의 확인을 받고 항상 최신 `origin/develop`에서 분기하며 PR 대상도 `develop`으로 한다. `develop` 최초 생성 전 전환 작업만 최신 `origin/main`을 기준으로 한다.
 - 커밋 전에 diff와 메시지 초안을 보여주고 사용자의 명시적 승인을 받는다. push와 tag는 각각 별도 승인을 받는다.
 - 커밋 메시지는 한 줄 `[PREFIX] type: 제목` 형식을 기본으로 하고 AI 생성 문구나 공동 작성자 표기를 넣지 않는다.
-- main 직접 push는 금지된다. `.githooks`의 보호 규칙을 유지한다.
+- `develop`·`release`·기존 `main` 직접 push는 금지된다. 작업 PR은 `develop`에 squash merge하고, 같은 저장소의 `develop → release` 승격 PR은 일반 merge commit으로 병합한다. 배포 대상은 `release`뿐이며 `.githooks`의 보호 규칙을 유지한다.
 
 ## Codex workflows
 

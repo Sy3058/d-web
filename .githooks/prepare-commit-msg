@@ -4,10 +4,17 @@
 
 branch=$(git branch --show-current)
 
-# Allow detached HEAD, merge, rebase commits
-if [ -z "$branch" ] || [ "$branch" = "main" ]; then
+# Allow detached HEAD and commits made while an integration branch is checked out.
+# Direct pushes to integration branches are independently blocked by pre-push.
+if [ -z "$branch" ]; then
   exit 0
 fi
+
+case "$branch" in
+  main|develop|release)
+    exit 0
+    ;;
+esac
 
 # Branch name pattern:
 #   {be|fe|admin}/{feat|fix|chore|hotfix}/{desc}

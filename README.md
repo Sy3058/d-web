@@ -77,3 +77,9 @@ pnpm --filter admin build
 ```
 
 전체 기능 목록은 [PRD](docs/PRD.md), 현재 완료 여부는 [마일스톤](docs/milestones/README.md)에서 확인할 수 있습니다.
+
+## 개발과 배포 흐름
+
+작업 브랜치는 최신 `origin/develop`에서 만들고 develop으로 PR해 squash merge합니다. 배포할 때 같은 저장소의 develop에서 release로 PR을 열고 일반 merge commit으로 승격합니다. 배포 대상은 release뿐입니다.
+
+현재는 전환 준비 단계로 GitHub 기본 브랜치가 main이며 develop/release 생성과 자동 배포는 아직 수행하지 않았습니다. 기존 main은 이력 보존용으로 남깁니다. 최초 전환, 서버 초기화, DNS·HTTPS, 배포 준비 상태는 [배포 가이드](docs/guides/GUIDE_DEPLOYMENT.md)를 확인하세요.
