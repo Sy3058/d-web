@@ -11,7 +11,8 @@ COPY admin/ ./admin/
 COPY frontend/ ./frontend/
 
 RUN pnpm install --frozen-lockfile
-RUN pnpm --filter admin build
+ARG VITE_API_URL=http://localhost:8000
+RUN VITE_API_URL=$VITE_API_URL pnpm --filter admin build
 
 FROM nginx:alpine
 

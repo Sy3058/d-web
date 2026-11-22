@@ -52,11 +52,12 @@ M4 (커뮤니티 - 후원 제외)
 ### 인프라
 - [x] Cloudflare 서비스 도메인 구매·Active 확인 (2026-11-21 사용자 보고, 실제 값은 로컬 기록)
 - [x] OVHcloud 싱가포르 VPS 구매 (2026-11-22 사용자 보고, VPS-1 2027·2 vCore·4GB·40GB, 구매 직전 견적 무약정 월 USD 5.35 세전)
-- [ ] DNS A/AAAA 연결 (공인 IPv4는 2026-11-22 사용자 확인, DNS는 미설정. IPv6는 실제 서비스 제공 확인 뒤 등록)
-- [ ] VPS 초기화 + SSH 키 + 방화벽 (22/80/443만 개방). SSH·제공 완료·배포는 구매와 별도 미검증
+- [x] DNS A 연결 (2026-11-22 실제 조회로 `staging`·`staging-admin`·`staging-api`가 VPS와 일치 확인. 실제 값은 공개하지 않음)
+- IPv6는 선택 사항이며 제공·라우팅을 검증하기 전에는 AAAA를 등록하지 않는다.
+- [ ] VPS 초기화 + SSH 키 + 방화벽 (비root 키 로그인·root/비밀번호 SSH 차단과 UFW 정책은 2026-11-23 사용자 보고로 확인. 외부 포트 스캔·root 로그인 거부 직접 테스트는 미검증)
 - [x] Docker Compose 구성 (FastAPI + PostgreSQL + Caddy) (C1, 로컬 검증 완료)
-- [ ] Caddy 리버스 프록시 + 자동 HTTPS 동작 확인 (로컬 라우팅은 C2 완료, 공개 배포·자동 HTTPS는 D4에서 후속)
-- 공개 배포 전 Astro 이미지 경로 보안 수정: 코드·잠금을 `astro@7.4.7`로 수정하고 회귀 검증 완료, release 반영·실제 배포는 별도다. [구현·검증 문서](../MODULES/INFRA/Security/IMPLEMENTATION_DEPENDENCY_SECURITY_UPDATES.md)
+- [ ] Caddy 리버스 프록시 + 자동 HTTPS 동작 확인 (로컬 라우팅은 C2 완료, 공개 배포·HTTPS는 미검증)
+- 공개 배포 전 Astro 이미지 경로 보안 수정: PR #163으로 `astro@7.4.7` 코드·잠금과 회귀 검증이 develop에 반영됐다. release 반영·실제 배포는 별도다. [구현·검증 문서](../MODULES/INFRA/Security/IMPLEMENTATION_DEPENDENCY_SECURITY_UPDATES.md)
 - [ ] Cloudflare R2 버킷 생성 + 액세스 키 + 커스텀 도메인 연결 (버킷 `dweb`+Object R/W 키 완료 2026-07-10, 실버킷 스모크 검증. **커스텀 도메인만 미연결** - 서빙 시점(M2~M3)까지 미룰 수 있음)
   - ⚠️ **커스텀 도메인은 `dweb`에 붙이지 말 것** (2026-07-15 결정). R2의 공개 설정은 버킷 단위라 `dweb`을 공개하면 같은 버킷의 미공개·유료 원고까지 서명 없이 받아진다. 표지 서빙은 **표지 전용 공개 버킷**을 새로 만들어 거기에 도메인을 붙인다 (DECISIONS "표지 서빙"). 원고는 비공개 유지 + presigned URL(M3).
 - [ ] PostgreSQL **일 1회 풀 덤프 → R2 30일 보관** 스크립트 + cron 등록 (Q18)
@@ -83,8 +84,8 @@ M4 (커뮤니티 - 후원 제외)
 
 ### CI/CD
 - [x] GitHub Actions: backend, frontend, admin lint/test/build job 구현 + PR #123 세 job 실통과 확인
-- [ ] GitHub 기본 브랜치 develop·배포 브랜치 release 전환 (로컬 CI·훅·규칙 준비, 원격 브랜치 생성·설정은 미수행)
-- [ ] release 승격 뒤 CI 성공 시 스테이징 자동 배포 (SHA별 이미지 pull → migration → compose up, CD 미구현). [배포 가이드](../guides/GUIDE_DEPLOYMENT.md)
+- [ ] GitHub 기본 브랜치 develop·배포 브랜치 release 전환 (2026-11-23 기본 develop·원격 두 브랜치 존재와 PR #163의 develop squash merge 확인. release 일반 merge·보호 규칙 세부는 미검증)
+- [ ] release 승격 뒤 CI 성공 시 스테이징 자동 배포 (같은 release SHA 수동 빌드 초기 부트스트랩과 deploy 파일은 준비, 레지스트리·CD 자동화는 미구현). [배포 가이드](../guides/GUIDE_DEPLOYMENT.md)
 - [ ] PR 템플릿/이슈 템플릿 동작 확인
 
 ---

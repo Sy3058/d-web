@@ -728,6 +728,12 @@ FE는 `tsconfig.json`, Admin은 `tsconfig.app.json`의 `compilerOptions.paths`�
 
 ## CI/CD 결정
 
+### 첫 스테이징 배포 설정 준비 (2026-11-23)
+
+로컬 Compose와 분리한 `deploy/compose.yml`을 사용한다. 외부 포트는 Caddy의 TCP 80/443뿐이며, backend는 비root로 실행하고 같은 이미지의 Alembic migration 성공을 API 기동 조건으로 둔다. 브라우저 API 주소는 frontend/admin 빌드에 주입하고 Astro 내부 API 주소는 런타임에 분리한다. secret 파일은 서버의 저장소 밖에 둔다.
+
+GHCR/CD 구현에 앞서 첫 수동 배포는 CI 성공을 확인한 release의 동일 SHA로 서버에서 세 이미지를 빌드하는 초기 절차를 준비한다. 이는 develop/작업 브랜치 배포를 허용하거나 release CI 성공 조건을 없애는 결정이 아니다. Compose는 SHA의 진위와 GitHub CI 성공을 자동 검증하지 않으므로 작업자가 확인한다. 이후 자동화는 기존 release CI 성공 → 이미지 발행 → VPS 배포 계획을 유지한다. 실제 공개 배포·자동 HTTPS·백업 복구는 미완료다. [실행 절차](../deploy/README.md), [구현·검증](MODULES/INFRA/DockerCompose/IMPLEMENTATION_STAGING_DEPLOYMENT.md).
+
 ### CI: GitHub Actions 도입 이력과 현재 상태 (2026-06-22, 2026-08-23 갱신)
 
 **결정: M0 F1을 백엔드 CI부터 구현한다. PR(→main)·main 푸시 시 ruff + format + pytest를 GitHub Actions로 돌린다. CD/배포(F2~F3)와 FE/admin job은 후속.**

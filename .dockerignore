@@ -1,6 +1,8 @@
 **/node_modules
 **/.git
 **/.env
+**/.env.*
+**/*.env
 **/dist
 **/__pycache__
 **/.pytest_cache

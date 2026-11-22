@@ -131,6 +131,9 @@ docs/MISTAKES.md 참고해서 FastAPI 라우터 작성해줘
 
 ## Vite / Astro
 
+- **같은 lockfile이어도 pnpm 증분 설치의 hidden-hoist 링크는 깨끗한 설치와 다를 수 있다** (2026-11-23 Astro 보안 수정 반영)
+  -> CI·깨끗한 worktree·Docker는 통과했지만 기존 설치에서만 zodResolver가 Zod 4.6 타입, 앱 schema가 4.4 타입을 읽어 검사에 실패했다. 실제 `.pnpm/node_modules/zod` 링크가 깨끗한 설치와 달랐다. 타입 캐스팅·검증 완화·임의 override 전에 각 소비자의 실제 module resolution을 비교한다. 기존 node_modules를 복구 가능하게 보존하고 frozen lockfile로 새로 설치해 정상 링크를 구성한 뒤 전체 게이트를 확인한다. 이미 실행 중인 개발 서버는 이전 패키지를 계속 물 수 있어 함께 재시작·HTTP 확인한다.
+
 - **새 컴포넌트 추가 후 production 검증만으로 실행 중인 dev의 정상 상태를 판단하지 않는다** (2026-11-20 공통 레이아웃)
   -> 실제 파일·import 경로가 정상이고 build·production SSR이 통과해도, 기존 dev 홈에는 `FailedToLoadModuleSSR`이 남았다. `.astro/dev.log`에 HMR route 갱신 실패가 있었고 다른 페이지는 200이었다. 해당 개발 서버만 정상 종료·재시작하여 디스크 캐시 삭제나 코드 변경 없이 복구했다. 공통 import 변경 후에는 실제 dev 홈을 포함한 적용 경로의 응답과 오류 셸 부재를 확인한다.
 

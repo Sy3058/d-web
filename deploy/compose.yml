@@ -1,0 +1,165 @@
+name: dweb-staging
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-api: &api-common
+  image: ${IMAGE_PREFIX:-dweb-staging}/api:${RELEASE_SHA:?set RELEASE_SHA}
+  pull_policy: never
+  env_file:
+    - ${BACKEND_ENV_FILE:?set BACKEND_ENV_FILE to an absolute path}
+  environment:
+    ENV: production
+    DEBUG: "false"
+    DATABASE_URL: postgresql+asyncpg://dweb:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/dweb
+    APP_BASE_URL: https://${APP_HOST:?set APP_HOST}
+    ADMIN_BASE_URL: https://${ADMIN_HOST:?set ADMIN_HOST}
+    API_BASE_URL: https://${API_HOST:?set API_HOST}
+    PAYMENT_ENVIRONMENT: test
+    PAYMENTS_ACCEPT_NEW: ${PAYMENTS_ACCEPT_NEW:-false}
+  logging: *default-logging
+
+services:
+  postgres:
+    image: postgres:16.16-alpine
+    environment:
+      POSTGRES_USER: dweb
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: dweb
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dweb -d dweb"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+    logging: *default-logging
+
+  migrate:
+    <<: *api-common
+    command: ["/app/.venv/bin/alembic", "upgrade", "head"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    <<: *api-common
+    build:
+      context: ../backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import socket, urllib.request; socket.setdefaulttimeout(3); urllib.request.urlopen('http://localhost:8000/')",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
+  frontend:
+    image: ${IMAGE_PREFIX:-dweb-staging}/frontend:${RELEASE_SHA:?set RELEASE_SHA}
+    pull_policy: never
+    build:
+      context: ..
+      dockerfile: frontend/Dockerfile
+      args:
+        PUBLIC_API_URL: https://${API_HOST:?set API_HOST}
+    environment:
+      API_INTERNAL_URL: http://api:8000
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:4321/favicon.svg',{signal:AbortSignal.timeout(3000)}).then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+    logging: *default-logging
+
+  admin:
+    image: ${IMAGE_PREFIX:-dweb-staging}/admin:${RELEASE_SHA:?set RELEASE_SHA}
+    pull_policy: never
+    build:
+      context: ..
+      dockerfile: admin/Dockerfile
+      args:
+        VITE_API_URL: https://${API_HOST:?set API_HOST}
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -T 3 --spider http://127.0.0.1/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    logging: *default-logging
+
+  caddy:
+    image: caddy:2-alpine
+    environment:
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL}
+      APP_HOST: ${APP_HOST:?set APP_HOST}
+      ADMIN_HOST: ${ADMIN_HOST:?set ADMIN_HOST}
+      API_HOST: ${API_HOST:?set API_HOST}
+    ports:
+      - target: 80
+        published: "80"
+        protocol: tcp
+      - target: 443
+        published: "443"
+        protocol: tcp
+    volumes:
+      - type: bind
+        source: ./Caddyfile
+        target: /etc/caddy/Caddyfile
+        read_only: true
+        bind:
+          create_host_path: false
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      frontend:
+        condition: service_healthy
+      admin:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    healthcheck:
+      # HTTPS 리다이렉트나 인증서 발급과 독립적으로 컨테이너 내부에서만 검사한다.
+      test: ["CMD-SHELL", "wget -q -T 3 -O /dev/null http://127.0.0.1:2019/config/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+    logging: *default-logging
+
+volumes:
+  postgres_data:
+  caddy_data:
+  caddy_config:

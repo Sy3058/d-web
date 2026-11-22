@@ -9,9 +9,15 @@ ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev
 
+RUN groupadd --system app && useradd --system --gid app --no-create-home app
+
+COPY alembic.ini ./
+COPY migrations/ ./migrations/
 COPY src/ ./src/
 
 EXPOSE 8000
+
+USER app
 
 # --proxy-headers + --forwarded-allow-ips: Caddy 뒤에서 X-Forwarded-For를 신뢰해
 # request.client.host를 실제 클라이언트 IP로 만든다(rate limit 키 정확화, I2 후속).
@@ -19,4 +25,4 @@ EXPOSE 8000
 # 전 요청이 Caddy IP 1개로 묶임 = 전역 1키 self-DoS.
 # docker 네트워크는 Caddy 컨테이너 IP가 동적이라 '*'로 두고, 위조 방지는 Caddy의
 # X-Forwarded-For 덮어쓰기(Caddyfile)가 담당. 직접 경로(127.0.0.1:8000)는 로컬 전용.
-CMD ["uv", "run", "uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips", "*"]
+CMD ["/app/.venv/bin/uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips", "*"]

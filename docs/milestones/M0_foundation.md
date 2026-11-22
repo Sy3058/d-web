@@ -85,6 +85,7 @@
   - `lib/validation.ts`: `z.string().email(msg)` → zod v4 권장형 `z.email(msg)`로 교체 (M1 인증 폼 작업 시)
   - `lib/api.ts`: 에러 바디를 raw text가 아닌 FastAPI `{"detail": ...}` JSON 파싱 (에러 UI 붙일 때)
   - `frontend/.env.example` 추가 - 브라우저 `PUBLIC_API_URL`과 SSR `API_INTERNAL_URL` 분리 문서화
+  - Astro 의존성 취약점은 공개 배포 전에 점검·해결 필요
 
 ### B7. Vite React SPA 관리자 ✅
 - 선행: 없음
@@ -143,9 +144,9 @@
 
 ---
 
-## 그룹 D. VPS 배포 기반 (구매 완료, 공개 배포 미검증)
+## 그룹 D. VPS 배포 기반 (서버 기반 준비, 공개 배포 미검증)
 
-> 2026-11-22 현재 Cloudflare 도메인과 OVHcloud 싱가포르 VPS 구매는 사용자 보고로 확인했다. 기존 Hetzner 계획은 대체됐다. 서버 제공·접속·배포는 아직 확인하지 않았으며 D1~D4와 운영 자동화는 후속이다. 구매 완료만으로 스테이징 HTTPS 또는 M0 완료를 판정하지 않는다.
+> 2026-11-23 기준 비root SSH 키 로그인·root/비밀번호 SSH 차단·UFW 정책·Docker/Compose 설치와 배포 디렉터리 준비를 사용자 보고로 확인했다. 2026-11-22 실제 조회로 세 staging A 레코드와 VPS 일치를 확인했다. 공개 배포·HTTPS·외부 포트 스캔·root 로그인 거부 직접 테스트는 미검증이며, 실제 도메인·IP·사용자 값은 공개하지 않는다.
 
 > **⚠️ VPS 배포 전 필수 보안 처리 (C1/C2 compose 재사용 시)**
 > 현재 `compose.yml`은 로컬 전용으로 안전하게 설정돼 있으나(포트 127.0.0.1 바인딩),
@@ -156,34 +157,33 @@
 >    외부 접근은 Caddy(80/443)로만. 로컬은 `127.0.0.1` 바인딩으로 이미 처리됨.
 > 2. **POSTGRES_PASSWORD 강한 값 필수**: 현재 `${POSTGRES_PASSWORD:-postgres}` 기본값 의존.
 >    프로덕션은 `.env`에 강한 랜덤 비밀번호 명시, 기본값 fallback에 의존 금지.
-> 3. **컨테이너 비root 실행**: `backend/Dockerfile`에 `USER` 지시어 없어 root로 uvicorn 실행 중.
->    결제/JWT 다루는 API에 RCE 발생 시 컨테이너 root 탈취. 비root 사용자 추가 후 `USER appuser`.
+> 3. **컨테이너 비root 실행**: 배포용 `backend/Dockerfile`은 비root `app` 사용자 실행을 준비했다. 로컬 compose와 운영 배포 설정은 별도로 검증한다.
 >
 > 추가 권장(Nit, 여유 시): admin nginx 보안 헤더(X-Frame-Options 등)는 D4 프로덕션 Caddy에서 일괄 주입 검토.
 
 ### D1. VPS 보안 기본
 - 선행: A2
-- 시작 조건: OVHcloud 제공 완료·공인 IP·초기 접속 방법 확인. SSH 공개키를 등록하고 비root 작업 사용자의 접속을 확인한 뒤 비밀번호·root SSH를 차단한다.
-- 산출물: 방화벽 22/80/443만 개방, SSH 키 only(비번 차단), 비root 작업 사용자
-- DoD: 외부에서 다른 포트 차단 확인, root SSH 거부 확인
+- 시작 조건: OVHcloud 제공 완료·공인 IP·초기 접속 방법 확인. 충족.
+- 산출물: 비root 작업 사용자 키 로그인, root·비밀번호 SSH 차단, UFW active·incoming deny·outgoing allow, 22/tcp 관리자 IP 제한 및 80/443 공개 확인(2026-11-23 사용자 보고)
+- DoD: 외부에서 다른 포트 차단 확인, root SSH 거부 확인. 직접 테스트 미검증으로 미완료 유지
 - 결정 필요: fail2ban 설치 여부
 
 ### D2. DNS A 레코드
 - 선행: A1, A2
-- 산출물: 서비스 도메인 + 관리자 도메인 → VPS IP
-- DoD: `dig` 결과 정상, 전파 확인
+- 산출물: `staging`·`staging-admin`·`staging-api` A 레코드 → VPS IP
+- DoD: 2026-11-22 실제 조회로 A 레코드와 VPS 일치 확인. AAAA는 미등록
 - 결정 필요: Cloudflare 프록시 사용 여부 (Caddy 자체 HTTPS와 충돌 주의 - Full(Strict) 모드면 OK)
 
 ### D3. VPS Docker 환경
 - 선행: D1
-- 산출물: Docker, Docker Compose, 컨테이너 레지스트리 로그인
-- DoD: `docker pull` 동작
+- 산출물: Docker 공식 apt 설치, Compose 설치, `hello-world` 실행, 배포 디렉터리 권한 700 확인. 컨테이너 레지스트리 로그인은 미완료
+- DoD: Docker/Compose 설치와 `hello-world` 성공 확인. 레지스트리 pull은 미검증
 - 결정 필요: 레지스트리 (GHCR vs Docker Hub)
 
 ### D4. Caddy + Let's Encrypt 검증
 - 선행: D2, D3, C1, C2
 - 산출물: 스테이징 도메인 HTTPS 정상 응답
-- DoD: 브라우저 접속 시 유효 인증서 (만료 30일 이상)
+- DoD: 공개 배포·HTTPS·브라우저 인증서 직접 확인 미검증
 
 ### D5. R2 커스텀 도메인 연결
 - 선행: A3, A1
@@ -224,13 +224,13 @@
 
 ### F2. build + push 워크플로우
 - 선행: F1, D3
-- 산출물: release 승격 커밋의 CI 성공 뒤 BE/FE/관리자 이미지를 같은 SHA로 빌드하고 레지스트리에 푸시. develop·작업 PR·main에서는 배포 이미지를 발행하지 않는다.
+- 산출물: release 승격 커밋의 CI 성공 뒤 BE/FE/관리자 이미지를 같은 SHA로 빌드하고 레지스트리에 푸시. 현재는 같은 release SHA 수동 빌드 초기 부트스트랩을 준비했으며 레지스트리·자동 발행은 미구현.
 - DoD: release SHA와 레지스트리 이미지 식별자가 일치하고 실패한 CI에서는 발행하지 않는다.
 - 2026-11-22 브랜치 전환: 로컬 CI는 develop/release와 최초 전환용 main을 검사하고 release PR은 같은 저장소 develop만 받는다. 원격 브랜치·기본 브랜치·merge 설정·보호 규칙과 실제 Actions 결과는 후속 확인이다. 이미지 발행·CD는 아직 미구현이다.
 
 ### F3. 스테이징 자동 배포
 - 선행: F2, D4
-- 산출물: release의 검증된 SHA별 이미지로 VPS에 배포. DB 백업·마이그레이션·healthcheck·이전 이미지 복구 절차를 포함한다. 구체적인 배포 파일·workflow·서버 설정은 미구현이며 [배포 가이드](../guides/GUIDE_DEPLOYMENT.md)를 따른다.
+- 산출물: release의 검증된 SHA별 이미지로 VPS에 배포. deploy Compose/Caddy·환경 예시·migrate 포함 Dockerfile은 준비했으나 레지스트리·CD 자동화·공개 HTTPS는 미구현이다. [배포 가이드](../guides/GUIDE_DEPLOYMENT.md)를 따른다.
 - DoD: develop → release 일반 merge → 해당 release 커밋 CI 성공 → 스테이징 변경 반영. 배포 실패 시 원인과 복구 결과 확인
 - 결정 필요: 무중단 배포 (rolling vs 짧은 down 허용)
 
