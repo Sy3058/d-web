@@ -50,10 +50,12 @@ M4 (커뮤니티 - 후원 제외)
 > **DoD**: 로컬에서 `docker compose up`으로 FastAPI + Postgres가 뜨고, 푸시 시 CI가 lint/test를 돌리며, 스테이징 도메인이 HTTPS로 응답.
 
 ### 인프라
-- [ ] 서비스 도메인 등록 + DNS A/AAAA 레코드 (Cloudflare)
-- [ ] Hetzner VPS 초기화 + SSH 키 + 방화벽 (22/80/443만 개방)
+- [x] Cloudflare 서비스 도메인 구매·Active 확인 (2026-11-21 사용자 보고, 실제 값은 로컬 기록)
+- [x] OVHcloud 싱가포르 VPS 구매 (2026-11-22 사용자 보고, VPS-1 2027·2 vCore·4GB·40GB, 구매 직전 견적 무약정 월 USD 5.35 세전)
+- [ ] DNS A/AAAA 연결 (공인 IPv4는 2026-11-22 사용자 확인, DNS는 미설정. IPv6는 실제 서비스 제공 확인 뒤 등록)
+- [ ] VPS 초기화 + SSH 키 + 방화벽 (22/80/443만 개방). SSH·제공 완료·배포는 구매와 별도 미검증
 - [x] Docker Compose 구성 (FastAPI + PostgreSQL + Caddy) (C1, 로컬 검증 완료)
-- [ ] Caddy 리버스 프록시 + 자동 HTTPS 동작 확인 (로컬 라우팅은 C2 완료, 자동 HTTPS는 D4에서 / 그룹 D 보류)
+- [ ] Caddy 리버스 프록시 + 자동 HTTPS 동작 확인 (로컬 라우팅은 C2 완료, 공개 배포·자동 HTTPS는 D4에서 후속)
 - [ ] Cloudflare R2 버킷 생성 + 액세스 키 + 커스텀 도메인 연결 (버킷 `dweb`+Object R/W 키 완료 2026-07-10, 실버킷 스모크 검증. **커스텀 도메인만 미연결** - 서빙 시점(M2~M3)까지 미룰 수 있음)
   - ⚠️ **커스텀 도메인은 `dweb`에 붙이지 말 것** (2026-07-15 결정). R2의 공개 설정은 버킷 단위라 `dweb`을 공개하면 같은 버킷의 미공개·유료 원고까지 서명 없이 받아진다. 표지 서빙은 **표지 전용 공개 버킷**을 새로 만들어 거기에 도메인을 붙인다 (DECISIONS "표지 서빙"). 원고는 비공개 유지 + presigned URL(M3).
 - [ ] PostgreSQL **일 1회 풀 덤프 → R2 30일 보관** 스크립트 + cron 등록 (Q18)
@@ -80,7 +82,8 @@ M4 (커뮤니티 - 후원 제외)
 
 ### CI/CD
 - [x] GitHub Actions: backend, frontend, admin lint/test/build job 구현 + PR #123 세 job 실통과 확인
-- [ ] main 머지 시 스테이징 자동 배포 (docker pull → compose up)
+- [ ] GitHub 기본 브랜치 develop·배포 브랜치 release 전환 (로컬 CI·훅·규칙 준비, 원격 브랜치 생성·설정은 미수행)
+- [ ] release 승격 뒤 CI 성공 시 스테이징 자동 배포 (SHA별 이미지 pull → migration → compose up, CD 미구현). [배포 가이드](../guides/GUIDE_DEPLOYMENT.md)
 - [ ] PR 템플릿/이슈 템플릿 동작 확인
 
 ---

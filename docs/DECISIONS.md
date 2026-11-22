@@ -159,18 +159,33 @@
 
 ## 인프라 결정
 
-### VPS: Hetzner 싱가포르
+### VPS: OVHcloud 싱가포르 (2026-11-22 변경)
 
-**이유**
-- 월 $8~10으로 압도적으로 저렴
-- AWS 서울 대비 응답속도 20~40ms 느리지만 Cloudflare CDN으로 이미지/정적 파일은 보완
-- API 호출만 싱가포르 거치는 구조라 체감 차이 크지 않음
-- 나중에 사용자 늘면 서울로 이전 가능 (Docker라 이전 쉬움)
+**결정**: 첫 공개 테스트 환경은 VPS 한 대에 독자 사이트·관리자·FastAPI·PostgreSQL·Caddy를 Docker로 배포한다. 사용자가 OVHcloud `VPS-1 2027` 싱가포르 구매 완료를 보고했다. 기존 Hetzner 싱가포르 계획과 당시 가격·지연 추정은 현재 선택의 근거로 사용하지 않는다.
 
-**탈락한 후보들**
-- AWS Lightsail 서울: 서울 리전 장점 있으나 월 $20~25로 2.5배 비쌈
-- DigitalOcean 싱가포르: Hetzner와 위치 동일한데 2배 비쌈
-- NCP: 가격 대비 이점 없음
+**구매 직전 최종 견적 (사용자 제공)**
+
+- 2 vCore, RAM 4GB, SSD NVMe 40GB, Ubuntu 26.04, Local Storage 포함.
+- `No commitment`, 월 **USD 5.35 세전**. 신원 확인 후 세금이 계산되는 견적이므로 실제 청구액·세금·결제 완료 영수증은 별도 미확인이다.
+- Automated Backup Standard는 월 USD 0.50에 같은 금액의 할인이 적용됐다. 할인 기간·갱신 가격·보관 및 복구 조건은 미확인이다.
+- 12개월 USD 54.48 선결제안도 비교했으나, 우선 무약정으로 사용성을 확인하고 장기 계약 여부를 재판단한다. 나중에도 같은 연간 가격을 보장하는 결정은 아니다.
+
+**이유와 적용 범위**
+
+- 가격뿐 아니라 업체의 운영 이력과 지속성을 고려해 선택했다. 싱가포르 서버의 한국 접속 성능과 앱의 CPU·메모리 사용량은 배포 후 측정한다.
+- 이미 구현한 FastAPI 내부 스케줄러(웹훅 처리 15초, 결제 상태 재확인 30초, 예약 공개 60초)와 Docker 구성을 유지한다. Vercel·Supabase 등으로 서비스를 분산하는 구조 변경은 이번 범위에 포함하지 않는다.
+- Cloudflare에서 서비스 도메인 구매·Active 상태는 사용자 확인 완료(2026-11-21, 실제 값은 로컬 기록). SSH 접속·DNS 연결은 아직 검증하지 않았다. 도메인 등록 기간과 서버 약정 기간은 별개다.
+- 구매 완료는 서버 제공 완료·SSH 접속·방화벽·DNS·HTTPS·배포 완료를 의미하지 않는다. 현재 로컬용 `compose.yml`·`Caddyfile`을 그대로 공개하지 않고 배포 설정과 기본 보안을 준비한다.
+- 이번 구매는 개발·테스트 환경용이다. 정식 운영의 계정 소유권·DB·secret 분리는 M7에서 확정하며, 다른 계정으로 서버를 이전할 수 있다고 가정하지 않는다.
+
+**배포 전 확인할 조건**
+
+- 주문에는 `500 Mbps unlimited`가 표시됐지만 공개 Asia 안내에는 VPS-1 월 500GB 이후 10Mbps 제한이 남아 있다. 이번 싱가포르 2027 상품의 실제 트래픽 조건은 주문 약관에서 확인한다.
+- 미국 사이트의 증설 문서에는 미국 외 지역 제한이 있다. 이번 Asia 계약의 싱가포르 상품에도 적용되는지는 미검증이며, 사양 변경을 즉시 할 수 있다고 가정하지 않는다. 필요하면 새 서버로 이전하는 절차와 비용을 확인한다.
+- 업체 디스크 백업과 별도로 PostgreSQL 덤프를 R2에 보관하고 복구를 검증한다. 유료·미공개 원고 버킷은 계속 비공개로 유지한다.
+- 공개 테스트 완료 조건은 FE/Admin/API HTTPS, 쿠키 로그인, 결제 redirect·webhook·서버 검증의 실제 동작이다. 브라우저 확인은 사용자가 수행한다.
+
+공식 근거: [OVHcloud VPS 싱가포르](https://www.ovhcloud.com/asia/vps/vps-singapore/), [계약 기간과 갱신](https://docs.us.ovhcloud.com/en/account/billing/manage-commitments), [미국 사이트 증설 제한 안내](https://docs.us.ovhcloud.com/en/bare-metal-cloud/vps/upgrading-configuration), [Ubuntu 26.04 Docker 지원](https://docs.docker.com/engine/install/ubuntu/).
 
 ### 이미지 스토리지: Cloudflare R2
 
@@ -322,7 +337,7 @@
 | 무통장 입금 | 가상계좌 운영 복잡도, 나중에 추가 |
 | 소설 뷰어 | 웹툰 우선, 뷰어 타입 선택 구조만 열어둠 |
 | 포렌식 워터마크 | VPS 성능 이슈 + 포스타입도 미적용, 나중에 연구 |
-| Grafana | 초기엔 Hetzner 콘솔로 충분, 트래픽 늘면 추가 |
+| Grafana | 초기엔 VPS 콘솔의 기본 지표 활용, OVHcloud 실제 제공 지표는 배포 때 확인. 트래픽 증가 뒤 재검토 |
 | 관리자 IP 화이트리스트 | 안정화 후 추가 |
 
 ### 제외 결정
@@ -490,7 +505,7 @@ bcrypt( base64( hmac_sha384(password, key=PASSWORD_PEPPER) ), gensalt(cost=12) )
 - **authz = DB `user.role` (JWT claim 아님)**: `get_current_user`가 이미 매 요청 `User` row를 DB 로드하므로(`lib/auth.py`) `user.role` 읽기는 추가 쿼리 0이고 항상 최신(강등/권한 회수 즉시 반영, 토큰 만료 대기 없음). JWT는 `sub`만 담는 최소 설계 유지(`create_access_token` "PII payload 포함 금지"와 일관). FE 가드용으로 `/auth/me`가 `role`을 노출(인가가 아니라 표시·라우팅용 - `login_hint` 철학과 동형).
 - **가드 = `require_role(*roles)` 팩토리**. M1.5는 `require_owner`만 사용(콘텐츠·매출·정산·환불). 모더레이션 엔드포인트는 M4에서 `require_role(OWNER, MODERATOR)`(owner ⊇ moderator). 일반 열람·구매는 role이 아니라 "인증됨"으로 게이팅하므로 moderator도 정상 유저로 동작.
 - **moderator는 owner가 런타임 부여**(owner 전용 엔드포인트, 예: `PATCH /admin/users/{id}/role`). 부트스트랩 스크립트로 박는 owner와 달리 관리자가 부여하는 첫 역할 = 진짜 RBAC. M4 소관.
-- **개발자는 product 역할이 아니다 (developer 역할 미도입)**: 개발자 ≠ 운영자(작가)는 실재하는 분리지만, 개발자 일(에러·로그·헬스)은 전부 외부 도구(Sentry·UptimeRobot·Hetzner, 모니터링 결정) + 인프라 계층이라 product 계정·엔드포인트가 없다. product 안에 자체 관측 대시보드를 두는 건 전문 도구 재발명이라 미채택 → `developer`를 역할로 만들지 않는다. 정말 in-product 개발자 엔드포인트가 필요해지면 그때 값을 추가(VARCHAR라 DB 변경 없음).
+- **개발자는 product 역할이 아니다 (developer 역할 미도입)**: 개발자 ≠ 운영자(작가)는 실재하는 분리지만, 개발자 일(에러·로그·헬스)은 전부 외부 도구(Sentry·UptimeRobot·VPS 콘솔, 모니터링 결정) + 인프라 계층이라 product 계정·엔드포인트가 없다. product 안에 자체 관측 대시보드를 두는 건 전문 도구 재발명이라 미채택 → `developer`를 역할로 만들지 않는다. 정말 in-product 개발자 엔드포인트가 필요해지면 그때 값을 추가(VARCHAR라 DB 변경 없음).
 - **2FA**: owner는 TOTP 필수(M1.5). moderator 2FA 여부는 M4 결정(권한이 좁아 blast radius 작음). 부트스트랩 `scripts/promote_admin.py`로 owner 승격(공개 관리자 가입 경로 없음).
 - **⚠️ "개발자 매출 차단"의 실체 = 인프라 계층, product 역할 아님 (정직성)**: 운영 인프라(VPS·DB 자격증명)를 **개발자가 통제하는 현 구조**에서 라우트 가드는 *앱 경로*만 막는다 - DB 직접 `SELECT`는 못 막는다. 그래서 "개발자가 매출을 못 본다"는 product 역할이 아니라 **자격증명/도구 소유권**으로 친다(owner가 결제도구·DB 로그인을 쥐고 개발자는 발급받지 않음). **진짜 정보 장벽**(개발자조차 매출 불가)은 작가가 DB 자격증명을 쥐고 개발자가 prod DB 접근이 없을 때 성립 → **M7 배포 인프라 결정으로 보류**.
 - **다중 계정 / 단수 정산**: `role`은 N명이 같은 역할을 가질 수 있다(owner 여러 명 가능, singleton 제약 없음). 단 **정산/지급 대상은 owner 계정 수에서 파생되지 않는다** - 돈 받는 주체는 단수 "작가" 정체성(1인 작가 결정)에 묶고, owner 역할은 관리 권한으로만(M5 정산 시 적용).
@@ -617,11 +632,13 @@ bcrypt( base64( hmac_sha384(password, key=PASSWORD_PEPPER) ), gensalt(cost=12) )
 
 ## 브랜치 전략 결정
 
-### GitHub Flow + 영역 prefix (area-first)
+### develop 통합 + release 배포, 영역 prefix 유지 (2026-11-22 변경)
+
+사용자 요청으로 기존 main 중심 GitHub Flow를 대체한다. 모든 신규 작업 브랜치는 최신 `origin/develop`에서 만들고 develop으로 PR한다. release에 승격된 코드만 배포한다. 기존 main은 최초 전환 기준점과 이력 보존용으로 남긴다.
 
 **흐름**
 ```
-main (항상 배포 가능 상태)
+develop (기본 브랜치·개발 통합, 직접 배포하지 않음)
   └── be/feat/auth-jwt
   └── be/fix/payment-webhook
   └── fe/feat/episode-viewer
@@ -629,7 +646,28 @@ main (항상 배포 가능 상태)
   └── admin/feat/upload-form
   └── common/docs/code-review
   └── common/chore/env-setup
+
+작업 브랜치 -- PR / squash merge --> develop
+develop -- 승격 PR / merge commit --> release -- CI 성공 --> 배포
+
+main (과거 이력 보존, 최초 전환 PR 이후 신규 작업·배포 대상 아님)
 ```
+
+**병합·보호 규칙**
+
+- 일반 작업 PR은 develop 대상이며 squash merge한다. hotfix도 develop에서 분기하고 같은 승격 경로를 거친다.
+- release 대상 PR은 같은 저장소의 develop만 허용한다. 장기 유지하는 develop → release는 squash/rebase하지 않고 일반 merge commit으로 이력을 보존한다.
+- release 승격은 develop의 누적 변경 전체를 포함한다. 아직 배포하면 안 되는 기능은 작업 브랜치에 두거나 승인된 비활성 상태로 유지한다. 긴급 수정만 release에 cherry-pick하는 별도 경로는 이번 결정에 포함하지 않는다.
+- develop·release·main 직접 push를 로컬 훅에서 차단한다. GitHub 보호 규칙은 별도로 설정하고 CI 성공을 required check로 지정한다. 클라이언트 훅과 CI 파일만으로 서버 보호가 자동 설정되지는 않는다.
+- 배포는 release push에서 해당 커밋의 CI가 통과한 뒤에만 한다. PR·develop·main·태그만으로 배포하지 않는다. 배포 시 커밋 SHA를 이미지와 기록에 남긴다.
+- 현재 첫 VPS는 결제 `test` 환경이다. release라는 이름으로 실결제를 켜지 않으며, 정식 운영 DB·secret·작가 계정 분리는 M7에서 확인한다.
+
+**전환 상태와 순서**
+
+- 2026-11-22 GitHub 읽기 조회 결과 default branch는 main, 원격 브랜치는 main만 존재, 저장소는 public, main은 protected다. merge commit은 비활성이고 squash만 활성이다. 보호 세부 내용은 연결 도구의 관리 권한 부족(403)으로 읽지 못했으므로 required checks가 설정됐다고 단정하지 않는다.
+- 로컬에서 CI·훅·문서를 먼저 준비한다. CI는 전환 PR을 검증하기 위해 main/develop/release 대상 PR·push를 받는다. 전환 후 main 트리거 제거는 후속 확인한다.
+- 사용자 승인 뒤 전환 PR을 main에 반영하고 그 최신 확정 커밋에서 develop/release를 생성한다. 기본 브랜치를 develop으로 바꾸고 merge commit을 허용한다. 두 통합 브랜치의 PR·status check·force push·삭제 보호를 설정한다. main은 보존한다.
+- 기존 미커밋 변경·이미 병합된 작업 브랜치를 임의로 reset/rebase/checkout하지 않는다. 실제 원격 생성·설정 변경·push·배포는 아직 수행하지 않았다. [전환과 배포 절차](guides/GUIDE_DEPLOYMENT.md)를 따른다.
 
 **브랜치 패턴**
 
@@ -644,12 +682,12 @@ main (항상 배포 가능 상태)
 영역: `be` (백엔드), `fe` (프론트), `admin`, `common`
 
 **영역 분리 명확화 (2026-11-08)**
-- BE API와 FE 소비 화면이 함께 필요한 기능도 `be/`와 `fe/` 브랜치·PR로 나눈다. FE가 새 API에 의존하면 BE를 먼저 머지하고 최신 main에서 FE 브랜치를 만든다.
+- BE API와 FE 소비 화면이 함께 필요한 기능도 `be/`와 `fe/` 브랜치·PR로 나눈다. FE가 새 API에 의존하면 BE를 먼저 develop에 머지하고 최신 origin/develop에서 FE 브랜치를 만든다.
 - 여러 앱 파일을 수정한다는 이유로 `common/`을 사용하지 않는다. `common/`은 공유 패키지·저장소 공통 설정·영역 공통 문서 작업에 사용하고, 특정 영역의 구현 문서는 해당 구현 브랜치에 포함한다.
 - BE API 변경에 따라 재생성하는 Admin API 타입은 BE 계약의 생성물이므로 해당 `be/` 브랜치에 포함한다. Admin 화면 동작 변경은 별도 `admin/` 브랜치로 분리한다.
 
 **이유**
-- 1인 프로젝트 → GitFlow 오버스펙, GitHub Flow가 적합
+- 개발 통합과 배포 시점을 분리하면서 장기 브랜치는 develop/release 두 개로 제한한다. 전체 GitFlow의 release/*·별도 hotfix 경로는 도입하지 않는다.
 - 영역 prefix를 맨 앞에 두고 area-first로 구성
   - `git branch`에서 `be/`, `fe/`, `admin/`, `common/` 별로 자동 그룹화
   - 어느 영역 작업인지 한눈에 확인, 영역별 진행 상황 파악 용이
@@ -662,7 +700,7 @@ main (항상 배포 가능 상태)
 |------|------|
 | UptimeRobot | 사이트 다운 감지 + 알림 (무료) |
 | Sentry | 코드 에러 추적, 프론트/백엔드 (무료 플랜) |
-| Hetzner 콘솔 | CPU/메모리/디스크 기본 확인 |
+| OVHcloud 콘솔 | 제공되는 VPS 기본 지표 확인. CPU/메모리/디스크 지표별 제공 범위와 추가 수집 필요성은 배포 때 검증 |
 | Grafana | 나중에 추가 (Docker로 쉽게 붙일 수 있음) |
 
 ---
@@ -693,14 +731,14 @@ FE는 `tsconfig.json`, Admin은 `tsconfig.app.json`의 `compilerOptions.paths`�
 
 **결정: M0 F1을 백엔드 CI부터 구현한다. PR(→main)·main 푸시 시 ruff + format + pytest를 GitHub Actions로 돌린다. CD/배포(F2~F3)와 FE/admin job은 후속.**
 
-**현재 상태**: `.github/workflows/ci.yml`에 backend, frontend, admin 세 job이 모두 구현되어 있다. frontend는 lint/astro check/build/test, admin은 lint/build/test를 실행한다. 위 문장은 단계적 도입 당시 결정 이력이다.
+**현재 상태 (2026-11-22 로컬 변경)**: `.github/workflows/ci.yml`은 main/develop/release 대상 PR·push에서 branch-policy와 backend/frontend/admin을 검사한다. release PR의 출처는 같은 저장소 develop으로 제한한다. frontend는 lint/astro check/build/test와 SSR 검사, admin은 lint/build/test를 실행한다. GitHub에서 변경된 CI가 실행된 결과는 아직 미검증이며 CD는 미구현이다. 위 main 중심 문장은 단계적 도입 당시 이력이다.
 
 - **범위 = 백엔드 우선**: 결제·인증·Signed URL 등 데이터 무결성 리스크가 BE에 집중 → 가장 비싼 회귀부터 막는다. FE/admin(eslint+tsc)은 frontend ESLint 셋업 선행 필요라 분리.
 - **도구**: `astral-sh/setup-uv`(캐시) + `uv sync --locked`(lockfile 재현성) + `actions/checkout`. Python은 `uv python install`이 `requires-python`(3.12)으로 자동 설치.
 - **검사 범위 = be.md PR 템플릿 게이트와 일치**: `ruff check src/`, `ruff format --check src/ tests/`. `migrations/`는 alembic 자동생성 + DB 적용 + forward-only라 의도적 제외(손대면 안 됨).
 - **테스트 DB**: GitHub Actions `postgres:16` 서비스. conftest가 `SQLModel.metadata.create_all`로 스키마를 직접 만들어 CI에 alembic 스텝 불필요. 필수 env(`PASSWORD_PEPPER` 등)는 테스트 전용 더미값 주입(실제 비밀 아님).
 - **`paths` 필터 미적용**: required check로 걸면 path-skip이 "pending"으로 남아 머지를 막는 트레이드오프 + 1인 저PR 볼륨이라 Actions 분 절약 한계효용 낮음.
-- **⚠️ CI 효력의 전제 = branch protection (정정 2026-07-02: 무료 플랜 불가)**: 게이트의 실제 효력은 YAML이 아니라 서버 규칙(branch protection/ruleset)에 있다(`/council` 5렌즈 공통 맹점). 그러나 `backend`를 required status check로 등록하려면 branch protection 또는 ruleset이 필요한데, **무료 private repo는 둘 다 불가**(`branches/main/protection`·`repos/.../rulesets` API 모두 403 "Upgrade to Pro or make public"). 따라서 CI가 빨강이어도 서버가 머지를 강제로 막지 못한다 - 원래 "후속 P0(branch protection 등록)"는 이 플랜에선 실행 불가. 대신 **로컬 훅 `.githooks/pre-push`로 main 직접 push를 차단**해 PR 흐름(브랜치 → PR → squash-merge → `git pull`)을 강제한다(B1이 PR 없이 main 직행한 사고 대응). 단 이 훅은 "직접 push 금지"만 강제하고 **CI-그린은 강제하지 못한다**(클라 훅은 CI 상태를 못 봄) → CI 준수는 수동 규율. 진짜 서버 게이트가 필요하면 Pro 업그레이드 또는 repo 공개.
+- **CI 효력의 전제 = branch protection**: 2026-07-02 당시 private/free 환경에서는 보호 API가 플랜 제한으로 거부돼 로컬 main push 방지 훅을 보완책으로 도입했다. 2026-11-22 실제 저장소는 public이고 main은 protected로 조회된다. 현재는 그 과거 플랜 제한을 단정하지 않는다. develop/release의 required checks와 보호 규칙을 실제 설정해야 하며, 로컬 훅만으로 CI 성공·GitHub API 변경을 강제할 수 없다. 이번 보호 세부 조회의 403은 연결 도구의 관리 권한 부족이며 과거 플랜 오류와 구분한다.
 - **후속**: `alembic upgrade head`+`alembic check` 게이트(모델↔마이그레이션 표류 차단), 액션 SHA 핀(공급망), CD(F2~F3).
 - **완료된 후속**: HIBP 외부호출 테스트 격리(hermetic, 2026-06-24) - conftest autouse 전역 stub(`_stub_hibp`)으로 어떤 테스트도 `api.pwnedpasswords.com`에 실제 요청을 못 보내게 함(per-test mock 의존 제거). 실제 함수 본문 raise sabotage로 미도달 입증. FE/admin job(2026-07-23, #98) - pnpm 10 + Node 24 셋업, frontend job(astro check/build/vitest)·admin job(eslint/tsc·vite build/vitest) 전 job 그린. frontend ESLint(2026-08-18) - ESLint 10 flat config와 Astro/TS/React Hooks recommended를 추가하고 frontend job에서 astro check 전에 실행한다.
 

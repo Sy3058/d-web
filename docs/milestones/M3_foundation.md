@@ -72,7 +72,7 @@
 | 개발자 소유 PortOne 테스트 Store ID, V2 API Secret, webhook secret | 발급·backend 로컬 설정 완료, V2 API secret 읽기 전용 실조회 완료, Store·webhook 통신 미검증 | 작가 사업자·대표자·계좌 정보를 입력하지 않고 두 secret은 `SecretStr`로 다룬다. D~F 공개 실연동에서 Store와 secret 조합을 검증한다. |
 | 카드 테스트 channel key·최소 결제 금액 | 테스트 channel 생성·backend 로컬 설정 완료, 최소 금액·브라우저 스모크 미검증 | 카드 1종은 M3 공개 HTTPS E2E 필수다. 확인된 테스트 하한을 M3 결제 하한으로 고정한다. |
 | 카카오페이·토스페이 channel key | `TC0ONETIME`·`tosstest` channel 생성과 backend 로컬 설정 완료, 브라우저 스모크 미검증 | M3 공개 HTTPS에서 실제 브라우저 스모크한다. 계약·심사를 거친 실 MID 검증만 M7 gate다. |
-| 공개 frontend·API·webhook HTTPS 주소 | 미검증 | 모바일 redirect, HttpOnly 쿠키, CORS, webhook 실수신 스모크에 필요하다. 로컬 fixture는 이를 대체하지 않는다. |
+| 공개 frontend·API·webhook HTTPS 주소 | Cloudflare 도메인 구매·Active와 OVHcloud 싱가포르 VPS 구매는 사용자 확인 완료. 서버 제공·DNS·HTTPS·공개 URL은 미검증 | [M0 배포 기반](M0_foundation.md#그룹-d-vps-배포-기반-구매-완료-공개-배포-미검증) 준비 뒤 모바일 redirect, HttpOnly 쿠키, CORS, webhook 실수신을 스모크한다. 로컬 fixture는 이를 대체하지 않는다. |
 | 결제 운영 스위치 | 설정 가드와 신규 episode intent 503 구현 완료 | `payments_accept_new=false`면 신규 intent만 503으로 닫고 webhook·결제 상태 재확인·기존 구매 열람·환불은 계속 작동하게 한다. |
 | 환불·만 14세 약관 문구 | 법무 미검토 | 테스트 UI는 즉시 제공·단순 변심 청약철회 제한·계약 불일치 예외를 결제 전에 고지한다. 168시간 정책과 문구는 잠정이며 실결제는 M7 Q1·Q7 승인 없이는 차단한다. |
 
@@ -505,7 +505,7 @@ cancel_pending 실패 확정 ─→ paid (사용자 환불) | review_required (�
 
 - [ ] **Q6. 운영 API 주소 검증**: `frontend/src/lib/api.ts`, `GoogleButton.astro`, `admin/src/lib/api.ts`의 localhost 폴백은 개발에만 허용한다. 운영 환경에서 필수 API 주소가 빠지거나 비어 있으면 지원하는 빌드·기동 경계에서 명확히 실패시킨다. 완료조건: 독자 API·Google 로그인·Admin API의 누락 설정이 검출되고, 명시한 정상 운영 주소와 SSR 내부 주소 분리는 유지되며 내부 주소가 브라우저 번들에 노출되지 않는다.
 
-Q1~Q4를 먼저 마친 뒤 남은 F 구매 내역·G 환불 작업을 진행한다. Q5는 M3 진행 중, Q6는 I 종료 점검까지 완료한다. 동작 수정과 구조 분리는 별도 커밋으로 검증하고, BE 계약 변경·Admin 생성 타입은 `be/`, FE 소비 변경은 선행 BE 머지 뒤 최신 main의 `fe/`, Admin 화면 변경은 `admin/`으로 나눈다. 2026-11-10에는 계획을 기록했고, 2026-11-11 BE 구현 범위와 남은 FE/Admin 작업은 위 상태 기록을 따른다.
+Q1~Q4를 먼저 마친 뒤 남은 F 구매 내역·G 환불 작업을 진행한다. Q5는 M3 진행 중, Q6는 I 종료 점검까지 완료한다. 동작 수정과 구조 분리는 별도 커밋으로 검증하고, BE 계약 변경·Admin 생성 타입은 `be/`, FE 소비 변경은 선행 BE의 develop 머지 뒤 최신 origin/develop의 `fe/`, Admin 화면 변경은 `admin/`으로 나눈다. 2026-11-10에는 계획을 기록했고, 2026-11-11 BE 구현 범위와 남은 FE/Admin 작업은 위 상태 기록을 따른다. 브랜치 기준은 2026-11-22 develop/release 전환 결정에 맞췄다.
 
 검증은 변경 범위에 맞는 집중 테스트부터 시작하고 완료 전에 해당 앱 전체 gate를 실행한다. Q3는 OpenAPI·소비 타입과 공개 캐시·개인화 계약을, Q4와 서비스 분리는 기존 구매·환불 경합 테스트를 포함한다. Q6는 운영 설정 누락·정상 설정의 빌드/기동 결과와 산출물을 확인한다. 브라우저 실기능 확인은 사용자에게 남기며 Playwright E2E는 추가하지 않는다.
 
@@ -524,7 +524,7 @@ Q1~Q4를 먼저 마친 뒤 남은 F 구매 내역·G 환불 작업을 진행한�
 9. `common/feat/m3-donations`: H
 10. `common/feat/m3-revenue-ops`: I
 
-위 목록은 그룹 의존 순서이며 BE·FE 구현이 함께 필요한 그룹은 영역별 브랜치·PR로 분리한다. 현재 F의 남은 구매 내역·G 환불 착수 전에는 [Q1~Q4](#m3-quality-followups)를 먼저 진행한다. 스택 PR은 사용하지 않는다. 선행 PR이 main에 머지된 뒤 최신 main에서 다음 브랜치를 만든다. 각 PR은 해당 `IMPLEMENTATION_*.md`, API 타입 생성물과 영향받는 backend/frontend/admin gate를 함께 갱신한다.
+위 목록은 그룹 의존 순서이며 BE·FE 구현이 함께 필요한 그룹은 영역별 브랜치·PR로 분리한다. 현재 F의 남은 구매 내역·G 환불 착수 전에는 [Q1~Q4](#m3-quality-followups)를 먼저 진행한다. 스택 PR은 사용하지 않는다. 선행 PR이 develop에 squash merge된 뒤 최신 origin/develop에서 다음 브랜치를 만든다. 배포는 develop → release 일반 merge 승격 뒤에만 한다. 각 PR은 해당 `IMPLEMENTATION_*.md`, API 타입 생성물과 영향받는 backend/frontend/admin gate를 함께 갱신한다.
 
 ---
 

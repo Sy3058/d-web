@@ -1,12 +1,14 @@
 name: CI
 
-# main 대상 PR과 main 직접 푸시에서 백엔드·프론트엔드 검사를 돌린다.
+# 통합 브랜치 대상 PR과 직접 푸시에서 브랜치 정책과 앱 검사를 돌린다.
 # (CD/배포는 범위 밖 - 이 워크플로는 검증만 한다.)
 on:
   push:
-    branches: [main]
+    branches: [main, develop, release]
   pull_request:
-    branches: [main]
+    branches: [main, develop, release]
+    # base를 develop에서 release 등으로 바꾼 PR도 정책을 다시 검사한다.
+    types: [opened, synchronize, reopened, edited]
 
 # 같은 브랜치에서 새 푸시가 오면 이전 실행을 취소(Actions 분 절약).
 concurrency:
@@ -18,7 +20,27 @@ permissions:
   contents: read
 
 jobs:
+  branch-policy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Test branch policy
+        run: sh scripts/test-branch-policy.sh
+
+      - name: Validate pull request target
+        if: github.event_name == 'pull_request'
+        env:
+          PR_BASE: ${{ github.event.pull_request.base.ref }}
+          PR_HEAD: ${{ github.event.pull_request.head.ref }}
+          PR_SOURCE_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          PR_TARGET_REPO: ${{ github.repository }}
+        run: ./scripts/check-pr-target.sh "$PR_BASE" "$PR_HEAD" "$PR_SOURCE_REPO" "$PR_TARGET_REPO"
+
   backend:
+    needs: branch-policy
     runs-on: ubuntu-latest
     timeout-minutes: 15      # DB race·행(hang) 시 무한 점유 방지
     defaults:
@@ -85,6 +107,7 @@ jobs:
         run: uv run pytest
 
   frontend:
+    needs: branch-policy
     runs-on: ubuntu-latest
     timeout-minutes: 15      # 설치·빌드 행(hang) 시 무한 점유 방지
 
@@ -128,6 +151,7 @@ jobs:
         run: pnpm --filter frontend test:ssr
 
   admin:
+    needs: branch-policy
     runs-on: ubuntu-latest
     timeout-minutes: 15      # 설치·빌드 행(hang) 시 무한 점유 방지
 
