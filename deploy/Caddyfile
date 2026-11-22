@@ -1,0 +1,27 @@
+{
+	email {$ACME_EMAIL}
+}
+
+(security_headers) {
+	header {
+		X-Robots-Tag "noindex, nofollow"
+		X-Content-Type-Options "nosniff"
+	}
+}
+
+{$APP_HOST} {
+	import security_headers
+	reverse_proxy frontend:4321
+}
+
+{$ADMIN_HOST} {
+	import security_headers
+	reverse_proxy admin:80
+}
+
+{$API_HOST} {
+	import security_headers
+	reverse_proxy api:8000 {
+		header_up X-Forwarded-For {remote_host}
+	}
+}
