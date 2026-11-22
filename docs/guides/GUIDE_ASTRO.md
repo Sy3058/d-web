@@ -7,7 +7,9 @@
 > 2. 아래 내용은 확인 날짜와 현재 설치 버전을 함께 본다.
 > 3. 버전 민감한 API는 **사용 시점에 Astro 공식 문서로 재확인**하고, 새 차이를 찾으면 근거와 날짜를 이 문서에 반영한다.
 >
-> **현재 스택**: `astro@^7.2.4`, Astro 내장 `vite@8.2.2`, `@astrojs/node@^11.1.4`, `@astrojs/react@^6.0.4`, `@tailwindcss/vite@4`, Node `>=24.16`. 실제 설치 범위는 `frontend/package.json`과 lockfile을 우선한다.
+> **현재 스택**: `astro@^7.4.7`, Astro 요구 범위의 frontend `vite@8.3.8`, `@astrojs/node@^11.1.4`, `@astrojs/react@^6.0.4`, `@tailwindcss/vite@4`, Node `>=24.22.3`. Admin은 Vite `8.2.6`을 유지한다. 실제 설치 범위는 `frontend/package.json`과 lockfile을 우선한다.
+
+> **보안 상태 (2026-11-23)**: GHSA-r3h5-4585-7x3w는 Astro `7.4.7`에서 수정됐다. Astro가 사용하는 `@astrojs/internal-helpers@0.13.1`과 adapter가 별도로 사용하는 `@astrojs/internal-helpers@0.10.4`가 함께 존재한다는 사실만으로 해당 취약점이 잔존한다고 판정하지 않는다. [Astro 공식 권고](https://github.com/withastro/astro/security/advisories/GHSA-r3h5-4585-7x3w)
 
 ---
 
@@ -95,7 +97,7 @@
 ## 이 프로젝트 Astro 컨벤션 (공식 문서에 없음)
 
 - **Tailwind는 `@tailwindcss/vite` 플러그인**(`vite.plugins`)으로 연결. 구 `@astrojs/tailwind` 통합 아님.
-- **현재는 Astro 7 + Vite 8을 사용한다.** frontend는 Astro가 Vite를 관리하므로 별도 Vite devDep을 두지 않고, admin도 Vite 8로 맞춘다. [Astro 7 공식 발표](https://astro.build/blog/astro-7/)
+- **현재는 Astro 7 + Vite 8을 사용한다.** frontend는 Astro 요구 범위에 맞춘 Vite `8.3.8`, admin은 Vite `8.2.6`을 사용한다. frontend는 Astro가 Vite를 관리하므로 별도 Vite devDep을 두지 않는다. [Astro 7 공식 발표](https://astro.build/blog/astro-7/)
 - adapter: `@astrojs/node`, `mode: 'standalone'`, `session: false`. integrations: `react()`, `sentry()`.
 - 섬 지시어 규칙: 로그인·결제·OAuth=`client:load`, 댓글·하트·후원=`client:idle`, 하단 위젯=`client:visible`.
 - 쿠키: `.astro`(SSR)는 `Astro.request.headers`로, React 섬은 `fetch(..., { credentials: 'include' })`. JWT localStorage 금지.

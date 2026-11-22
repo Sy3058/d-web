@@ -64,3 +64,37 @@ ProseMirror는 FE·Admin 공통의 TipTap 간접 의존성이다. 상위 TipTap 
 - 기존 Backend 가상환경의 재귀 영구 삭제는 저장소 보호 훅이 차단했다. 보호 훅을 바꾸지 않고 복구 가능한 휴지통으로 이동했으므로 약 214MB는 휴지통에 남아 있다. 활성 Backend의 Python 3.12.16·Pillow 13 import를 재확인했다. make-the-one 보안 도구의 minor alias도 실제로는 Python 3.12.16을 가리켜 제거한 3.12.13에 의존하지 않았다.
 - 중지된 API·FE·Admin 컨테이너에는 cache/runtime 파일 외의 데이터 변경이 없음을 확인하고 파일 변경 목록과 nginx 설정을 비공개 백업에 보존했다. 컨테이너를 새 이미지로 교체하되 시작하지 않았고 이전 앱 이미지 세 개의 부재를 확인했다. 이전 PostgreSQL 16.14·16.15 및 11월 12일 검증 이미지를 제거했다. 다른 프로젝트용 이미지·모든 DB 볼륨·검증된 DB 백업은 유지했다.
 - 사용자가 Android Studio를 직접 제거해 새로 추가했던 `STUDIO_JDK` 사용자 환경변수를 원복했다. Windows 설치용 임시 다운로드 약 1.97GB를 정리하고 설정 백업 세 개는 보존했다. STS·VS Code의 구형 내장 JRE는 배포 구성품이므로 폴더를 임의 삭제하지 않았고, 실제 실행 설정은 수정된 외부 JDK를 유지한다. APT 관리 Git과 시스템 Python도 유지했다. 기존 터미널·IDE의 상속 환경은 새 세션에서 갱신해야 한다.
+
+## 2026-11-23 Astro 이미지 경로 경계 수정
+
+사용자 요청으로 최신 `origin/develop`에서 `fe/fix/astro-image-path` 브랜치와 별도 worktree를 만들었다. 기존 `common/feat/staging-deployment`의 미커밋 배포 설정은 원래 worktree에 보존한다.
+
+### 대상과 변경
+
+- `GHSA-r3h5-4585-7x3w` / `CVE-2026-126364`: Node adapter의 이미지 엔드포인트가 Linux에서 대소문자만 다른 출력 경로를 허용하는 문제다. Astro 7.4.7에서 수정되며 adapter만 갱신해서는 해결되지 않는다.
+- frontend의 Astro 하한을 `^7.4.7`, 실제 잠금을 `7.4.7`로 변경했다. `@astrojs/node`는 호환 peer 범위 안의 기존 `11.1.4`를 유지했다.
+- Astro가 사용하는 `@astrojs/internal-helpers`는 `0.13.1`로 갱신된다. adapter 등 다른 경로에 기존 helper `0.10.4`가 남아 있어도 이미지 엔드포인트는 Astro의 수정된 helper를 사용한다. 단순히 old helper 문자열이 존재하는지만으로 이 공지의 잔존을 판정하지 않는다.
+- 새 Astro는 Vite `^8.3.5`를 요구하므로 frontend의 실제 Vite는 `8.3.8`이다. Admin의 직접 Vite는 `8.2.6`을 유지했다. Astro 하위 compiler·markdown·Sharp·Shiki·Zod·devalue 등의 새 의존성 및 peer snapshot도 lockfile에 반영됐다. 다른 직접 의존성 하한을 일괄 올리거나 override로 강제하지 않았다.
+- Node 24.22.3·pnpm 10.24.0으로 별도 설치했으며 원본 worktree의 node_modules·env 파일을 복사하거나 연결하지 않았다. frozen offline install과 diff 검사를 통과했다.
+
+### HTTP 회귀 검사와 한계
+
+기존 `frontend/tests/viewer-ssr.check.mjs`에 다음 검사를 추가했다. 브라우저나 Playwright를 사용하지 않고 실제 production SSR 빌드를 localhost로 실행한다.
+
+1. `dist/client`와 대소문자만 다른 `dist/CLIENT`가 서로 다른 inode인 Linux 파일시스템임을 확인한다.
+2. 고유 파일명과 무해한 SVG로 공개 정적 이미지의 200 응답을 확인한다.
+3. `/_image?href=/../CLIENT/...&w=32&f=svg`가 파일 경계에서 400으로 거부되고 비공개 표시 문자열을 반환하지 않는지 확인한다.
+4. 생성한 고유 파일만 정리한다. 기존 CLIENT 디렉터리는 보존하고 테스트가 만든 디렉터리만 비재귀로 제거한다.
+
+현재 앱은 Sharp를 직접 설치하지 않아 production bundle의 정상 최적화 요청이 `MissingSharp`로 실패할 수 있다. 이 기능을 새로 활성화하기 위해 의존성을 추가하지 않았다. 그래서 정상 대조는 정적 이미지 제공으로 확인하고, 공격 경로는 **이미지 처리에 도달하기 전 400 거부**를 검사한다. 구버전 7.2.4 이미지에서는 경계를 통과해 이미지 처리까지 진행한 뒤 MissingSharp로 500이 발생해 새 검사가 실패했고, 수정본은 400으로 거부해 통과했다. 실제 원고·비밀 파일을 읽거나 유출 성공을 주장하는 검증은 아니다.
+
+### 검증과 반영
+
+- Frontend lint·Astro check·단위 테스트 377개·build와 HTTP SSR 검사 20개 통과.
+- frontend Docker 이미지 빌드 후 동일 HTTP SSR 검사 20개를 다시 통과했다. 임시 컨테이너는 network none으로 외부 통신과 포트 공개 없이 실행·자동 제거했다.
+- Admin lint·단위 테스트 139개·build 통과. 공유 잠금의 peer graph 변경을 함께 검증했다.
+- 기존 unused import hint 1건, Sentry 토큰 미설정 및 transitions sourcemap 경고는 유지된다.
+- Backend 의존성·코드는 변경하지 않았다. 기존 서버와 원본 worktree의 개발 프로세스는 재시작하지 않았다.
+- 실제 배포 적용에는 이 브랜치의 develop 병합과 배포 작업 브랜치의 최신 코드 반영, release 승격 후 이미지 재빌드가 필요하다. 기존 이미지와 실행 중 프로세스는 자동으로 수정되지 않는다. 커밋·push·배포는 수행하지 않았다.
+
+공식 근거: [Astro 보안 공지](https://github.com/withastro/astro/security/advisories/GHSA-r3h5-4585-7x3w), [Astro 7.4.7 릴리스](https://github.com/withastro/astro/releases/tag/astro%407.4.7), [pnpm 사용 시 Sharp 의존성 안내](https://docs.astro.build/en/guides/images/#default-image-service).
