@@ -131,6 +131,9 @@ docs/MISTAKES.md 참고해서 FastAPI 라우터 작성해줘
 
 ## Vite / Astro
 
+- **BusyBox 기반 컨테이너 healthcheck에서 `localhost`를 쓰면 IPv6로 오진할 수 있다** (2026-11-23 로컬 compose)
+  -> BusyBox `wget http://localhost`가 `::1`을 먼저 선택했지만 admin nginx는 IPv4에서만 수신해, `127.0.0.1` 요청은 200인데 컨테이너가 unhealthy가 됐다. IPv4 전용 서비스의 내부 검사는 `127.0.0.1`로 고정하고 짧은 네트워크 제한 시간을 둔다. Caddy는 공개 홈·Host 라우팅·업스트림 상태와 분리해 `127.0.0.1:2019/config/` 관리 API로 자체 프로세스만 확인한다.
+
 - **같은 lockfile이어도 pnpm 증분 설치의 hidden-hoist 링크는 깨끗한 설치와 다를 수 있다** (2026-11-23 Astro 보안 수정 반영)
   -> CI·깨끗한 worktree·Docker는 통과했지만 기존 설치에서만 zodResolver가 Zod 4.6 타입, 앱 schema가 4.4 타입을 읽어 검사에 실패했다. 실제 `.pnpm/node_modules/zod` 링크가 깨끗한 설치와 달랐다. 타입 캐스팅·검증 완화·임의 override 전에 각 소비자의 실제 module resolution을 비교한다. 기존 node_modules를 복구 가능하게 보존하고 frozen lockfile로 새로 설치해 정상 링크를 구성한 뒤 전체 게이트를 확인한다. 이미 실행 중인 개발 서버는 이전 패키지를 계속 물 수 있어 함께 재시작·HTTP 확인한다.
 

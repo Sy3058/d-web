@@ -1,7 +1,12 @@
 {
   "private": true,
   "scripts": {
-    "dev:fe": "pnpm --filter frontend dev",
-    "dev:admin": "pnpm --filter admin dev"
+    "dev": "bash scripts/dev.sh",
+    "dev:db": "docker compose up -d --wait postgres",
+    "dev:api": "cd backend && ENV=development APP_BASE_URL=http://localhost:4321 ADMIN_BASE_URL=http://localhost:5173 API_BASE_URL=http://localhost:8000 PAYMENTS_ACCEPT_NEW=false uv run uvicorn src.main:app --host 127.0.0.1 --port 8000 --reload",
+    "dev:fe": "PUBLIC_API_URL=http://localhost:8000 API_INTERNAL_URL=http://localhost:8000 pnpm --filter frontend dev --host 127.0.0.1 --port 4321 --ignore-lock",
+    "dev:admin": "VITE_API_URL=http://localhost:8000 pnpm --filter admin dev --host 127.0.0.1 --port 5173 --strictPort",
+    "preview:up": "docker compose --profile preview up -d --build --wait",
+    "preview:stop": "docker compose --profile preview stop caddy admin frontend api"
   }
 }
