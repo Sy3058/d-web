@@ -17,17 +17,18 @@ import sentry_sdk
 import structlog
 from apscheduler.events import EVENT_JOB_ERROR, JobExecutionEvent
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from sqlalchemy import delete, update
+from sqlalchemy import delete, or_, update
 from sqlalchemy.sql import func
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.config import settings
 from src.lib.db import async_session_maker
-from src.models.user import EmailVerification, RefreshToken, TrustedDevice
+from src.models.user import EmailVerification, RefreshToken, SignupEmailVerification, TrustedDevice
 from src.models.work import Episode
 from src.services.payment_reconciliation_service import reconcile_payments
 from src.services.payment_webhook_service import process_webhook_receipts
 from src.services.portone_rest import PortOneRestAdapter
+from src.services.signup_service import RESEND_COOLDOWN
 
 log = structlog.get_logger(__name__)
 
@@ -82,18 +83,34 @@ async def publish_due_episodes(session: AsyncSession) -> int:
 
 
 async def cleanup_expired_tokens(session: AsyncSession) -> dict[str, int]:
-    """만료(expires_at 경과) 토큰 행 삭제 (#57). 반환 = 테이블별 삭제 행 수.
+    """수명이 끝난 토큰과 가입 인증 행 삭제 (#57). 반환 = 테이블별 삭제 행 수.
 
-    삭제 기준은 expires_at 경과 하나다. revoked_at 행을 만료 전에 지우면 refresh
-    회전 재사용 탐지(M1 C4)의 근거가 사라져 세션 전체 revoke가 조용한 401로
+    기존 세 토큰 테이블은 expires_at 경과 시 삭제한다. revoked_at 행을 만료 전에
+    지우면 refresh 회전 재사용 탐지(M1 C4)의 근거가 사라져 세션 전체 revoke가 조용한 401로
     퇴화한다 - 이슈 #57 본문("revoked 삭제")과의 의도적 차이. 만료되면 revoked
-    여부와 무관하게 삭제되므로 결국 전부 정리된다. 세 테이블은 FK 의존이 없어
-    순서 무관, 한 트랜잭션으로 커밋한다.
+    여부와 무관하게 삭제되므로 결국 전부 정리된다.
+
+    가입 인증 행은 만료 코드, 만료 또는 없는 proof, 재발송 쿨다운 종료를 모두
+    만족해야 삭제한다. 어느 한 수명이라도 남아 있으면 검증·가입·중복 발송 제한의
+    근거이므로 보존한다. 모든 테이블은 FK 의존이 없어 순서 무관, 한 트랜잭션으로
+    커밋한다.
     """
+    now = datetime.now(UTC)
     deleted: dict[str, int] = {}
     for model in _CLEANUP_MODELS:
         result = await session.exec(delete(model).where(model.expires_at <= func.now()))
         deleted[model.__tablename__] = result.rowcount
+    signup_result = await session.exec(
+        delete(SignupEmailVerification).where(
+            SignupEmailVerification.expires_at <= now,
+            or_(
+                SignupEmailVerification.proof_expires_at.is_(None),
+                SignupEmailVerification.proof_expires_at <= now,
+            ),
+            SignupEmailVerification.last_sent_at <= now - RESEND_COOLDOWN,
+        )
+    )
+    deleted[SignupEmailVerification.__tablename__] = signup_result.rowcount
     await session.commit()
     log.info("expired_tokens_cleaned", **deleted)
     return deleted

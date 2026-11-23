@@ -39,15 +39,27 @@ from src.lib.exceptions import (
     TokenReuseError,
 )
 from src.lib.rate_limit import RateLimit
+from src.lib.signup_verification import (
+    clear_signup_verification_cookie,
+    set_signup_verification_cookie,
+)
+from src.lib.signup_verification import (
+    cookie_name as signup_cookie_name,
+)
 from src.models.user import User, UserRead
 from src.schemas.auth import (
     LoginRequest,
     MessageResponse,
     ResendVerificationRequest,
+    SignupEmailChallengeResponse,
+    SignupEmailRequest,
+    SignupEmailVerifyRequest,
+    SignupEmailVerifyResponse,
     SignupRequest,
+    SignupVerificationResponse,
     VerifyEmailRequest,
 )
-from src.services import auth_service
+from src.services import auth_service, email_service, signup_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 logger = structlog.get_logger(__name__)
@@ -55,8 +67,6 @@ logger = structlog.get_logger(__name__)
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 CurrentUser = Annotated[User, Depends(get_current_user)]
 
-# 비열거: 신규/중복 가입 동일 응답.
-_SIGNUP_MESSAGE = "입력하신 주소로 메일을 보냈어요"
 # 비열거: 이메일/비번 중 무엇이 틀렸는지 구분 노출 금지.
 _INVALID_CREDENTIALS = "이메일 또는 비밀번호가 올바르지 않습니다"
 _UNAUTHORIZED = "인증이 필요합니다"
@@ -75,18 +85,97 @@ _RESEND_MESSAGE = "인증 메일을 보냈어요"
 async def signup(
     body: SignupRequest,
     background_tasks: BackgroundTasks,
+    request: Request,
+    response: Response,
     session: SessionDep,
 ) -> MessageResponse:
     try:
-        await auth_service.signup(
-            body.email, body.password, body.nickname, session, background_tasks
+        result = await signup_service.complete_signup(
+            body.email,
+            body.password,
+            body.nickname,
+            request.cookies.get(signup_cookie_name()),
+            session,
         )
+    except signup_service.SignupVerificationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="이메일 인증이 필요하거나 만료되었습니다",
+            headers={"Cache-Control": "no-store"},
+        ) from exc
     except PwnedPasswordError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="유출 이력이 있는 비밀번호입니다. 다른 비밀번호를 사용하세요",
+            headers={"Cache-Control": "no-store"},
         ) from exc
-    return MessageResponse(message=_SIGNUP_MESSAGE)
+    response.headers["Cache-Control"] = "no-store"
+    clear_signup_verification_cookie(response)
+    if result.duplicate:
+        background_tasks.add_task(email_service.send_already_registered_email, str(body.email))
+    return MessageResponse(message="회원가입이 완료되었습니다. 로그인해 주세요")
+
+
+@router.post(
+    "/signup/send-verification",
+    response_model=SignupEmailChallengeResponse,
+    dependencies=[Depends(RateLimit("5/minute", scope="signup-email"))],
+)
+async def signup_send_verification(
+    body: SignupEmailRequest,
+    background_tasks: BackgroundTasks,
+    response: Response,
+    session: SessionDep,
+) -> SignupEmailChallengeResponse:
+    try:
+        challenge_id = await signup_service.send_verification(
+            str(body.email), session, background_tasks
+        )
+    except signup_service.SignupCooldownError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="잠시 후 다시 시도해 주세요",
+            headers={"Cache-Control": "no-store"},
+        ) from exc
+    response.headers["Cache-Control"] = "no-store"
+    return SignupEmailChallengeResponse(
+        challenge_id=str(challenge_id),
+        message="입력하신 주소로 안내 메일을 보냈어요",
+    )
+
+
+@router.post(
+    "/signup/verify-email",
+    response_model=SignupEmailVerifyResponse,
+    dependencies=[Depends(RateLimit("5/minute", scope="signup-verify-email"))],
+)
+async def signup_verify_email(
+    body: SignupEmailVerifyRequest,
+    response: Response,
+    session: SessionDep,
+) -> SignupEmailVerifyResponse:
+    try:
+        email, proof = await signup_service.verify_email(body.challenge_id, body.code, session)
+    except signup_service.SignupVerificationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="유효하지 않거나 만료된 인증 코드입니다",
+            headers={"Cache-Control": "no-store"},
+        ) from exc
+    response.headers["Cache-Control"] = "no-store"
+    set_signup_verification_cookie(response, proof)
+    return SignupEmailVerifyResponse(email=email, message="이메일이 인증되었습니다")
+
+
+@router.get("/signup/verification", response_model=SignupVerificationResponse)
+async def signup_verification(
+    request: Request, response: Response, session: SessionDep
+) -> SignupVerificationResponse:
+    response.headers["Cache-Control"] = "no-store"
+    email = await signup_service.get_verified_email(
+        request.cookies.get(signup_cookie_name()), session
+    )
+    return SignupVerificationResponse(email=email)
 
 
 @router.post(

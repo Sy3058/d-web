@@ -9,13 +9,22 @@ published_at/expires_at은 timestamptz라 픽스처 시각은 전부 tz-aware(UT
 import uuid
 from datetime import UTC, datetime, timedelta
 
+import pytest
 import pytest_asyncio
+from fastapi import BackgroundTasks
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.lib.scheduler import cleanup_expired_tokens, publish_due_episodes
-from src.models.user import EmailVerification, RefreshToken, TrustedDevice, User
+from src.models.user import (
+    EmailVerification,
+    RefreshToken,
+    SignupEmailVerification,
+    TrustedDevice,
+    User,
+)
 from src.models.work import Episode, Work
+from src.services import signup_service
 
 
 def _past(minutes: int = 5) -> datetime:
@@ -225,6 +234,109 @@ async def test_cleanup_covers_trusted_devices_and_email_verifications(
 
     assert deleted["trusted_devices"] == 1
     assert deleted["email_verifications"] == 1
+
+
+def _signup_verification(
+    email: str,
+    *,
+    expires_at: datetime,
+    last_sent_at: datetime,
+    proof_expires_at: datetime | None = None,
+    used_at: datetime | None = None,
+) -> SignupEmailVerification:
+    return SignupEmailVerification(
+        email=email,
+        challenge_id=uuid.uuid4(),
+        token_hash=uuid.uuid4().hex + uuid.uuid4().hex,
+        expires_at=expires_at,
+        last_sent_at=last_sent_at,
+        proof_hash=(uuid.uuid4().hex + uuid.uuid4().hex) if proof_expires_at else None,
+        proof_expires_at=proof_expires_at,
+        used_at=used_at,
+    )
+
+
+async def test_cleanup_signup_verifications_respects_all_lifetimes_and_is_idempotent(
+    db_session: AsyncSession,
+):
+    now = datetime.now(UTC)
+    old_send = now - signup_service.RESEND_COOLDOWN - timedelta(seconds=1)
+    expired = now - timedelta(seconds=1)
+    future = now + timedelta(minutes=5)
+    rows = [
+        _signup_verification(
+            "expired-unused@example.com", expires_at=expired, last_sent_at=old_send
+        ),
+        _signup_verification(
+            "completed-old@example.com",
+            expires_at=expired,
+            last_sent_at=old_send,
+            proof_expires_at=expired,
+            used_at=expired,
+        ),
+        _signup_verification("active-code@example.com", expires_at=future, last_sent_at=old_send),
+        _signup_verification(
+            "active-proof@example.com",
+            expires_at=expired,
+            last_sent_at=old_send,
+            proof_expires_at=future,
+        ),
+        _signup_verification(
+            "expired-proof-active-code@example.com",
+            expires_at=future,
+            last_sent_at=old_send,
+            proof_expires_at=expired,
+        ),
+        _signup_verification("recent-cooldown@example.com", expires_at=expired, last_sent_at=now),
+    ]
+    db_session.add_all(rows)
+    await db_session.commit()
+
+    deleted = await cleanup_expired_tokens(db_session)
+
+    assert deleted["signup_email_verifications"] == 2
+    remaining = {
+        row.email for row in (await db_session.exec(select(SignupEmailVerification))).all()
+    }
+    assert remaining == {
+        "active-code@example.com",
+        "active-proof@example.com",
+        "expired-proof-active-code@example.com",
+        "recent-cooldown@example.com",
+    }
+    second = await cleanup_expired_tokens(db_session)
+    assert second["signup_email_verifications"] == 0
+
+
+async def test_cleanup_signup_verification_releases_email_but_keeps_recent_cooldown(
+    db_session: AsyncSession,
+):
+    now = datetime.now(UTC)
+    db_session.add_all(
+        [
+            _signup_verification(
+                "released@example.com",
+                expires_at=now - timedelta(seconds=1),
+                last_sent_at=now - signup_service.RESEND_COOLDOWN - timedelta(seconds=1),
+            ),
+            _signup_verification(
+                "cooldown@example.com",
+                expires_at=now - timedelta(seconds=1),
+                last_sent_at=now,
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    await cleanup_expired_tokens(db_session)
+
+    released_tasks = BackgroundTasks()
+    await signup_service.send_verification("released@example.com", db_session, released_tasks)
+    assert len(released_tasks.tasks) == 1
+    with pytest.raises(signup_service.SignupCooldownError):
+        await signup_service.send_verification(
+            "cooldown@example.com", db_session, BackgroundTasks()
+        )
 
 
 def test_webhook_worker_is_registered_without_starting_scheduler():

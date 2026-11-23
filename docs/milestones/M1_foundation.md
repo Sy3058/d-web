@@ -11,6 +11,8 @@
 
 > **현재 상태**: M1은 2026-06-27 완료되고 `v0.1.0`으로 종료됐다. 아래 브랜치명·테스트 수·Opus 리뷰 문구는 당시 검증 이력이며, 현재 운영 계약은 `AGENTS.md`, `docs/DECISIONS.md`, 실제 구현과 테스트를 우선한다.
 
+> **2026-11-23 후속 변경**: 사용자 요청으로 이메일 인증번호 확인 후 계정을 만드는 순서로 변경한다. 비밀번호 재입력(#68)·표시 버튼과 API/독자 도메인 분리 시 로그인 표시도 함께 수정한다. 현재 계약과 검증 범위는 [가입 전 이메일 인증 구현](../MODULES/BE/Auth/IMPLEMENTATION_SIGNUP_PREVERIFICATION.md)을 따른다. 아래 C/E/G의 가입 후 인증 설명은 초기 구현 이력이다.
+
 ---
 
 ## 선행: 백엔드 스켈레톤 복원
@@ -193,6 +195,7 @@ git stash pop stash@{0}
 > ⚠️ AUTH-08은 PRD 우선순위상 P1이나, 다운스트림(M3 결제·M4 댓글)의 `require_verified_email` 의존성을 위해 **발송·검증 인프라는 M1에 선구현**한다 (실제 차단 적용은 M3/M4).
 
 ### E1. 이메일 발송 서비스 (Resend) ✅ 완료 (2026-06-05)
+- 2026-11-23: 신규 가입 인증번호와 중복 가입 안내는 게시 템플릿의 From·Subject를 사용한다. 기존 인증 링크 재발송 HTML은 `EMAIL_FROM`을 유지한다. 아래 가입 후 링크 인증 설명은 초기 구현 이력이다.
 - 선행: A1, A4
 - 산출물: `services/email_service.py` (httpx 비동기 호출), 인증 메일 템플릿. 구현: [IMPLEMENTATION_EMAIL.md](../MODULES/BE/Auth/IMPLEMENTATION_EMAIL.md)
 - DoD: 가입 시 `email_verifications`에 1시간 토큰 insert + 메일 발송 → 수신함 도착 확인

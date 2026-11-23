@@ -4,10 +4,10 @@ import { createRoot, hydrateRoot, type Root } from 'react-dom/client';
 import { renderToString } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { getBrowserGuestWorkProgress, getWorkProgress, isLoggedIn } = vi.hoisted(() => ({
+const { getBrowserGuestWorkProgress, getWorkProgress, restoreViewerSession } = vi.hoisted(() => ({
   getBrowserGuestWorkProgress: vi.fn(),
   getWorkProgress: vi.fn(),
-  isLoggedIn: vi.fn(),
+  restoreViewerSession: vi.fn(),
 }));
 
 vi.mock('@/lib/guestProgress', () => ({ getBrowserGuestWorkProgress }));
@@ -17,10 +17,7 @@ vi.mock('@/lib/workProgress', async (importOriginal) => {
   return { ...original, getWorkProgress };
 });
 
-vi.mock('@/lib/viewer', async (importOriginal) => {
-  const original = await importOriginal<typeof import('@/lib/viewer')>();
-  return { ...original, isLoggedIn };
-});
+vi.mock('@/lib/viewerSession', () => ({ restoreViewerSession }));
 
 import WorkExperience from './WorkExperience';
 
@@ -45,7 +42,7 @@ beforeEach(() => {
     .IS_REACT_ACT_ENVIRONMENT = true;
   getWorkProgress.mockReset();
   getBrowserGuestWorkProgress.mockReset();
-  isLoggedIn.mockReset();
+  restoreViewerSession.mockReset();
   getBrowserGuestWorkProgress.mockReturnValue({ readEpisodeIds: [], lastEpisodeId: null });
   container = document.createElement('div');
   document.body.append(container);
@@ -72,7 +69,7 @@ describe('WorkExperience', () => {
   });
 
   it('공개 HTML hydration 뒤 구매 배지를 한 요청으로 갱신한다', async () => {
-    isLoggedIn.mockReturnValue(true);
+    restoreViewerSession.mockResolvedValue(true);
     getWorkProgress.mockResolvedValue({ read_episode_ids: [], purchased_episode_ids: ['b'], last_episode: null });
     await act(async () => root.unmount());
     container.innerHTML = renderToString(<WorkExperience workId="work-a" episodes={episodes} order="asc" pathname="/works/work-a" />);
@@ -86,7 +83,7 @@ describe('WorkExperience', () => {
   });
 
   it('비로그인은 API 요청 없이 로컬 0% 진행도와 첫 화 CTA를 표시한다', async () => {
-    isLoggedIn.mockReturnValue(false);
+    restoreViewerSession.mockResolvedValue(false);
     await renderProgress();
 
     expect(getWorkProgress).not.toHaveBeenCalled();
@@ -100,7 +97,7 @@ describe('WorkExperience', () => {
   });
 
   it('비로그인은 가장 최근에 연 공개 회차 자체로 이어 본다', async () => {
-    isLoggedIn.mockReturnValue(false);
+    restoreViewerSession.mockResolvedValue(false);
     getBrowserGuestWorkProgress.mockReturnValue({
       readEpisodeIds: ['a', 'b'],
       lastEpisodeId: 'b',
@@ -118,7 +115,7 @@ describe('WorkExperience', () => {
   });
 
   it('stale login_hint의 401 결과는 공개 첫 화 CTA로 폴백한다', async () => {
-    isLoggedIn.mockReturnValue(true);
+    restoreViewerSession.mockResolvedValue(true);
     getWorkProgress.mockResolvedValue(null);
     await renderProgress();
 
@@ -128,7 +125,7 @@ describe('WorkExperience', () => {
   });
 
   it('진행도 0건은 0% 바와 제목이 붙은 첫 화 CTA를 표시한다', async () => {
-    isLoggedIn.mockReturnValue(true);
+    restoreViewerSession.mockResolvedValue(true);
     getWorkProgress.mockResolvedValue({ read_episode_ids: [], last_episode: null });
     await renderProgress();
 
@@ -140,7 +137,7 @@ describe('WorkExperience', () => {
   });
 
   it('정상 응답은 clamp된 진행률과 다음 화 제목·링크를 표시한다', async () => {
-    isLoggedIn.mockReturnValue(true);
+    restoreViewerSession.mockResolvedValue(true);
     getWorkProgress.mockResolvedValue({
       read_episode_ids: ['a', 'a', 'b', 'c', 'stale'],
       last_episode: { id: 'c', public_id: 87654321, title: '달빛 아래 재회' },
@@ -157,7 +154,7 @@ describe('WorkExperience', () => {
   });
 
   it('읽기 이력 없는 구매도 한 번의 요청으로 표시하고 잠금과 가격을 없앤다', async () => {
-    isLoggedIn.mockReturnValue(true);
+    restoreViewerSession.mockResolvedValue(true);
     getWorkProgress.mockResolvedValue({ read_episode_ids: [], purchased_episode_ids: ['b', 'a'], last_episode: null });
     await renderProgress();
     const purchased = container.querySelector('[data-episode-id="b"]');
@@ -170,7 +167,7 @@ describe('WorkExperience', () => {
   });
 
   it('로컬 구매 위조는 무료·잠금 배지에 영향을 주지 않는다', async () => {
-    isLoggedIn.mockReturnValue(false);
+    restoreViewerSession.mockResolvedValue(false);
     getBrowserGuestWorkProgress.mockReturnValue({ readEpisodeIds: ['b'], lastEpisodeId: 'b', purchased_episode_ids: ['b'] });
     await renderProgress();
     expect(container.textContent).not.toContain('구매완료');
@@ -179,7 +176,7 @@ describe('WorkExperience', () => {
   });
 
   it.each([null, new Error('503')])('인증 만료와 서버 오류는 구매 표시 없이 공개 목록을 유지한다: %s', async (result) => {
-    isLoggedIn.mockReturnValue(true);
+    restoreViewerSession.mockResolvedValue(true);
     if (result instanceof Error) getWorkProgress.mockRejectedValue(result);
     else getWorkProgress.mockResolvedValue(result);
     await renderProgress();
@@ -188,14 +185,14 @@ describe('WorkExperience', () => {
   });
 
   it('최신순 목록도 작가 순서의 첫 화 CTA를 유지한다', async () => {
-    isLoggedIn.mockReturnValue(false);
+    restoreViewerSession.mockResolvedValue(false);
     await act(async () => root.render(<WorkExperience workId="work-a" episodes={episodes} order="desc" pathname="/works/work-a" />));
     expect(container.querySelector('[data-episode-id]')?.getAttribute('data-episode-id')).toBe('d');
     expect(container.querySelector('[data-floating-reading-cta] a')?.getAttribute('href')).toBe('/works/work-a/11111111');
   });
 
   it('작품 전환 시 기존 배지를 즉시 지우고 늦은 이전 응답을 무시한다', async () => {
-    isLoggedIn.mockReturnValue(true);
+    restoreViewerSession.mockResolvedValue(true);
     let resolveOld: (value: unknown) => void = () => undefined;
     getWorkProgress.mockReturnValueOnce(new Promise((resolve) => { resolveOld = resolve; }));
     getWorkProgress.mockResolvedValueOnce({ read_episode_ids: [], purchased_episode_ids: ['b'], last_episode: null });
@@ -210,7 +207,7 @@ describe('WorkExperience', () => {
   });
 
   it('unmount 뒤 늦은 응답은 상태를 갱신하지 않는다', async () => {
-    isLoggedIn.mockReturnValue(true);
+    restoreViewerSession.mockResolvedValue(true);
     let resolveRequest: (value: {
       read_episode_ids: string[];
       last_episode: null;

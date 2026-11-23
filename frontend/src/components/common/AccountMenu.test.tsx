@@ -38,6 +38,23 @@ async function openMenu() {
 }
 
 describe('AccountMenu', () => {
+  it('프론트엔드에 힌트가 없어도 서버 세션의 닉네임을 표시한다', async () => {
+    vi.mocked(getMe).mockResolvedValue({ nickname: 'API 독자' } as User);
+    await act(async () => root.render(<AccountMenu />));
+    expect(getMe).toHaveBeenCalledOnce();
+    expect(container.querySelector('button')?.textContent).toBe('API 독자');
+  });
+
+  it('힌트 없는 서버 확인의 일시 장애도 기존 계정 표시를 지우지 않는다', async () => {
+    document.cookie = 'login_hint=독자; Path=/';
+    vi.mocked(getMe).mockResolvedValueOnce({ nickname: '서버 독자' } as User);
+    await act(async () => root.render(<AccountMenu />));
+    document.cookie = 'login_hint=; Max-Age=0; Path=/';
+    vi.mocked(getMe).mockRejectedValueOnce(new TypeError('network'));
+    await act(async () => window.dispatchEvent(new Event('focus')));
+    expect(container.querySelector('button')?.textContent).toBe('서버 독자');
+  });
+
   it('힌트가 남아 있어도 갱신 후 최종 인증 실패면 로그인 표시로 바꾼다', async () => {
     document.cookie = 'login_hint=old-reader; Path=/';
     vi.mocked(getMe).mockResolvedValue(null);
@@ -116,12 +133,12 @@ describe('AccountMenu', () => {
     expect(container.querySelector('a')?.getAttribute('href')).toBe('/auth/login');
   });
 
-  it('뷰어 컨트롤을 다시 표시할 때 쿠키 변경을 반영하되 같은 힌트는 재조회하지 않는다', async () => {
+  it('뷰어 컨트롤을 다시 표시할 때 힌트와 무관하게 서버 상태를 재조회한다', async () => {
     document.cookie = 'login_hint=reader; Path=/';
     await act(async () => root.render(<AccountMenu visible />));
     await act(async () => root.render(<AccountMenu visible={false} />));
     await act(async () => root.render(<AccountMenu visible />));
-    expect(getMe).toHaveBeenCalledOnce();
+    expect(getMe).toHaveBeenCalledTimes(2);
     await act(async () => root.render(<AccountMenu visible={false} />));
     document.cookie = 'login_hint=; Max-Age=0; Path=/';
     await act(async () => root.render(<AccountMenu visible />));

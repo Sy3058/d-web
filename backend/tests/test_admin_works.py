@@ -36,6 +36,7 @@ async def owner(db_session: AsyncSession) -> User:
     """TOTP 활성 owner. require_owner 통과 조건(role=owner + totp_confirmed_at NOT NULL)."""
     user = await auth_service.create_user("owner@example.com", "OwnerPass1!", "작가", db_session)
     user.role = RoleEnum.OWNER
+    user.is_email_verified = True
     user.totp_confirmed_at = datetime.now(UTC)
     db_session.add(user)
     await db_session.commit()

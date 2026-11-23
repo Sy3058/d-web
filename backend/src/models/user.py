@@ -13,10 +13,12 @@ from enum import StrEnum
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    CheckConstraint,
     Column,
     DateTime,
     ForeignKey,
     Index,
+    Integer,
     String,
     Text,
     UniqueConstraint,
@@ -185,6 +187,48 @@ class EmailVerification(SQLModel, table=True):
     used_at: datetime | None = Field(
         default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
     )
+
+
+class SignupEmailVerification(SQLModel, table=True):
+    """User 생성 전 이메일 코드 검증과 가입 증명을 보관한다."""
+
+    __tablename__ = "signup_email_verifications"
+    __table_args__ = (
+        Index("uq_signup_email_verifications_email", "email", unique=True),
+        Index("uq_signup_email_verifications_challenge_id", "challenge_id", unique=True),
+        Index("uq_signup_email_verifications_token_hash", "token_hash", unique=True),
+        Index("uq_signup_email_verifications_proof_hash", "proof_hash", unique=True),
+        CheckConstraint(
+            "attempts >= 0 AND attempts <= 5",
+            name="ck_signup_email_verifications_attempts",
+        ),
+    )
+
+    id: uuid.UUID | None = Field(default=None, sa_column=_pk_column())
+    email: str = Field(sa_column=Column(String(255), nullable=False))
+    challenge_id: uuid.UUID | None = Field(
+        default=None,
+        sa_column=Column(
+            PgUUID(as_uuid=True),
+            nullable=False,
+            server_default=text("gen_random_uuid()"),
+        ),
+    )
+    token_hash: str = Field(sa_column=Column(String(64), nullable=False))
+    attempts: int = Field(
+        default=0,
+        sa_column=Column(Integer, nullable=False, server_default=text("0")),
+    )
+    expires_at: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False))
+    last_sent_at: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False))
+    proof_hash: str | None = Field(default=None, sa_column=Column(String(64), nullable=True))
+    proof_expires_at: datetime | None = Field(
+        default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
+    )
+    used_at: datetime | None = Field(
+        default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
+    )
+    created_at: datetime | None = Field(default=None, sa_column=_created_at_column())
 
 
 class TrustedDevice(SQLModel, table=True):

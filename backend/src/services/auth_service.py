@@ -30,7 +30,6 @@ import structlog
 from anyio import to_thread
 from fastapi import BackgroundTasks
 from sqlalchemy import update
-from sqlalchemy.exc import IntegrityError
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -40,12 +39,11 @@ from src.lib.exceptions import (
     EmailVerificationError,
     InvalidCredentialsError,
     InvalidTokenError,
-    PwnedPasswordError,
     RefreshRotationConflictError,
     TokenReuseError,
 )
 from src.models.user import EmailVerification, RefreshToken, RoleEnum, User
-from src.services import email_service, hibp
+from src.services import email_service
 
 logger = structlog.get_logger(__name__)
 
@@ -324,47 +322,6 @@ async def create_user(email: str, password: str, nickname: str, session: AsyncSe
     return user
 
 
-async def signup(
-    email: str,
-    password: str,
-    nickname: str,
-    session: AsyncSession,
-    background_tasks: BackgroundTasks,
-) -> None:
-    """회원가입. 비열거: 신규/중복 모두 호출자는 동일 응답을 반환한다.
-
-    - 유출 비번(HIBP) → PwnedPasswordError (이메일 존재와 무관 → 422 노출 안전)
-    - 신규: 미인증 user 생성 + 인증 토큰 발급 → commit 후 인증 메일(백그라운드)
-    - 중복: user 생성 안 함 + 더미 해시로 타이밍 평탄화 + '이미 가입됨' 안내 메일
-    - 동시 가입 race(선체크 통과 후 UNIQUE 충돌): rollback 후 중복과 동일하게 수렴(비열거)
-    메일 발송은 BackgroundTasks라 DB commit 이후 실행(메일 실패가 가입을 롤백 안 함).
-    """
-    email = _normalize_email(email)
-    if await hibp.is_password_pwned(password):
-        raise PwnedPasswordError
-
-    existing = await get_user_by_email(email, session)
-    if existing is not None:
-        await _dummy_verify()  # 신규 경로의 bcrypt 비용과 시간 정합
-        background_tasks.add_task(email_service.send_already_registered_email, email)
-        return
-
-    try:
-        user = await create_user(email, password, nickname, session)
-        raw_token = await create_email_verification(user.id, session)
-        await session.commit()
-    except IntegrityError:
-        # 동시 가입 race 패자: get_user_by_email가 None을 본 직후 다른 요청이 같은 이메일을
-        # 먼저 commit → users.email UNIQUE 위반. 신규(인증 메일)와 응답이 갈리면 비열거가
-        # 깨지므로 rollback 후 중복 경로와 동일하게 수렴시킨다(패자는 이미 create_user에서
-        # bcrypt 비용을 냈으니 별도 _dummy_verify는 불필요).
-        await session.rollback()
-        background_tasks.add_task(email_service.send_already_registered_email, email)
-        return
-
-    background_tasks.add_task(email_service.send_verification_email, email, raw_token)
-
-
 async def resend_verification(
     email: str,
     session: AsyncSession,
@@ -439,6 +396,9 @@ async def login(email: str, password: str, session: AsyncSession) -> tuple[User,
 
     user = await revalidate_password_user(user, password, session)
 
+    if not user.is_email_verified:
+        raise InvalidCredentialsError
+
     if requires_totp_login(user):
         # owner가 일반 로그인으로 세션을 열면 2FA가 우회된다 -> /admin/login 전용.
         # 응답은 다른 실패와 동일한 401(비열거 연장 - 올바른 비번 소지자에게도 '이 계정이
@@ -480,7 +440,7 @@ async def rotate_refresh(raw: str, session: AsyncSession) -> tuple[User, str, st
     # 최초 조회의 revoked 상태를 유지한다. User 잠금 대기 후 최신 revoked를 읽어
     # 정상 동시 회전 패자를 재사용 공격으로 바꾸면 승자의 새 쿠키까지 지워진다.
     user = await lock_user(record.user_id, session)
-    if user is None:
+    if user is None or not user.is_email_verified:
         raise InvalidTokenError
 
     # 제출된 토큰 자체가 이미 죽음(stale): 회전이 지난 토큰의 재제출 = 탈취 신호.

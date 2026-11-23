@@ -1,5 +1,11 @@
 # 이메일 발송 서비스 (M1 그룹 E - E1)
 
+> 2026-11-23: 신규 가입의 6자리 인증번호는 Resend의 게시된 `email-verification` 템플릿과
+> 문자열 변수 `verifycode`로 발송한다. 중복 가입 안내는 `already-registered` 템플릿과
+> 문자열 변수 `loginurl`로 발송한다. 두 요청은 `from`·`subject`를 생략해 템플릿 설정을 사용한다.
+> 기존 계정용 인증 링크 재발송 HTML은 `EMAIL_FROM`을 사용하므로 해당 환경변수는 유지한다.
+> 현재 가입 계약은 [가입 전 이메일 인증 구현](./IMPLEMENTATION_SIGNUP_PREVERIFICATION.md)을 따른다.
+
 | 항목 | 내용 |
 |------|------|
 | 모듈 | Backend / Auth |

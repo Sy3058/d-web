@@ -167,7 +167,7 @@ def webhook_body(event_type="Transaction.Paid", payment_id="entrypoint-payment")
 async def test_complete_verifies_provider_and_duplicate_grants_once(
     api, order, user, provider, session_factory
 ):
-    assert user.is_email_verified is False
+    assert user.is_email_verified is True
     login(api, user.id)
     for _ in range(2):
         response = await api.post(f"/payments/{order.payment_id}/complete")
@@ -178,13 +178,26 @@ async def test_complete_verifies_provider_and_duplicate_grants_once(
     assert len(logs) == 2
     assert all(log.source == "browser" for log in logs)
     assert provider.gets == [(order.payment_id, "entrypoint-store")] * 2
-    assert provider.closed
+
+
+async def test_unverified_user_is_denied_before_provider_call(
+    api, order, user, provider, db_session
+):
+    user.is_email_verified = False
+    db_session.add(user)
+    await db_session.commit()
+    login(api, user.id)
+    response = await api.post(f"/payments/{order.payment_id}/complete")
+    assert response.status_code == 401
+    assert provider.gets == []
+    # 인증에서 거부되어 provider dependency 자체가 열리지 않는다.
+    assert not provider.closed
 
 
 @pytest.mark.parametrize("case", ["anonymous", "other_owner", "other_environment", "missing"])
 async def test_complete_access_boundary(api, order, user, db_session, provider, case):
     if case == "other_owner":
-        other = User(email="other@example.com", nickname="other")
+        other = User(email="other@example.com", nickname="other", is_email_verified=True)
         db_session.add(other)
         await db_session.commit()
         login(api, other.id)

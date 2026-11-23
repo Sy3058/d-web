@@ -22,6 +22,7 @@ from .user import (
     OAuthAccount,
     RefreshToken,
     RoleEnum,
+    SignupEmailVerification,
     User,
     UserRead,
 )
@@ -39,6 +40,7 @@ __all__ = [
     "OAuthAccount",
     "RefreshToken",
     "EmailVerification",
+    "SignupEmailVerification",
     "UserRead",
     "RoleEnum",
     "Work",

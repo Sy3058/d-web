@@ -6,7 +6,6 @@ vi.mock('./api', async (importOriginal) => {
   const original = await importOriginal<typeof import('./api')>();
   return { ...original, api: { ...original.api, get: apiGet, put: apiPut } };
 });
-
 import { ApiError } from './api';
 import {
   calculateBlockOffsetBp,
@@ -14,7 +13,6 @@ import {
   clampBlockIndex,
   getEpisodeContent,
   imageFetchPriority,
-  isLoggedIn,
   putProgress,
 } from './viewer';
 
@@ -42,7 +40,6 @@ describe('getEpisodeContent', () => {
     await expect(getEpisodeContent('episode-a')).rejects.toBe(networkError);
   });
 });
-
 describe('putProgress', () => {
   it('블록 인덱스와 내부 오프셋을 함께 전송한다', async () => {
     apiPut.mockResolvedValue(undefined);
@@ -102,23 +99,5 @@ describe('block-local progress', () => {
     expect(calculateBlockRestoreY(1000, 5400, 6000)).toBe(4240);
     expect(calculateBlockRestoreY(1000, 5400, -1)).toBe(1000);
     expect(calculateBlockRestoreY(1000, 5400, 20_000)).toBe(6400);
-  });
-});
-
-describe('isLoggedIn', () => {
-  it('login_hint 쿠키가 있으면 true', () => {
-    expect(isLoggedIn('login_hint=%EB%8F%84%EA%B5%B0')).toBe(true);
-  });
-
-  it('다른 쿠키들 사이에 섞여 있어도 찾는다', () => {
-    expect(isLoggedIn('theme=dark; login_hint=abc; foo=bar')).toBe(true);
-  });
-
-  it('없으면 false', () => {
-    expect(isLoggedIn('theme=dark; foo=bar')).toBe(false);
-  });
-
-  it('빈 문자열이면 false', () => {
-    expect(isLoggedIn('')).toBe(false);
   });
 });

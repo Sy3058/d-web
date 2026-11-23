@@ -80,6 +80,38 @@ email_verifications
 └── used_at    TIMESTAMPTZ            -- NULL = 미사용
 ```
 
+### signup_email_verifications
+
+2026-11-23 가입 순서 변경. User를 생성하기 전에 Resend로 받은 6자리 인증번호로 이메일
+소유권을 확인한다. 이메일 하나당 최신 challenge와 일회성 가입 증명을 보관한다.
+
+```sql
+signup_email_verifications
+├── id               UUID PRIMARY KEY DEFAULT gen_random_uuid()
+├── email            VARCHAR(255) NOT NULL  -- 정규화, UNIQUE
+├── challenge_id     UUID NOT NULL DEFAULT gen_random_uuid()  -- UNIQUE, 재발송 시 교체
+├── token_hash       VARCHAR(64) NOT NULL   -- challenge + 인증번호 HMAC, UNIQUE
+├── attempts         INTEGER NOT NULL DEFAULT 0  -- 실패 횟수, 0..5
+├── expires_at       TIMESTAMPTZ NOT NULL   -- 인증번호 발급 + 10분
+├── last_sent_at     TIMESTAMPTZ NOT NULL   -- 재발송 간격 최소 60초
+├── proof_hash       VARCHAR(64)           -- 인증 후 HttpOnly 증명 HMAC, UNIQUE
+├── proof_expires_at TIMESTAMPTZ           -- 인증 성공 + 15분
+├── used_at          TIMESTAMPTZ           -- 최종 가입 시 소비, NULL = 아직 미소비
+└── created_at       TIMESTAMPTZ DEFAULT now()
+```
+
+오답 시도와 재발송·인증은 행 잠금으로 직렬화한다. 오답 횟수는 오류 응답 전에 commit하며
+재시도·다른 IP로 우회할 수 없다. `proof_hash`가 있으면 이미 인증된 challenge라 재사용할 수
+없다. 최종 가입은 잠근 최신 증명으로 이메일·만료·미소비를 확인하고 User 생성과 증명 소비를
+함께 commit한다. 인증번호 발송·확인만으로 User를 만들지 않는다.
+
+기존 토큰 정리 작업(기동 직후와 24시간마다)이 만료된 가입 인증 행도 삭제한다.
+코드 만료, 증명 미발급 또는 만료, 마지막 발송 후 60초 경과를 모두 만족해야 삭제하며
+유효한 증명과 재발송 제한에 필요한 행은 유지한다.
+
+이미 적용한 초기 revision `a3b8c9d0e1f2`를 수정하지 않고 후속 migration으로 challenge와
+시도 횟수를 추가한다. [HTTP·화면 계약](MODULES/BE/Auth/IMPLEMENTATION_SIGNUP_PREVERIFICATION.md)을 참조한다.
+
 ### trusted_devices
 관리자 신뢰 기기 - "이 기기에서 30일간 2단계 인증 생략" (M1.5 B3). TOTP 검증 성공 시
 옵트인 발급, `/admin/login` 1단계가 유효 행을 확인하면 TOTP 생략(비번은 여전히 필수).

@@ -110,6 +110,7 @@ M4 (커뮤니티 - 후원 제외)
 - [x] **council 리뷰 fix (선존 이슈, #28)** - ~~refresh 회전 race 원자화 🔴 (I1 ✅)~~ → ~~인증 표면 rate limit IP (I2 ✅)~~ → ~~CORS(I3) ✅~~ → ~~죽은 테스트 픽스처 + 회전 실측 동시성 테스트(I4) ✅~~. 상세는 M1_foundation.md 그룹 I
 
 ### 프론트엔드 (Astro + React 아일랜드)
+- 2026-11-23 후속 변경: 이메일 인증번호를 먼저 확인한 뒤 계정을 생성하도록 순서 변경. 비밀번호 확인(#68)·표시 버튼과 도메인 분리 시 로그인 표시를 함께 수정한다. [현재 가입·세션 계약](../MODULES/BE/Auth/IMPLEMENTATION_SIGNUP_PREVERIFICATION.md)
 - [x] 회원가입 / 로그인 페이지 (이메일 + 구글 버튼) (G1/G2, RHF+Zod, 구글 버튼은 백엔드 login-init 링크)
 - [x] 구글 로그인 실패 표시 (G3, BFF - 프론트 콜백 페이지 없음, `login.astro`가 `?error=` 표시)
 - [x] 이메일 인증 안내 페이지 + 재발송 버튼 (G4, `verify-email.astro` + VerifyEmail 아일랜드, 429 표시)

@@ -30,6 +30,7 @@ export default function AccountMenu({ compact = false, visible = true }: Props) 
   const lastHint = useRef('');
   const logoutLock = useRef(false);
   const syncVisibleHint = useRef<(() => void) | null>(null);
+  const visibilityInitialized = useRef(false);
   if (previousVisible !== visible) {
     setPreviousVisible(visible);
     if (!visible) setOpen(false);
@@ -40,10 +41,9 @@ export default function AccountMenu({ compact = false, visible = true }: Props) 
       if (logoutLock.current) return;
       const currentRevision = ++revision.current;
       const name = readLoginHint();
-      if (lastHint.current !== name || !name) setNickname(name);
+      if (name && lastHint.current !== name) setNickname(name);
       lastHint.current = name;
       setOpen(false);
-      if (!name) return;
       void getMe().then((user) => {
         if (currentRevision !== revision.current) return;
         setNickname(user?.nickname ?? '');
@@ -55,9 +55,7 @@ export default function AccountMenu({ compact = false, visible = true }: Props) 
       if (event.persisted) updateLoginHint();
     };
     updateLoginHint();
-    syncVisibleHint.current = () => {
-      if (readLoginHint() !== lastHint.current) updateLoginHint();
-    };
+    syncVisibleHint.current = updateLoginHint;
     window.addEventListener('focus', updateLoginHint);
     window.addEventListener('pageshow', pageShow);
     window.addEventListener('dweb:account-updated', updateLoginHint);
@@ -70,7 +68,10 @@ export default function AccountMenu({ compact = false, visible = true }: Props) 
     };
   }, []);
 
-  useLayoutEffect(() => { syncVisibleHint.current?.(); }, [visible]);
+  useLayoutEffect(() => {
+    if (visibilityInitialized.current && visible) syncVisibleHint.current?.();
+    visibilityInitialized.current = true;
+  }, [visible]);
 
   async function handleLogout() {
     if (logoutLock.current) return;

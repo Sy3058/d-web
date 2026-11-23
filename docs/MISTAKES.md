@@ -98,7 +98,7 @@ docs/MISTAKES.md 참고해서 FastAPI 라우터 작성해줘
   → 최초 me 요청 실패뿐 아니라 refresh 단계 실패도 raw fetch로 재현한다. 장애 중 bootstrap·content 요청 0과 오류 UI, 실패 뒤 in-flight 해제 및 명시적 재시도 성공을 함께 확인한다.
 
 - **계정 SSR의 401은 브라우저 세션 만료를 확정하지 못한다** (2026-11-19)
-  → refresh 쿠키는 Path=/auth/refresh라 /my 요청에 없다. SSR에서 쿠키 없는 refresh를 시도하고 로그인으로 보내면 유효한 refresh와 표시용 닉네임이 남아 상태가 어긋난다. SSR은 access 조회만 하고 브라우저에서 복구한다. 메뉴도 힌트만으로 로그인 상태를 확정하지 않는다. 서버 조회의 refresh 호출 0, 브라우저 갱신 성공/최종401/장애 구분과 늦은 메뉴 응답 무시를 검사한다.
+  → refresh 쿠키는 Path=/auth/refresh라 /my 요청에 없다. SSR에서 쿠키 없는 refresh를 시도하고 로그인으로 보내면 유효한 refresh와 표시용 닉네임이 남아 상태가 어긋난다. SSR은 access 조회만 하고 브라우저에서 복구한다. 메뉴도 힌트만으로 로그인 상태를 확정하지 않는다. API와 프런트가 다른 호스트면 host-only `login_hint`는 프런트에서 읽을 수 없으므로, 힌트가 없다고 계정 확인 요청이나 서버 진행도를 생략하지 않는다(2026-11-23 스테이징에서 확인). 서버 조회의 refresh 호출 0, 힌트 없는 브라우저 갱신 성공/최종401/장애 구분과 늦은 메뉴 응답 무시를 검사한다.
 
 - **Promise 성공 경로만 렌더 상태를 바꾸면 rejection이 영구 로딩으로 굳는다** (#116, 2026-08-17)
   → 실제 사고: 회차 콘텐츠 초기 요청과 이미지 URL 재발급 요청이 `then`만 사용했다. `getEpisodeContent`가 의도대로 네트워크 오류와 5xx를 throw하자 rejection은 처리되지 않았고, `content=undefined`가 계속 loading을 뜻해 오류 안내 없이 무한 로딩됐다

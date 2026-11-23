@@ -52,13 +52,18 @@ async def test_send_skips_when_no_api_key(mock_post, clear_api_key):
     mock_post.assert_not_called()
 
 
-async def test_send_calls_resend_when_api_key_set(mock_post, set_api_key):
-    await email_service._send("user@example.com", "제목", "<p>본문</p>")
+async def test_send_calls_resend_when_api_key_set(monkeypatch, mock_post, set_api_key):
+    monkeypatch.setattr(email_service.settings, "email_from", "legacy@example.com")
+    html = "<p>본문</p>"
+    await email_service._send("user@example.com", "제목", html)
     mock_post.assert_called_once()
     call_kwargs = mock_post.call_args
     payload = call_kwargs.kwargs["json"]
     assert payload["to"] == ["user@example.com"]
     assert payload["subject"] == "제목"
+    assert payload["html"] == html
+    assert payload["from"] == "legacy@example.com"
+    assert "template" not in payload
 
 
 async def test_send_uses_bearer_auth(mock_post, set_api_key):
@@ -94,6 +99,55 @@ async def test_send_fail_open_on_http_error(monkeypatch, set_api_key):
 # ---------------------------------------------------------------------------
 
 
+async def test_signup_verification_email_uses_published_template(
+    monkeypatch, mock_post, set_api_key
+):
+    monkeypatch.setattr(email_service.settings, "email_from", "legacy@example.com")
+    await email_service.send_signup_code_email("user@example.com", "012345")
+
+    payload = mock_post.call_args.kwargs["json"]
+    assert payload == {
+        "to": ["user@example.com"],
+        "template": {
+            "id": "email-verification",
+            "variables": {"verifycode": "012345"},
+        },
+    }
+    assert not ({"from", "subject", "html", "text", "react"} & payload.keys())
+
+
+async def test_signup_verification_email_skips_without_api_key(mock_post, clear_api_key):
+    await email_service.send_signup_code_email("user@example.com", "012345")
+
+    mock_post.assert_not_called()
+
+
+async def test_signup_verification_email_http_error_is_fail_open_and_sanitized(
+    monkeypatch, set_api_key
+):
+    import httpx
+
+    mock_response = MagicMock()
+    mock_response.raise_for_status.side_effect = httpx.HTTPStatusError(
+        "403", request=MagicMock(), response=MagicMock()
+    )
+    mock_client = AsyncMock()
+    mock_client.post = AsyncMock(return_value=mock_response)
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=None)
+    mock_logger = MagicMock()
+    monkeypatch.setattr(email_service, "logger", mock_logger)
+
+    with patch("src.services.email_service.httpx.AsyncClient", return_value=mock_client):
+        await email_service.send_signup_code_email("private@example.com", "012345")
+
+    logged = repr(mock_logger.method_calls)
+    assert "email_send_failed_fail_open" in logged
+    assert "012345" not in logged
+    assert "re_test_key" not in logged
+    assert "private@example.com" not in logged
+
+
 async def test_verification_email_token_in_url(monkeypatch, set_api_key):
     """인증 메일 HTML에 토큰 원문이 verify-email URL에 포함돼야 한다."""
     sent: dict = {}
@@ -125,23 +179,27 @@ async def test_verification_email_to_address(monkeypatch, set_api_key):
 # ---------------------------------------------------------------------------
 
 
-async def test_already_registered_email_has_login_link(monkeypatch, set_api_key):
-    sent: dict = {}
-
-    async def capture(to, subject, html):
-        sent.update({"html": html, "subject": subject})
-
-    monkeypatch.setattr(email_service, "_send", capture)
+async def test_already_registered_email_uses_published_template(
+    monkeypatch, mock_post, set_api_key
+):
+    monkeypatch.setattr(email_service.settings, "email_from", "legacy@example.com")
     await email_service.send_already_registered_email("user@example.com")
 
-    assert "/auth/login" in sent["html"]
-    assert "이미 가입" in sent["subject"]
+    payload = mock_post.call_args.kwargs["json"]
+    assert payload == {
+        "to": ["user@example.com"],
+        "template": {
+            "id": "already-registered",
+            "variables": {"loginurl": f"{email_service.settings.app_base_url}/auth/login"},
+        },
+    }
+    assert not ({"from", "subject", "html", "text", "react"} & payload.keys())
 
 
 async def test_already_registered_email_to_address(monkeypatch, set_api_key):
     sent: dict = {}
 
-    async def capture(to, subject, html):
+    async def capture(to, *, template):
         sent["to"] = to
 
     monkeypatch.setattr(email_service, "_send", capture)

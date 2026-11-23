@@ -18,18 +18,23 @@ export interface ViewerBootstrap {
   next_episode: BootstrapEpisodeLink | null;
 }
 
-// effect에서 읽은 힌트는 세션 복구 시도에만 쓰고 실제 권한은 서버가 확인한다.
+export interface ViewerBootstrapResult {
+  bootstrap: ViewerBootstrap;
+  authenticated: boolean;
+}
+
+// bootstrap보다 먼저 API 세션을 확인해 이후 개인 UI도 같은 서버 판정을 사용한다.
 export async function getViewerBootstrap(
   workId: string,
   publicId: number,
-  cookieString: string,
-): Promise<ViewerBootstrap | null> {
-  await restoreViewerSession(cookieString);
+): Promise<ViewerBootstrapResult | null> {
+  const authenticated = await restoreViewerSession();
   try {
-    return await api.get<ViewerBootstrap>(
+    const bootstrap = await api.get<ViewerBootstrap>(
       `/works/${encodeURIComponent(workId)}/episodes/${publicId}/viewer-bootstrap`,
       { cache: 'no-store' },
     );
+    return { bootstrap, authenticated };
   } catch (error) {
     if (error instanceof ApiError && (error.status === 404 || error.status === 422)) {
       return null;

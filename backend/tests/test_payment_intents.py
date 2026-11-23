@@ -509,7 +509,7 @@ async def test_http_auth_validation_kill_switch_and_rate_limit(
     db_session.add(user)
     await db_session.commit()
     response = await async_client.post(url, json=payload)
-    assert response.status_code == 403 and response.headers["cache-control"] == "no-store"
+    assert response.status_code == 401 and response.headers["cache-control"] == "no-store"
     user.is_email_verified = True
     db_session.add(user)
     await db_session.commit()

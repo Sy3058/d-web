@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import pytest_asyncio
-from fastapi import BackgroundTasks, HTTPException
+from fastapi import HTTPException
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -22,8 +22,9 @@ from src.lib.auth import (
     create_access_token,
     require_verified_email,
 )
-from src.models.user import EmailVerification, RefreshToken, User
-from src.services import auth_service, email_service, hibp
+from src.lib.signup_verification import cookie_name as signup_cookie_name
+from src.models.user import EmailVerification, RefreshToken, SignupEmailVerification, User
+from src.services import auth_service, email_service, hibp, signup_service
 from tests.conftest import (
     EXISTING_USER_EMAIL,
     EXISTING_USER_NICKNAME,
@@ -42,10 +43,17 @@ _LOGIN = {"email": EXISTING_USER_EMAIL, "password": EXISTING_USER_PASSWORD}
 def externals(monkeypatch) -> SimpleNamespace:
     """이메일 발송 함수를 mock(HIBP는 conftest _stub_hibp가 전역 stub). 호출 검증용 핸들 반환."""
     verification = AsyncMock()
+    signup_mail = AsyncMock()
     already = AsyncMock()
     monkeypatch.setattr(email_service, "send_verification_email", verification)
+    monkeypatch.setattr(email_service, "send_signup_code_email", signup_mail)
     monkeypatch.setattr(email_service, "send_already_registered_email", already)
-    return SimpleNamespace(verification=verification, already=already, monkeypatch=monkeypatch)
+    return SimpleNamespace(
+        verification=verification,
+        signup_mail=signup_mail,
+        already=already,
+        monkeypatch=monkeypatch,
+    )
 
 
 @pytest_asyncio.fixture
@@ -76,37 +84,123 @@ async def _refresh_tokens(session: AsyncSession, user_id) -> list[RefreshToken]:
 # --- C1 회원가입 ------------------------------------------------------------
 
 
-async def test_signup_new_creates_unverified_user(async_client, db_session, externals):
-    resp = await async_client.post(
-        "/auth/signup",
-        json={"email": "New@Example.com", "password": "Passw0rd!", "nickname": "n"},
+async def _verify_signup_email(async_client, externals, email="New@Example.com"):
+    issued = await async_client.post("/auth/signup/send-verification", json={"email": email})
+    assert issued.status_code == 200
+    normalized, code = externals.signup_mail.await_args.args
+    assert normalized == email.lower()
+    verified = await async_client.post(
+        "/auth/signup/verify-email",
+        json={"challenge_id": issued.json()["challenge_id"], "code": code},
     )
-    assert resp.status_code == 200
-    assert resp.json()["message"] == "입력하신 주소로 메일을 보냈어요"
+    assert verified.status_code == 200
+    assert "proof" not in verified.text
+    cookie = next(
+        value
+        for value in verified.headers.get_list("set-cookie")
+        if value.startswith(signup_cookie_name() + "=")
+    )
+    assert "HttpOnly" in cookie and "SameSite=strict" in cookie and "Path=/" in cookie
+    return issued, verified
 
-    users = (await db_session.exec(select(User).where(User.email == "new@example.com"))).all()
-    assert len(users) == 1
-    assert users[0].is_email_verified is False
-    assert len((await db_session.exec(select(EmailVerification))).all()) == 1
-    externals.verification.assert_awaited_once()
-    externals.already.assert_not_awaited()
 
-
-async def test_signup_duplicate_is_indistinguishable(
-    async_client, db_session, existing_user, externals
+async def test_signup_requires_verified_proof_and_creates_verified_user(
+    async_client, db_session, externals
 ):
-    resp = await async_client.post(
-        "/auth/signup",
-        json={"email": "user@example.com", "password": "Passw0rd!", "nickname": "x"},
-    )
-    # 비열거: 신규와 동일 응답
+    payload = {"email": "New@Example.com", "password": "Passw0rd!", "nickname": "n"}
+    missing = await async_client.post("/auth/signup", json=payload)
+    assert missing.status_code == 400
+    assert not (await db_session.exec(select(User).where(User.email == "new@example.com"))).all()
+
+    await _verify_signup_email(async_client, externals)
+    resp = await async_client.post("/auth/signup", json=payload)
     assert resp.status_code == 200
-    assert resp.json()["message"] == "입력하신 주소로 메일을 보냈어요"
-    # user 추가 생성 없음
-    users = (await db_session.exec(select(User).where(User.email == "user@example.com"))).all()
-    assert len(users) == 1
+    user = (await db_session.exec(select(User).where(User.email == "new@example.com"))).one()
+    assert user.is_email_verified is True
+    assert user.email_verified_at is not None
+    replay = await async_client.post("/auth/signup", json=payload)
+    assert replay.status_code == 400
+
+
+async def test_signup_email_resend_cooldown(async_client, db_session, externals):
+    issued = await async_client.post(
+        "/auth/signup/send-verification", json={"email": "cooldown@example.com"}
+    )
+    assert issued.status_code == 200
+    assert (
+        await async_client.post(
+            "/auth/signup/send-verification", json={"email": "cooldown@example.com"}
+        )
+    ).status_code == 429
+    assert len((await db_session.exec(select(SignupEmailVerification))).all()) == 1
+    externals.signup_mail.assert_awaited_once()
+
+
+async def test_signup_duplicate_consumes_proof_without_overwrite(
+    async_client, db_session, externals
+):
+    email = "insert-race@example.com"
+    await _verify_signup_email(async_client, externals, email)
+    existing_user = User(
+        email=email,
+        hashed_password="existing-hash",
+        nickname="existing",
+        is_email_verified=True,
+        email_verified_at=datetime.now(UTC),
+    )
+    db_session.add(existing_user)
+    await db_session.commit()
+    old_hash, old_nickname = existing_user.hashed_password, existing_user.nickname
+    response = await async_client.post(
+        "/auth/signup",
+        json={"email": email, "password": "Different1!", "nickname": "changed"},
+    )
+    assert response.status_code == 200
+    await db_session.refresh(existing_user)
+    assert (existing_user.hashed_password, existing_user.nickname) == (old_hash, old_nickname)
     externals.already.assert_awaited_once()
-    externals.verification.assert_not_awaited()
+
+
+async def test_signup_proof_rejects_cross_email_and_expiry(async_client, db_session, externals):
+    await _verify_signup_email(async_client, externals, "bound@example.com")
+    payload = {"password": "Passw0rd!", "nickname": "bound"}
+    cross = await async_client.post("/auth/signup", json={"email": "other@example.com", **payload})
+    assert cross.status_code == 400
+    record = (await db_session.exec(select(SignupEmailVerification))).one()
+    record.proof_expires_at = datetime.now(UTC) - timedelta(seconds=1)
+    db_session.add(record)
+    await db_session.commit()
+    expired = await async_client.post(
+        "/auth/signup", json={"email": "bound@example.com", **payload}
+    )
+    assert expired.status_code == 400
+
+
+async def test_concurrent_signup_proof_is_consumed_once(
+    async_client, session_factory, externals, monkeypatch
+):
+    await _verify_signup_email(async_client, externals, "race@example.com")
+    proof = async_client.cookies.get(signup_cookie_name())
+    barrier = asyncio.Barrier(2)
+
+    async def synchronized_hash(_password):
+        await barrier.wait()
+        return "already-hashed"
+
+    monkeypatch.setattr(auth_service, "hash_password", synchronized_hash)
+
+    async def complete():
+        async with session_factory() as session:
+            return await signup_service.complete_signup(
+                "race@example.com", "Passw0rd!", "racer", proof, session
+            )
+
+    results = await asyncio.gather(complete(), complete(), return_exceptions=True)
+    assert sum(isinstance(value, signup_service.SignupResult) for value in results) == 1
+    assert sum(isinstance(value, signup_service.SignupVerificationError) for value in results) == 1
+    async with session_factory() as session:
+        users = (await session.exec(select(User).where(User.email == "race@example.com"))).all()
+    assert len(users) == 1
 
 
 async def test_signup_weak_password_rejected(async_client):
@@ -118,46 +212,13 @@ async def test_signup_weak_password_rejected(async_client):
 
 
 async def test_signup_pwned_password_rejected(async_client, externals):
+    await _verify_signup_email(async_client, externals, "pwned@example.com")
     externals.monkeypatch.setattr(hibp, "is_password_pwned", AsyncMock(return_value=True))
     resp = await async_client.post(
         "/auth/signup",
         json={"email": "pwned@example.com", "password": "Passw0rd!", "nickname": "n"},
     )
     assert resp.status_code == 422
-
-
-async def test_concurrent_signup_single_winner(db_session, session_factory, monkeypatch):
-    """실측 동시성: 두 독립 세션이 같은 이메일로 동시에 signup하면 한쪽만 유저를 만들고,
-    패자는 users.email UNIQUE 위반(IntegrityError)을 잡아 중복 경로와 동일하게 수렴한다.
-    둘 다 예외 없이 정상 반환해야 비열거가 깨지지 않는다(신규 200 vs race 500 방지).
-
-    회전 race 테스트(test_token)와 동형: Barrier로 두 코루틴이 create_user 직전
-    (= get_user_by_email가 None을 본 직후)까지 와서 동시에 INSERT/commit하도록 강제해
-    선체크↔INSERT 사이의 진짜 race를 만든다. db_session 의존은 생성 행의 테이블 정리용.
-    """
-    email = "race@example.com"
-    barrier = asyncio.Barrier(2)
-    real_create_user = auth_service.create_user
-
-    async def create_user_after_barrier(*args, **kwargs):
-        await barrier.wait()
-        return await real_create_user(*args, **kwargs)
-
-    monkeypatch.setattr(auth_service, "create_user", create_user_after_barrier)
-
-    async def do_signup():
-        async with session_factory() as session:
-            await auth_service.signup(email, "Passw0rd!", "racer", session, BackgroundTasks())
-
-    results = await asyncio.gather(do_signup(), do_signup(), return_exceptions=True)
-
-    # 비열거: race 패자도 신규와 동일하게 예외 없이 정상 반환
-    assert all(not isinstance(r, BaseException) for r in results), results
-
-    # 정확히 한 명만 생성(이중 가입 없음)
-    async with session_factory() as verify:
-        rows = (await verify.exec(select(User).where(User.email == email))).all()
-    assert len(rows) == 1
 
 
 # --- C2 로그인 --------------------------------------------------------------
@@ -175,6 +236,30 @@ async def test_login_success_sets_cookies(async_client, db_session, existing_use
     assert any(c.startswith(REFRESH_COOKIE_NAME + "=") for c in set_cookies)
     # refresh_tokens 행 발급됨
     assert len(await _refresh_tokens(db_session, existing_user.id)) == 1
+
+
+async def test_unverified_user_cannot_login_access_or_refresh(async_client, db_session):
+    user = await auth_service.create_user(
+        "legacy-unverified@example.com", "Passw0rd!", "legacy", db_session
+    )
+    refresh = await auth_service.create_refresh_token(user.id, db_session)
+    await db_session.commit()
+    before_count = len(await _refresh_tokens(db_session, user.id))
+
+    login = await async_client.post(
+        "/auth/login",
+        json={"email": user.email, "password": "Passw0rd!"},
+    )
+    assert login.status_code == 401
+    assert not login.headers.get_list("set-cookie")
+
+    async_client.cookies.set(access_cookie_name(), create_access_token(str(user.id)))
+    assert (await async_client.get("/auth/me")).status_code == 401
+
+    async_client.cookies.clear()
+    async_client.cookies.set(REFRESH_COOKIE_NAME, refresh, path="/auth/refresh")
+    assert (await async_client.post("/auth/refresh")).status_code == 401
+    assert len(await _refresh_tokens(db_session, user.id)) == before_count
 
 
 async def test_login_wrong_password_generic_401(async_client, existing_user):
@@ -332,6 +417,11 @@ async def _issue_verification(session: AsyncSession, user_id) -> str:
 
 
 async def test_verify_email_success(async_client, db_session, existing_user):
+    existing_user.is_email_verified = False
+    existing_user.email_verified_at = None
+    db_session.add(existing_user)
+    await db_session.commit()
+    assert existing_user.is_email_verified is False
     user_id = existing_user.id
     raw = await _issue_verification(db_session, user_id)
 
@@ -347,6 +437,9 @@ async def test_verify_email_success(async_client, db_session, existing_user):
 
 
 async def test_verify_email_expired_rejected(async_client, db_session, existing_user):
+    existing_user.is_email_verified = False
+    db_session.add(existing_user)
+    await db_session.commit()
     user_id = existing_user.id
     raw = await _issue_verification(db_session, user_id)
     record = (await db_session.exec(select(EmailVerification))).first()
@@ -380,7 +473,10 @@ async def test_verify_email_unknown_token_rejected(async_client, existing_user):
 async def test_verify_email_idempotent_preserves_verified_at(
     async_client, db_session, existing_user
 ):
-    # 이미 인증된 유저가 또 다른 미사용 토큰으로 검증해도 email_verified_at은 보존
+    # 최초 인증 후 또 다른 미사용 토큰으로 검증해도 email_verified_at은 보존한다.
+    existing_user.is_email_verified = False
+    db_session.add(existing_user)
+    await db_session.commit()
     user_id = existing_user.id
     raw1 = await _issue_verification(db_session, user_id)
     await async_client.post("/auth/verify-email", json={"token": raw1})
@@ -403,6 +499,9 @@ _RESEND_MESSAGE = "인증 메일을 보냈어요"
 async def test_resend_invalidates_old_and_issues_new(
     async_client, db_session, existing_user, externals
 ):
+    existing_user.is_email_verified = False
+    db_session.add(existing_user)
+    await db_session.commit()
     user_id = existing_user.id
     old_raw = await _issue_verification(db_session, user_id)
 

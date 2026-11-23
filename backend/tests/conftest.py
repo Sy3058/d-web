@@ -142,7 +142,7 @@ async def user(db_session: AsyncSession) -> User:
     refresh 토큰·회전 등 FK만 필요한 테스트용 - bcrypt(cost=12)를 안 거쳐 빠르다.
     로그인·비밀번호 검증이 필요한 테스트는 existing_user를 쓴다.
     """
-    u = User(email="plain@example.com", nickname="plain")
+    u = User(email="plain@example.com", nickname="plain", is_email_verified=True)
     db_session.add(u)
     await db_session.commit()
     await db_session.refresh(u)
@@ -155,5 +155,8 @@ async def existing_user(db_session: AsyncSession) -> User:
     user = await auth_service.create_user(
         EXISTING_USER_EMAIL, EXISTING_USER_PASSWORD, EXISTING_USER_NICKNAME, db_session
     )
+    user.is_email_verified = True
+    db_session.add(user)
     await db_session.commit()
+    await db_session.refresh(user)
     return user

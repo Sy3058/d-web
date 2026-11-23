@@ -84,7 +84,7 @@ describe('ViewerControls', () => {
 
     document.cookie = 'login_hint=; Max-Age=0; Path=/';
     await act(async () => window.dispatchEvent(new Event('focus')));
-    expect(container.querySelector('a[href="/auth/login"]')?.textContent).toBe('로그인');
+    expect(container.querySelector('button[aria-label="독자 닉네임 계정 메뉴"]')).not.toBeNull();
   });
 
   it('SSR은 쿠키를 읽지 않고 로그인 링크를 렌더한다', () => {

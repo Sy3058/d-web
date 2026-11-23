@@ -17,7 +17,6 @@ import {
   getEpisodeContent,
   getProgress,
   imageFetchPriority,
-  isLoggedIn,
   putProgress,
   type ContentDocNode,
   type EpisodeContentResponse,
@@ -26,7 +25,7 @@ import {
 interface Props {
   episodeId: string;
   checkout?: { title: string; amount: number | null; returnPath: string; workId?: string };
-  initialSessionReady?: boolean;
+  initialSessionAuthenticated?: boolean;
   navigation?: {
     workId: string;
     workTitle: string;
@@ -100,7 +99,12 @@ function renderNodeHtml(node: ContentDocNode, extensions: Extensions): string {
   }
 }
 
-export default function Viewer({ episodeId, navigation, checkout, initialSessionReady = false }: Props) {
+export default function Viewer({
+  episodeId,
+  navigation,
+  checkout,
+  initialSessionAuthenticated,
+}: Props) {
   const extensions = useMemo(() => buildViewerExtensions(), []);
   const [contentState, setContentState] = useState<ContentRequestState>({
     status: 'loading',
@@ -115,6 +119,11 @@ export default function Viewer({ episodeId, navigation, checkout, initialSession
   // 기존 진행도를 읽고 복원할지 결정하기 전에는 상단의 초기 observer 값으로 PUT하지 않는다.
   const [canSaveProgress, setCanSaveProgress] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(true);
+  const [sessionAuthenticated, setSessionAuthenticated] = useState<boolean | null>(
+    typeof initialSessionAuthenticated === 'boolean'
+      ? initialSessionAuthenticated
+      : null,
+  );
   const retriedRef = useRef(false);
   const blockRefs = useRef(new Map<number, HTMLDivElement>());
   const topVisibleRef = useRef(0);
@@ -153,6 +162,7 @@ export default function Viewer({ episodeId, navigation, checkout, initialSession
       setRestoredAnchor(null);
       setCanSaveProgress(false);
       setControlsVisible(true);
+      setSessionAuthenticated(null);
     }
 
     if (episodeChanged || !contentRequest.preserveContent) {
@@ -164,10 +174,14 @@ export default function Viewer({ episodeId, navigation, checkout, initialSession
       // 비공개 진입의 bootstrap 직후 첫 요청만 이미 완료된 복구를 재사용한다.
       // 회차 전환, 수동 재시도, 이미지 URL 재발급은 현재 쿠키로 다시 복구한다.
       const sessionReady =
-        initialSessionReady &&
+        typeof initialSessionAuthenticated === 'boolean' &&
         initialSessionEpisodeRef.current === episodeId &&
         contentRequest.attempt === 0;
-      if (!sessionReady) await restoreViewerSession(document.cookie);
+      if (!sessionReady) {
+        const authenticated = await restoreViewerSession();
+        if (cancelled) return;
+        setSessionAuthenticated(authenticated);
+      }
       if (cancelled) return;
       return getEpisodeContent(episodeId);
     };
@@ -197,7 +211,7 @@ export default function Viewer({ episodeId, navigation, checkout, initialSession
     return () => {
       cancelled = true;
     };
-  }, [contentRequest, episodeId, initialSessionReady]);
+  }, [contentRequest, episodeId, initialSessionAuthenticated]);
 
   useEffect(() => {
     const onUserScroll = () => {
@@ -262,7 +276,8 @@ export default function Viewer({ episodeId, navigation, checkout, initialSession
     setCanSaveProgress(false);
     setRestoredAnchor(null);
 
-    const useServerProgress = isLoggedIn(document.cookie);
+    if (sessionAuthenticated === null) return;
+    const useServerProgress = sessionAuthenticated;
     progressTargetRef.current = useServerProgress ? 'server' : 'guest';
     if (!useServerProgress) {
       const progress = getBrowserGuestProgress(episodeId);
@@ -299,7 +314,7 @@ export default function Viewer({ episodeId, navigation, checkout, initialSession
     return () => {
       cancelled = true;
     };
-  }, [episodeId, blocks.length]);
+  }, [episodeId, blocks.length, sessionAuthenticated]);
 
   useEffect(() => {
     if (restoredAnchor === null) return;

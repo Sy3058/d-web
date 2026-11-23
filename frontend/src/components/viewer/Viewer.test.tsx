@@ -10,6 +10,7 @@ const {
   isLoggedIn,
   putBrowserGuestProgress,
   putProgress,
+  restoreViewerSession,
 } = vi.hoisted(() => ({
   getBrowserGuestProgress: vi.fn(),
   getEpisodeContent: vi.fn(),
@@ -17,6 +18,7 @@ const {
   isLoggedIn: vi.fn(),
   putBrowserGuestProgress: vi.fn(),
   putProgress: vi.fn(),
+  restoreViewerSession: vi.fn(),
 }));
 
 vi.mock('@/lib/guestProgress', () => ({
@@ -25,7 +27,7 @@ vi.mock('@/lib/guestProgress', () => ({
 }));
 
 vi.mock('@/lib/viewerSession', () => ({
-  restoreViewerSession: vi.fn().mockResolvedValue(undefined),
+  restoreViewerSession,
 }));
 
 vi.mock('@/lib/viewer', async (importOriginal) => {
@@ -112,6 +114,7 @@ beforeEach(() => {
   putBrowserGuestProgress.mockReset();
   putProgress.mockReset();
   isLoggedIn.mockReturnValue(true);
+  restoreViewerSession.mockReset().mockImplementation(async () => isLoggedIn());
   getBrowserGuestProgress.mockReturnValue(null);
   getEpisodeContent.mockResolvedValue(episodeContent('episode-a'));
   getProgress.mockResolvedValue(null);
