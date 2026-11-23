@@ -10,6 +10,8 @@
 
 E1이 발송한 인증 토큰을 받아 **유저를 인증 완료로 표시**하는 검증 측. 토큰 발급·해싱은 C 그룹(`create_email_verification`), 발송은 E1(`send_verification_email`)에서 끝났고, E2는 **입력 토큰을 동일 해시해 대조 -> `is_email_verified=True`** 로 만드는 엔드포인트만 추가한다.
 
+> 2026-11-23: 이 링크 경로는 기존 미인증 계정의 인증·재발송을 위해 유지한다. 신규 가입은 [이메일 코드 사전 인증](./IMPLEMENTATION_SIGNUP_PREVERIFICATION.md) 후 계정을 생성한다. 미인증 계정은 로그인·세션 갱신·보호 API 접근이 거부된다.
+
 ---
 
 ## 1. 산출물

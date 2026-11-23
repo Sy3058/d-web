@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { getViewerBootstrap, type ViewerBootstrap } from '@/lib/viewerBootstrap';
+import { getViewerBootstrap, type ViewerBootstrapResult } from '@/lib/viewerBootstrap';
 import Viewer from './Viewer';
 import { ghostControl } from '@/components/ui/controlStyles';
 import { formatEpisodeDate } from '@/lib/catalog';
@@ -13,7 +13,7 @@ type EntryState =
   | { status: 'loading' }
   | { status: 'error' }
   | { status: 'notFound' }
-  | { status: 'ready'; bootstrap: ViewerBootstrap };
+  | { status: 'ready'; result: ViewerBootstrapResult };
 
 export default function ViewerEntry({ workId, publicId }: Props) {
   return <ViewerEntryRequest key={`${workId}/${publicId}`} workId={workId} publicId={publicId} />;
@@ -25,10 +25,10 @@ function ViewerEntryRequest({ workId, publicId }: Props) {
 
   useEffect(() => {
     let cancelled = false;
-    getViewerBootstrap(workId, publicId, document.cookie)
-      .then((bootstrap) => {
+    getViewerBootstrap(workId, publicId)
+      .then((result) => {
         if (cancelled) return;
-        setState(bootstrap ? { status: 'ready', bootstrap } : { status: 'notFound' });
+        setState(result ? { status: 'ready', result } : { status: 'notFound' });
       })
       .catch(() => {
         if (!cancelled) setState({ status: 'error' });
@@ -62,7 +62,7 @@ function ViewerEntryRequest({ workId, publicId }: Props) {
     );
   }
 
-  const bootstrap = state.bootstrap;
+  const { bootstrap, authenticated } = state.result;
   const previous = bootstrap.previous_episode;
   const next = bootstrap.next_episode;
   const displayDate = formatEpisodeDate(bootstrap.first_published_at);
@@ -81,7 +81,7 @@ function ViewerEntryRequest({ workId, publicId }: Props) {
       <Viewer
         key={bootstrap.episode_id}
         episodeId={bootstrap.episode_id}
-        initialSessionReady
+        initialSessionAuthenticated={authenticated}
         navigation={{
           workId: bootstrap.work_id,
           workTitle: bootstrap.work_title,

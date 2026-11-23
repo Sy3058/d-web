@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import EpisodeRow from './EpisodeRow';
 import { orderEpisodes, type EpisodeSummary, type EpisodeOrder } from '@/lib/catalog';
 import { getBrowserGuestWorkProgress } from '@/lib/guestProgress';
-import { isLoggedIn } from '@/lib/viewer';
+import { restoreViewerSession } from '@/lib/viewerSession';
 import {
   getWorkProgress,
   selectReadingCta,
@@ -27,41 +27,47 @@ function WorkExperienceContent({ workId, episodes: catalogEpisodes, order, pathn
   const episodes = useMemo(() => catalogEpisodes.map((episode) => ({
     id: episode.id, publicId: episode.public_id, title: episode.title,
   })), [catalogEpisodes]);
-  // undefined는 hydration 전/로딩 중, null은 stale login_hint의 401이나 서버 오류로 공개
-  // 첫 화 CTA만 유지하는 상태다. 비로그인은 hydration 뒤 로컬 진행도 객체로 전환한다.
+  // undefined는 hydration 전/로딩 중, null은 인증 확인이나 진행도 API 장애로 공개 첫 화
+  // CTA만 유지하는 상태다. 서버가 확정한 비로그인은 hydration 뒤 로컬 진행도로 전환한다.
   const [progress, setProgress] = useState<DisplayProgress | null | undefined>(undefined);
 
   useEffect(() => {
-    if (!isLoggedIn(document.cookie)) {
-      const local = getBrowserGuestWorkProgress(episodes.map((episode) => episode.id));
-      const lastEpisode = episodes.find((episode) => episode.id === local.lastEpisodeId) ?? null;
-      // localStorage는 hydration 뒤 effect에서만 읽는다. 공개 SSR에는 로컬 위치를 넣지 않는다.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setProgress({
-        source: 'guest',
-        purchased_episode_ids: [],
-        read_episode_ids: local.readEpisodeIds,
-        last_episode: lastEpisode
-          ? {
-              id: lastEpisode.id,
-              public_id: lastEpisode.publicId,
-              title: lastEpisode.title,
-            }
-          : null,
-      });
-      return;
-    }
-
     let cancelled = false;
-    getWorkProgress(workId).then(
-      (result) => {
+    const loadProgress = async () => {
+      let authenticated: boolean;
+      try {
+        authenticated = await restoreViewerSession();
+      } catch {
+        if (!cancelled) setProgress(null);
+        return;
+      }
+      if (cancelled) return;
+      if (!authenticated) {
+        const local = getBrowserGuestWorkProgress(episodes.map((episode) => episode.id));
+        const lastEpisode = episodes.find((episode) => episode.id === local.lastEpisodeId) ?? null;
+        setProgress({
+          source: 'guest',
+          purchased_episode_ids: [],
+          read_episode_ids: local.readEpisodeIds,
+          last_episode: lastEpisode
+            ? {
+                id: lastEpisode.id,
+                public_id: lastEpisode.publicId,
+                title: lastEpisode.title,
+              }
+            : null,
+        });
+        return;
+      }
+      try {
+        const result = await getWorkProgress(workId);
         if (!cancelled) setProgress(result ? { ...result, source: 'server' } : null);
-      },
-      () => {
+      } catch {
         // 진행도는 열람을 막지 않는 부가 기능이다. 404·5xx를 0%로 오인시키지 않고 숨긴다.
         if (!cancelled) setProgress(null);
-      },
-    );
+      }
+    };
+    void loadProgress();
 
     return () => {
       cancelled = true;

@@ -21,6 +21,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/signup/send-verification": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Signup Send Verification */
+        post: operations["signup_send_verification_auth_signup_send_verification_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/signup/verify-email": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Signup Verify Email */
+        post: operations["signup_verify_email_auth_signup_verify_email_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/signup/verification": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Signup Verification */
+        get: operations["signup_verification_auth_signup_verification_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/login": {
         parameters: {
             query?: never;
@@ -1512,6 +1563,38 @@ export interface components {
          * @enum {string}
          */
         RoleEnum: "reader" | "owner" | "moderator";
+        /** SignupEmailChallengeResponse */
+        SignupEmailChallengeResponse: {
+            /** Challenge Id */
+            challenge_id: string;
+            /** Message */
+            message: string;
+        };
+        /** SignupEmailRequest */
+        SignupEmailRequest: {
+            /**
+             * Email
+             * Format: email
+             */
+            email: string;
+        };
+        /** SignupEmailVerifyRequest */
+        SignupEmailVerifyRequest: {
+            /**
+             * Challenge Id
+             * Format: uuid
+             */
+            challenge_id: string;
+            /** Code */
+            code: string;
+        };
+        /** SignupEmailVerifyResponse */
+        SignupEmailVerifyResponse: {
+            /** Email */
+            email: string;
+            /** Message */
+            message: string;
+        };
         /** SignupRequest */
         SignupRequest: {
             /**
@@ -1523,6 +1606,11 @@ export interface components {
             password: string;
             /** Nickname */
             nickname: string;
+        };
+        /** SignupVerificationResponse */
+        SignupVerificationResponse: {
+            /** Email */
+            email: string | null;
         };
         /**
          * SiteTextRead
@@ -1847,6 +1935,92 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    signup_send_verification_auth_signup_send_verification_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SignupEmailRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SignupEmailChallengeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    signup_verify_email_auth_signup_verify_email_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SignupEmailVerifyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SignupEmailVerifyResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    signup_verification_auth_signup_verification_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SignupVerificationResponse"];
                 };
             };
         };

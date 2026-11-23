@@ -6,6 +6,7 @@ CPU DoS와 bcrypt 72바이트 truncate 우회를 함께 막는다(AUTH-01).
 """
 
 import re
+import uuid
 from typing import Literal
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
@@ -41,6 +42,29 @@ class SignupRequest(BaseModel):
     @classmethod
     def _password_policy(cls, v: str) -> str:
         return validate_password_policy(v)
+
+
+class SignupEmailRequest(BaseModel):
+    email: EmailStr
+
+
+class SignupEmailVerifyRequest(BaseModel):
+    challenge_id: uuid.UUID
+    code: str = Field(pattern=r"^[0-9]{6}$")
+
+
+class SignupEmailChallengeResponse(BaseModel):
+    challenge_id: str
+    message: str
+
+
+class SignupEmailVerifyResponse(BaseModel):
+    email: str
+    message: str
+
+
+class SignupVerificationResponse(BaseModel):
+    email: str | None
 
 
 class LoginRequest(BaseModel):

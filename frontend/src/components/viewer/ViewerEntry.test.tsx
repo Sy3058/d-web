@@ -208,6 +208,7 @@ it('회차 전환 후 늦게 끝난 이전 bootstrap으로 본문을 열지 않�
 });
 
 it('공개 Viewer도 최초 content 전에 세션을 refresh하고 full을 렌더한다', async () => {
+  document.cookie = 'login_hint=; Max-Age=0';
   fetchMock.mockResolvedValueOnce(response(401)).mockResolvedValueOnce(response(200))
     .mockResolvedValueOnce(response(200, { id: 'reader' }))
     .mockResolvedValueOnce(response(200, fullContent)).mockResolvedValueOnce(response(404));
@@ -219,14 +220,15 @@ it('공개 Viewer도 최초 content 전에 세션을 refresh하고 full을 렌�
   expect(container.querySelector('img[src$="paid-full.webp"]')).not.toBeNull();
 });
 
-it('공개 게스트 Viewer는 세션 요청 없이 서버가 절단한 preview만 렌더한다', async () => {
+it('공개 게스트 Viewer도 서버 세션 확인 뒤 절단된 preview만 렌더한다', async () => {
   document.cookie = 'login_hint=; Max-Age=0';
-  fetchMock.mockResolvedValueOnce(response(200, {
+  fetchMock.mockResolvedValueOnce(response(401)).mockResolvedValueOnce(response(401))
+    .mockResolvedValueOnce(response(200, {
     ...fullContent, content: { type: 'doc', content: [fullContent.content.content[0]] },
     has_paid_part: true,
   }));
   await act(async () => root.render(<Viewer episodeId="episode-a" />));
-  expect(paths()).toEqual(['/episodes/episode-a/content']);
+  expect(paths()).toEqual(['/auth/me', '/auth/refresh', '/episodes/episode-a/content']);
   expect(container.querySelectorAll('img')).toHaveLength(1);
   expect(container.querySelector('img[src$="paid-full.webp"]')).toBeNull();
   expect(container.textContent).toContain('여기부터는 유료 구간');
@@ -247,11 +249,10 @@ it('공개 Viewer의 stale hint 최종 401 뒤에는 익명 preview로 수렴한
       ...fullContent,
       content: { type: 'doc', content: [fullContent.content.content[0]] },
       has_paid_part: true,
-    })).mockResolvedValueOnce(response(401)).mockResolvedValueOnce(response(401));
+    }));
   await act(async () => root.render(<Viewer episodeId="episode-a" />));
   expect(paths()).toEqual([
     '/auth/me', '/auth/refresh', '/episodes/episode-a/content',
-    '/episodes/episode-a/progress', '/auth/refresh',
   ]);
   expect(container.querySelectorAll('img')).toHaveLength(1);
   expect(document.cookie).toContain('login_hint=1');
@@ -293,14 +294,14 @@ it('bootstrap 후 최초 content만 세션 재조회를 생략하고 이미지 �
   ]);
 });
 
-it('initialSessionReady는 최초 회차에만 적용하고 회차 변경 때 세션을 복구한다', async () => {
+it('확인된 initial session은 최초 회차에만 적용하고 회차 변경 때 세션을 복구한다', async () => {
   fetchMock.mockResolvedValueOnce(response(200, fullContent)).mockResolvedValueOnce(response(404));
-  await act(async () => root.render(<Viewer episodeId="episode-a" initialSessionReady />));
+  await act(async () => root.render(<Viewer episodeId="episode-a" initialSessionAuthenticated />));
   expect(paths()).toEqual(['/episodes/episode-a/content', '/episodes/episode-a/progress']);
   fetchMock.mockResolvedValueOnce(response(200, { id: 'reader' }))
     .mockResolvedValueOnce(response(200, { ...fullContent, episode_id: 'episode-b' }))
     .mockResolvedValueOnce(response(404));
-  await act(async () => root.render(<Viewer episodeId="episode-b" initialSessionReady />));
+  await act(async () => root.render(<Viewer episodeId="episode-b" initialSessionAuthenticated />));
   expect(paths().slice(2)).toEqual([
     '/auth/me', '/episodes/episode-b/content', '/episodes/episode-b/progress',
   ]);

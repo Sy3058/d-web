@@ -32,6 +32,7 @@ CONFIRM_URL = "/admin/2fa/confirm"
 async def owner(db_session: AsyncSession) -> User:
     u = User(
         email="2fa-owner@example.com",
+        is_email_verified=True,
         nickname="owner",
         role=RoleEnum.OWNER,
         hashed_password="fixture-password-hash",

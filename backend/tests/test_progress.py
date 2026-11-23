@@ -63,7 +63,7 @@ async def _authed(client: AsyncClient, user: User) -> None:
 @pytest_asyncio.fixture
 async def other_user(db_session: AsyncSession) -> User:
     """교차 유저 격리 검증용 두 번째 유저(conftest의 user와 다른 계정)."""
-    u = User(email="other@example.com", nickname="other")
+    u = User(email="other@example.com", nickname="other", is_email_verified=True)
     db_session.add(u)
     await db_session.commit()
     await db_session.refresh(u)

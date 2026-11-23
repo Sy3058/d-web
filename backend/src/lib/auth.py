@@ -449,7 +449,7 @@ async def get_current_user(
         raise _UNAUTHORIZED from exc
 
     user = await session.get(User, user_id)
-    if user is None or user.deleted_at is not None:
+    if user is None or user.deleted_at is not None or not user.is_email_verified:
         raise _UNAUTHORIZED
     return user
 

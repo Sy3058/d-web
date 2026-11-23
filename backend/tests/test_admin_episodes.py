@@ -54,6 +54,7 @@ async def _authed(client: AsyncClient, user: User) -> None:
 async def owner(db_session: AsyncSession) -> User:
     user = await auth_service.create_user("owner@example.com", "OwnerPass1!", "작가", db_session)
     user.role = RoleEnum.OWNER
+    user.is_email_verified = True
     user.totp_confirmed_at = datetime.now(UTC)
     db_session.add(user)
     await db_session.commit()

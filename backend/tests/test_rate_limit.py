@@ -25,8 +25,7 @@ async def test_login_sixth_request_returns_429(async_client):
 
 async def test_rate_limit_scopes_are_independent(async_client, monkeypatch):
     # signup 경로의 메일 발송은 mock(HIBP는 conftest 전역 stub) - rate limit 버킷만 검증한다.
-    monkeypatch.setattr(email_service, "send_verification_email", AsyncMock())
-    monkeypatch.setattr(email_service, "send_already_registered_email", AsyncMock())
+    monkeypatch.setattr(email_service, "send_signup_code_email", AsyncMock())
 
     # login 버킷 소진(6회째 429)
     for _ in range(5):
@@ -35,7 +34,7 @@ async def test_rate_limit_scopes_are_independent(async_client, monkeypatch):
 
     # 같은 윈도우라도 signup은 독립 버킷이라 통과(엔드포인트별 scope 분리 확인)
     signup = await async_client.post(
-        "/auth/signup",
-        json={"email": "fresh@example.com", "password": "Passw0rd!", "nickname": "n"},
+        "/auth/signup/send-verification",
+        json={"email": "fresh@example.com"},
     )
     assert signup.status_code == 200

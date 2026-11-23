@@ -28,7 +28,13 @@ def _mask_email(email: str) -> str:
     return f"{head}***{sep}{domain}"
 
 
-async def _send(to: str, subject: str, html: str) -> None:
+async def _send(
+    to: str,
+    subject: str | None = None,
+    html: str | None = None,
+    *,
+    template: dict[str, object] | None = None,
+) -> None:
     """Resend API로 메일 1건을 발송한다. 키 미설정 또는 HTTP 오류 시 fail-open."""
     api_key = settings.resend_api_key.get_secret_value()
     if not api_key:
@@ -36,16 +42,19 @@ async def _send(to: str, subject: str, html: str) -> None:
         return
 
     try:
+        payload: dict[str, object] = {"to": [to]}
+        if subject is not None:
+            payload["subject"] = subject
+        if template is not None:
+            payload["template"] = template
+        else:
+            payload["from"] = settings.email_from
+            payload["html"] = html
         async with httpx.AsyncClient(timeout=_TIMEOUT_SECONDS) as client:
             response = await client.post(
                 _RESEND_API_URL,
                 headers={"Authorization": f"Bearer {api_key}"},
-                json={
-                    "from": settings.email_from,
-                    "to": [to],
-                    "subject": subject,
-                    "html": html,
-                },
+                json=payload,
             )
             response.raise_for_status()
     except httpx.HTTPError as exc:
@@ -71,18 +80,6 @@ def _verification_html(verify_url: str) -> str:
 """.strip()
 
 
-def _already_registered_html(login_url: str) -> str:
-    safe_login = html_module.escape(login_url)
-    return f"""
-<p>안녕하세요.</p>
-<p>이 이메일 주소로 이미 가입된 계정이 있습니다.</p>
-<p><a href="{safe_login}">로그인하기</a></p>
-<p style="color:#888;font-size:12px;">
-  본인이 가입을 시도하지 않으셨다면 이 메일을 무시하셔도 됩니다.
-</p>
-""".strip()
-
-
 async def send_verification_email(email: str, token: str) -> None:
     """가입 인증 메일 발송. 토큰 원문은 URL에만, 로그에는 절대 남기지 않는다."""
     verify_url = f"{settings.app_base_url}/auth/verify-email?token={token}"
@@ -94,12 +91,20 @@ async def send_verification_email(email: str, token: str) -> None:
     )
 
 
+async def send_signup_code_email(email: str, code: str) -> None:
+    """가입 전 6자리 인증 코드를 발송한다. 코드는 로그에 남기지 않는다."""
+    logger.info("signup_code_email_sending", email=_mask_email(email))
+    await _send(
+        to=email,
+        template={"id": "email-verification", "variables": {"verifycode": code}},
+    )
+
+
 async def send_already_registered_email(email: str) -> None:
     """중복 가입 시도 시 '이미 가입된 계정' 안내 메일. 비열거 정책의 핵심."""
     login_url = f"{settings.app_base_url}/auth/login"
     logger.info("already_registered_email_sending", email=_mask_email(email))
     await _send(
         to=email,
-        subject="[dweb] 이미 가입된 이메일입니다",
-        html=_already_registered_html(login_url),
+        template={"id": "already-registered", "variables": {"loginurl": login_url}},
     )

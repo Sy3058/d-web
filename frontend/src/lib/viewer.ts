@@ -80,15 +80,6 @@ export function imageFetchPriority(imageOrdinal: number): 'high' | 'low' {
   return imageOrdinal < FIRST_HIGH_PRIORITY_IMAGES ? 'high' : 'low';
 }
 
-const LOGIN_HINT_PREFIX = 'login_hint=';
-
-/** login_hint 쿠키(비-HttpOnly 표시용, Navbar.astro와 동일 판별 원천 - DECISIONS "네비
- * 로그인 표시")의 존재로 로그인 여부를 판별한다. 진행도 GET/PUT을 비로그인에서 아예
- * 안 쏘기 위한 게이트 - 401을 받고 나서 처리하는 대신 요청 자체를 막는다. */
-export function isLoggedIn(cookieString: string): boolean {
-  return cookieString.split('; ').some((c) => c.indexOf(LOGIN_HINT_PREFIX) === 0);
-}
-
 /** 저장된 진행도(page_no)를 현재 블록 수 범위로 자른다. 본문 수정으로 블록이 줄면 저장된
  * 인덱스가 범위를 넘을 수 있다(계획 검증 2026-07-23 보강 - 클램프 없으면 스크롤 복원이
  * 존재하지 않는 블록을 가리켜 무동작하거나 예외를 낸다). */
