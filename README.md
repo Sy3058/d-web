@@ -57,14 +57,16 @@
 
 ## 로컬에서 실행
 
-저장소 루트에서 실행합니다. 독자용 사이트는 `frontend/package.json` 기준 **Node.js 24.16 이상**과 pnpm이 필요합니다. API까지 실행하려면 Python과 Docker, 각 영역의 환경 변수가 추가로 필요합니다. 필요한 설정 키는 영역별 `.env.example`을 확인하세요.
+WSL의 저장소 루트에서 실행합니다. **Node.js 24.22.3 이상**, pnpm, uv, Docker Desktop이 필요합니다. 환경 설정과 최초 DB 준비는 [로컬 개발 가이드](docs/guides/GUIDE_LOCAL_DEVELOPMENT.md)를 확인하세요.
 
 ```bash
 pnpm install --frozen-lockfile
-pnpm --filter frontend dev
+pnpm dev
 ```
 
-관리 화면: `pnpm --filter admin dev`. API와 DB 설정은 [`backend/`](backend/)와 [`compose.yml`](compose.yml)을 참고하세요. 비밀 키는 저장소에 추가하지 마세요.
+`pnpm dev`는 DB만 Docker로 실행하고 독자 사이트 `http://localhost:4321`, 관리자 `http://localhost:5173`, API `http://localhost:8000`을 개발 모드로 실행합니다. 파일 저장 시 반영되며 Ctrl+C로 앱을 함께 종료해도 DB는 유지됩니다. 비밀 키는 저장소에 추가하지 마세요.
+
+Docker 전체 구성 확인은 개발 서버 종료 후 `pnpm preview:up`으로 실행합니다. 이때 주소는 `http://localhost`와 `http://admin.localhost`이며, `pnpm preview:stop`으로 앱 컨테이너를 종료합니다. 기본 `docker compose up -d`는 DB만 실행하고, VPS 스테이징은 별도 `deploy/compose.yml`을 사용합니다.
 
 ```bash
 pnpm --filter frontend lint

@@ -160,6 +160,14 @@
 
 ## 인프라 결정
 
+### 로컬 개발 기본 실행과 배포 확인 분리 (2026-11-23)
+
+- 일상 개발은 PostgreSQL만 Docker로 실행하고 Astro `4321`, Vite 관리자 `5173`, uvicorn reload API `8000`을 WSL에서 실행한다. 루트 `pnpm dev`가 세 앱을 함께 관리한다.
+- 개발 서버는 loopback에만 바인딩하며 포트가 점유되면 다른 포트로 우회하거나 기존 프로세스를 종료하지 않고 실패한다. 종료 시 자신이 시작한 앱 프로세스 그룹만 정리하고 DB는 유지한다.
+- 로컬 Compose의 앱·Caddy는 `preview` profile로 분리한다. 기본 Compose는 DB만, `pnpm preview:up`은 빌드 산출물·프록시 확인용이다. 스테이징 배포는 별도 `deploy/compose.yml`과 release 정책을 유지한다.
+- 개발 명령은 localhost의 FE/Admin/API URL과 development 쿠키 설정을 적용한다. 신규 결제는 끄고 공개 HTTPS가 필요한 결제·OAuth 외부 연동 검증은 스테이징에서 수행한다. 서버의 결제 URL 검증을 완화하지 않는다.
+- [로컬 개발 가이드](guides/GUIDE_LOCAL_DEVELOPMENT.md)를 기준으로 실행한다.
+
 ### VPS: OVHcloud 싱가포르 (2026-11-22 변경)
 
 **결정**: 첫 공개 테스트 환경은 VPS 한 대에 독자 사이트·관리자·FastAPI·PostgreSQL·Caddy를 Docker로 배포한다. 사용자가 OVHcloud `VPS-1 2027` 싱가포르 구매 완료를 보고했다. 기존 Hetzner 싱가포르 계획과 당시 가격·지연 추정은 현재 선택의 근거로 사용하지 않는다.
