@@ -1,0 +1,60 @@
+name: Build deployment images
+
+on:
+  workflow_call:
+    inputs:
+      deployment_environment:
+        required: true
+        type: string
+      api_host:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    if: >-
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+      ((inputs.deployment_environment == 'staging' && github.ref == 'refs/heads/develop') ||
+       (inputs.deployment_environment == 'production' && github.ref == 'refs/heads/release'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Validate deployment identity and public API host
+        id: target
+        env:
+          DEPLOY_ENVIRONMENT: ${{ inputs.deployment_environment }}
+          API_HOST: ${{ inputs.api_host }}
+        run: bash scripts/prepare-deployment.sh
+
+      - name: Sign in to GHCR
+        env:
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: printf '%s' "$REGISTRY_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+
+      - name: Build and publish commit images
+        env:
+          IMAGE_PREFIX: ${{ steps.target.outputs.image_prefix }}
+          DEPLOY_SHA: ${{ steps.target.outputs.deployment_sha }}
+          PUBLIC_API_URL: ${{ steps.target.outputs.api_url }}
+        run: |
+          docker build --label "org.opencontainers.image.revision=$DEPLOY_SHA" --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" -f backend/Dockerfile -t "$IMAGE_PREFIX/api:$DEPLOY_SHA" backend
+          docker push "$IMAGE_PREFIX/api:$DEPLOY_SHA"
+          docker build --label "org.opencontainers.image.revision=$DEPLOY_SHA" --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" --label "io.dweb.api-url=$PUBLIC_API_URL" --build-arg "PUBLIC_API_URL=$PUBLIC_API_URL" -f frontend/Dockerfile -t "$IMAGE_PREFIX/frontend:$DEPLOY_SHA" .
+          docker push "$IMAGE_PREFIX/frontend:$DEPLOY_SHA"
+          docker build --label "org.opencontainers.image.revision=$DEPLOY_SHA" --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" --label "io.dweb.api-url=$PUBLIC_API_URL" --build-arg "VITE_API_URL=$PUBLIC_API_URL" -f admin/Dockerfile -t "$IMAGE_PREFIX/admin:$DEPLOY_SHA" .
+          docker push "$IMAGE_PREFIX/admin:$DEPLOY_SHA"
+
+      - name: Sign out of GHCR
+        if: always()
+        run: docker logout ghcr.io

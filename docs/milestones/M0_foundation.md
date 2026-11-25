@@ -227,6 +227,7 @@
 - 산출물: develop→staging 또는 release→production 커밋의 CI 성공 뒤 BE/FE/관리자 이미지를 같은 SHA로 빌드하고 GHCR에 푸시. workflow와 private registry 경로는 준비했지만 GitHub 환경·secret·flag 활성화는 미완료.
 - DoD: 해당 환경의 develop/release SHA와 레지스트리 이미지 식별자가 일치하고 실패한 CI에서는 발행하지 않는다.
 - 2026-11-25 CD 준비: `develop` staging, `release` production 매핑과 full SHA image publish를 코드로 준비했다. 실제 Actions·GHCR private pull은 외부 활성화 전이다.
+- 공급망 보강: 외부 Action 전체 SHA 고정, checkout 자격증명 저장 해제, 배포 secret 없는 이미지 발행 workflow와 별도 SSH 배포 runner 분리. GitHub 보호 규칙·계정 보안 설정은 별도 운영 확인 대상이다.
 
 ### F3. 스테이징·운영 자동 배포 (CD 구현 준비, 외부 미완료)
 - 선행: F2, D4
