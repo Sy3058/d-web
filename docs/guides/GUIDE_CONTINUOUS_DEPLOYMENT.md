@@ -11,16 +11,20 @@
 
 PR, `main`, 태그와 작업 브랜치는 배포하지 않는다. 각 앱 이미지는 전체 commit SHA 태그를 사용하고, 서버는 해당 SHA가 대상 통합 브랜치의 현재 HEAD인지 확인한다. 배포 job은 branch-policy, backend, frontend, admin job이 모두 성공한 뒤에만 실행된다.
 
-워크플로우는 `.github/workflows/ci.yml`의 opt-in 조건에서 `.github/workflows/deploy.yml`을 호출한다. 두 환경은 별도 GitHub Environment, 별도 DB volume, 별도 secret 파일, 별도 R2 설정, 별도 Docker project와 edge network를 사용한다. Caddy만 공용 edge로 80/443을 열고, 앱과 PostgreSQL은 각 환경의 내부 네트워크에 둔다.
+워크플로우는 `.github/workflows/ci.yml`의 opt-in 조건에서 `build-images.yml`을 먼저 호출하고, 이미지 발행이 성공한 뒤 `deploy.yml`을 호출한다. 두 단계는 별도 GitHub-hosted runner에서 실행한다. 두 환경은 별도 GitHub Environment, 별도 DB volume, 별도 secret 파일, 별도 R2 설정, 별도 Docker project와 edge network를 사용한다. Caddy만 공용 edge로 80/443을 열고, 앱과 PostgreSQL은 각 환경의 내부 네트워크에 둔다.
 
 ## GitHub 설정
 
-Repository Variables에는 배포 flag만 등록한다.
+Repository Variables에는 배포 flag와 공개 빌드 주소를 등록한다.
 
 - `STAGING_DEPLOY_ENABLED`: 정확히 `true`일 때만 `develop` 배포를 허용한다.
 - `PRODUCTION_DEPLOY_ENABLED`: 정확히 `true`일 때만 `release` 배포를 허용한다.
+- `STAGING_API_HOST`: staging 이미지에 넣을 API hostname. 예: `staging-api.example.com`
+- `PRODUCTION_API_HOST`: production 이미지에 넣을 API hostname. 예: `api.example.com`
 
 각 GitHub Environment의 Variables에는 해당 환경의 `SSH_HOST`, `SSH_USER`, `SSH_PORT`, `API_HOST`를 별도로 등록한다.
+
+빌드는 Environment에 연결하지 않으며 공개 Repository Variable만 입력받는다. 해당 환경의 Repository API hostname, Environment의 `API_HOST`, VPS `deploy.env`의 `API_HOST`를 모두 같게 설정한다. 빌드 주소가 비어 있으면 발행 전에 실패하고, 이미지의 API 주소와 VPS 주소가 다르면 서비스 변경 전에 배포를 중단한다.
 
 Environment Secrets에는 다음을 등록한다. 값 자체는 문서나 로그에 복사하지 않는다. GHCR 이미지는 기본 private이므로 서버가 pull할 때 사용할 GitHub Packages read 권한도 별도로 준비한다.
 
@@ -28,9 +32,17 @@ Environment Secrets에는 다음을 등록한다. 값 자체는 문서나 로그
 - `SSH_KNOWN_HOSTS`: 검증한 호스트 키
 - `CF_ACCESS_CLIENT_ID`, `CF_ACCESS_CLIENT_SECRET`: Cloudflare Access service token
 
-staging과 production은 각각 별도 GitHub Environment와 별도 배포 키를 사용한다. `GITHUB_TOKEN`은 workflow의 GHCR push에만 쓰이며, 서버 pull을 위해 장기 PAT를 저장소 파일에 넣지 않는다. 서버의 `docker login ghcr.io` 절차와 read:packages 자격증명 배치는 실제 서버 bootstrap에서 수동으로 정한다.
+staging과 production은 각각 별도 GitHub Environment와 별도 배포 키를 사용한다. 위 네 배포 credential은 Environment Secrets로만 등록하고 Repository Secrets에는 복제하지 않는다. 빌드 워크플로 호출에는 배포 secret을 전달하지 않는다. `GITHUB_TOKEN`의 `packages: write`는 이미지 발행 job에만 주며, 서버 접속 job은 `contents: read`만 사용한다. 서버 pull을 위해 장기 PAT를 저장소 파일에 넣지 않는다. 서버의 `docker login ghcr.io` 절차와 read:packages 자격증명 배치는 실제 서버 bootstrap에서 수동으로 정한다.
 
 `API_HOST`는 `prepare-deployment.sh`가 scheme, path, private IP, localhost를 거부한다. `PUBLIC_API_URL`과 `VITE_API_URL`에는 이 값으로 만든 공개 HTTPS URL만 빌드 인자로 들어간다.
+
+## CI 공급망 보호
+
+외부 Action은 공식 저장소에서 확인한 전체 40자리 commit SHA로 고정하고, 모든 checkout은 `persist-credentials: false`로 실행한다. 갱신할 때는 공식 저장소와 commit을 다시 확인하고 검토 가능한 PR로 pin을 변경한다. 읽기 쉬운 `# v6` 같은 주석은 참고용이며 실제 실행 버전은 SHA가 결정한다.
+
+빌드 runner에서는 의존성 설치·이미지 빌드와 GHCR 발행을 수행한다. 서버 접속 runner는 같은 통합 commit의 `scripts/`만 checkout하고, 고정된 cloudflared 바이너리의 SHA256을 검사한 뒤 SSH 명령을 실행한다. 이 runner에서는 앱 의존성을 설치하거나 빌드하지 않고, 빌드 runner의 cache·artifact·실행 파일을 가져오지 않는다. 두 단계 사이에는 성공 의존성만 연결하고 배포 SHA는 신뢰한 GitHub 이벤트에서 독립적으로 결정한다.
+
+이 분리는 빌드 환경으로 서버 접속 키가 전파되는 경로를 줄인다. 저장소 계정이나 승인된 소스·Action 자체의 침해, 악성 앱 이미지까지 자동으로 판별하지는 않는다. 자동 배포 활성화 전에는 GitHub의 develop/release 보호 규칙과 필수 CI 검사, Environment 허용 브랜치를 확인하고 계정의 패스키·2단계 인증을 설정한다. 이 보강은 해당 GitHub 계정 설정을 자동 변경하지 않는다. [GitHub 보안 지침](https://docs.github.com/en/actions/reference/security/secure-use)을 함께 따른다.
 
 ## 서버 디렉터리와 기존 자산 보존
 
@@ -100,7 +112,7 @@ chmod 600 staging/deploy.env production/deploy.env edge/edge.env
 
 staging의 DB 비밀번호는 기존 volume 생성 때 사용한 값을 유지한다. 기존 `backend.env`를 staging 파일의 출발점으로 쓰되 URL을 staging 주소로 바꾼다. production은 네 인증 키, DB 비밀번호, R2 버킷과 버킷 한정 접근 키를 새로 만든다. DB 연결 문자열에 들어갈 비밀번호는 긴 랜덤 hex처럼 URL 인코딩 문제를 피할 수 있는 값을 사용한다. production은 staging의 사용자·작품 데이터를 자동으로 복제하지 않는다.
 
-GitHub Environment의 허용 배포 브랜치도 staging은 `develop`, production은 `release`로 제한한다. GitHub 환경의 `API_HOST`와 VPS의 해당 환경 `API_HOST`가 같아야 이미지 검증이 통과한다. OAuth 콘솔에는 각 환경 API의 콜백을, Resend와 PortOne 테스트 설정에는 각 환경의 URL을 맞춘다. 현재 결제 설정은 두 환경 모두 `test`, 신규 결제 차단이 기본이다.
+GitHub Environment의 허용 배포 브랜치도 staging은 `develop`, production은 `release`로 제한한다. Repository의 해당 `STAGING_API_HOST`/`PRODUCTION_API_HOST`, GitHub Environment의 `API_HOST`와 VPS의 해당 환경 `API_HOST`가 같아야 이미지 검증이 통과한다. OAuth 콘솔에는 각 환경 API의 콜백을, Resend와 PortOne 테스트 설정에는 각 환경의 URL을 맞춘다. 현재 결제 설정은 두 환경 모두 `test`, 신규 결제 차단이 기본이다.
 
 ## 최초 edge 전환
 
@@ -139,9 +151,9 @@ docker compose --env-file edge.env -f edge.yml up -d --wait --wait-timeout 180
 1. `develop` 또는 `release`에 승인된 push가 발생하거나 `workflow_dispatch`를 수동 실행한다. 두 경우 모두 repository flag가 `true`여야 한다.
 2. 공통 CI가 네 개의 필수 job을 통과한다.
 3. opt-in flag와 matching branch 조건을 확인한다.
-4. pinned cloudflared를 checksum 검증 후 설치한다.
-5. GHCR에 `/<environment>/<service>:<full-sha>` 이미지 세 개를 빌드·push한다.
-6. SSH는 `StrictHostKeyChecking=yes`, `IdentitiesOnly=yes`, `ProxyCommand=cloudflared access ssh`로 연결하고 `deploy <full-sha>`만 전달한다.
+4. 배포 credential 없는 빌드 runner에서 공개 API 주소를 검증하고 GHCR에 `/<environment>/<service>:<full-sha>` 이미지 세 개를 빌드·push한다.
+5. 발행 성공 후 별도 runner의 배포 job이 Environment에 연결하고 pinned cloudflared를 checksum 검증 후 설치한다.
+6. 이 job에만 SSH·Access credential을 전달한다. SSH는 `StrictHostKeyChecking=yes`, `IdentitiesOnly=yes`, `ProxyCommand=cloudflared access ssh`로 연결하고 `deploy <full-sha>`만 전달한다.
 7. 서버 `deploy.sh`가 branch HEAD, source mirror, compose project, 환경 격리, 이미지 revision/API URL을 검증한다.
 8. commit SHA별 이미지를 digest로 고정하고 DB backup, migration, healthcheck 순서로 기동한다.
 

@@ -6,8 +6,9 @@
 
 ## 구성
 
-- `.github/workflows/ci.yml`: 네 개의 CI job 성공 후 `STAGING_DEPLOY_ENABLED` 또는 `PRODUCTION_DEPLOY_ENABLED`가 정확히 `true`일 때만 deploy job 호출
-- `.github/workflows/deploy.yml`: 환경별 branch/ref 검사, pinned cloudflared, GHCR build/push, known-hosts 고정 SSH, Cloudflare Access service token ProxyCommand
+- `.github/workflows/ci.yml`: 네 개의 CI job 성공 후 해당 환경 flag가 정확히 `true`일 때 publish를 실행하고, 성공한 발행에 의존해 deploy 호출
+- `.github/workflows/build-images.yml`: 배포 secret·Environment 없는 별도 runner에서 공개 API hostname을 검증하고 GHCR build/push. `packages: write`는 이 job에만 부여
+- `.github/workflows/deploy.yml`: 별도 runner의 배포 Environment, 환경별 branch/ref 검사, pinned cloudflared, known-hosts 고정 SSH와 Cloudflare Access service token ProxyCommand. 토큰은 `contents: read`만 허용
 - `scripts/prepare-deployment.sh`: 배포 환경과 ref, full SHA, 공개 `API_HOST`, image prefix 산출
 - `deploy/scripts/dispatch.sh`: SSH original command를 `deploy|status <40자리 SHA>`로 제한하고 환경별 job을 직렬 실행
 - `deploy/scripts/deploy.sh`: source bare mirror, branch HEAD, compose isolation, edge alias, volume, image label/digest, backup/migration/healthcheck 검증
@@ -46,11 +47,28 @@ edge 전환은 기존 external network와 volume을 확인한 뒤에만 수행�
 
 ## GitHub 활성화 계약
 
+Repository Variables에는 두 flag 외에 공개 빌드 주소 `STAGING_API_HOST`, `PRODUCTION_API_HOST`를 등록한다. 선택한 환경의 변수 키를 먼저 결정하고 조회하므로 staging 값 누락 시 production 값으로 fallback하지 않는다. 빌드는 Environment에 연결하지 않고 배포 secret을 전달받지 않는다. 각 Environment의 `API_HOST`와 VPS 주소도 해당 공개 변수와 일치해야 서버 이미지 검증이 통과한다.
+
 각 Environment에 staging·production별 별도 `SSH_PRIVATE_KEY`, `SSH_KNOWN_HOSTS`, `CF_ACCESS_CLIENT_ID`, `CF_ACCESS_CLIENT_SECRET`을 secret으로 등록한다. `SSH_HOST`, `SSH_USER`, `SSH_PORT`, `API_HOST`는 environment variable이다. `STAGING_DEPLOY_ENABLED`와 `PRODUCTION_DEPLOY_ENABLED`는 Environment variable이 아니라 Repository Variables이며 기본적으로 `false` 또는 미설정이다. 최초에는 staging, release 순서로 각 flag를 임시 활성화해 수동 CI로 내부 기동하고 완료 후 다시 끈다. 두 환경 내부 health 확인 후 edge 전환·브라우저 검증을 거쳐 정기 자동 배포를 활성화한다. 구체적인 최초·정기 절차는 [운영 가이드](../../../guides/GUIDE_CONTINUOUS_DEPLOYMENT.md#활성화-순서와-수동-비활성화)를 따른다. GHCR가 private이면 서버의 read:packages 로그인 자격증명도 별도 bootstrap 대상이다.
 
 배포 키는 `authorized_keys`의 `restrict,command="/home/sy3058/d-web-deploy/bin/dispatch.sh staging"`와 production용 별도 명령으로 제한하고 agent forwarding, port forwarding, TTY를 허용하지 않는다. 두 환경은 각각 Self-hosted Access application과 별도 service token을 사용하며 published SSH route는 `ssh://localhost:22` outbound tunnel이다. 이 경로는 UFW 변경 없이 기존 개인 SSH 키 로그인을 유지한다. known hosts에는 검증한 VPS 공개 host key를 Cloudflare 접속 hostname으로 등록하며 StrictHostKeyChecking을 끄지 않는다.
 
 공식 근거는 [Cloudflare SSH published application](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/use-cases/ssh/ssh-cloudflared-authentication/)과 [Cloudflare service tokens](https://developers.cloudflare.com/cloudflare-one/access-controls/service-credentials/service-tokens/)이다. CI ProxyCommand는 workflow가 설치한 pinned `cloudflared`에 `access ssh --hostname`를 호출하는 현재 스크립트 계약을 따른다.
+
+## Action 고정과 runner 분리
+
+2026-11-25 공식 저장소의 기존 태그를 조회해 아래 commit을 확인했다. 외부 `uses:`는 전체 SHA로 고정하고 모든 checkout의 자격증명 저장을 끈다. 이 조회는 출처와 참조를 확인한 것이며 Action의 모든 코드를 보안 감사했다는 뜻은 아니다. pin 갱신은 공식 저장소의 commit을 다시 확인하고 PR로 검토한다.
+
+| Action | 확인한 ref | 고정 SHA |
+| --- | --- | --- |
+| [actions/checkout](https://github.com/actions/checkout/commit/d23441a48e516b6c34aea4fa41551a30e30af803) | v6 | `d23441a48e516b6c34aea4fa41551a30e30af803` |
+| [actions/setup-node](https://github.com/actions/setup-node/commit/949feb2413d6458794dcd2491c4babbbce0c15c1) | v7 | `949feb2413d6458794dcd2491c4babbbce0c15c1` |
+| [pnpm/action-setup](https://github.com/pnpm/action-setup/commit/73e46992e05b19abd31f2f3c20e0e7370d762115) | v6 | `73e46992e05b19abd31f2f3c20e0e7370d762115` |
+| [astral-sh/setup-uv](https://github.com/astral-sh/setup-uv/commit/fac544c07dec837d0ccb6301d7b5580bf5edae39) | v8.2.0 | `fac544c07dec837d0ccb6301d7b5580bf5edae39` |
+
+빌드와 배포는 서로 다른 reusable workflow와 GitHub-hosted runner를 사용한다. 빌드 호출에는 secret을 전달하지 않으며 내부의 유일한 secret 참조는 GHCR 발행용 `GITHUB_TOKEN`이다. SSH·Cloudflare 키는 배포 Environment에만 저장한다. 배포 runner는 같은 통합 SHA의 `scripts/`만 checkout하고 앱 패키지 설치·Docker 빌드·빌드 artifact/cache 복원을 하지 않는다. 빌드 결과의 실행 파일이나 임의 SHA 출력을 신뢰해 배포하지 않는다.
+
+이 보호는 빌드 환경에서 서버 접속 자격증명을 탈취하는 경로를 줄인다. 승인된 앱 소스·의존성·Action 자체의 악성 동작과 저장소 계정 침해를 완전히 차단하지는 않는다. GitHub 브랜치 보호·Environment 허용 브랜치·계정 2FA/패스키 설정은 별도 운영 확인 대상이며 이 변경으로 자동 설정되지 않는다. 근거: [GitHub secure use](https://docs.github.com/en/actions/reference/security/secure-use), [재사용 workflow의 secret 전달 규칙](https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows).
 
 ## 배포 순서와 실패 경계
 
@@ -70,7 +88,7 @@ edge 전환은 기존 external network와 volume을 확인한 뒤에만 수행�
 
 ## 로컬 검증 (2026-11-25)
 
-- deployment 정책·격리·ProxyCommand·실제 Compose parser 테스트 15개 통과
+- deployment 정책·격리·ProxyCommand·실제 Compose parser 및 workflow 공급망 경계 테스트 20개 통과
 - 배포 worker·digest 검증·백업 실패·재시도 테스트 14개 통과. 완료한 SHA의 재요청에서 HEAD 불일치·실제 재배포·health 실패도 검증
 - 기존 branch policy 테스트 24개, actionlint, shell 구문 검사 통과
 - backend format/lint 및 1,270개 테스트 통과

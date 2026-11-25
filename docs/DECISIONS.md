@@ -757,6 +757,8 @@ GHCR/CD 구현에 앞서 첫 수동 배포는 CI 성공을 확인한 release의 
 
 배포 job 이력의 성공은 현재 실행 상태의 증거로 사용하지 않는다. 실행 중인 같은 SHA 요청은 worker를 공유하지만, 완료 후 재요청은 현재 branch HEAD 검증과 실제 배포를 다시 수행한다. 최초 bootstrap은 두 환경 내부 기동 → shared edge 전환 → 브라우저 확인·초기 데이터 준비 → 정기 자동 배포 활성화 순서로 진행한다. 정기 승격의 staging 브라우저 검증 조건을 edge 전환 전 최초 기동에 적용해 순환 조건을 만들지 않는다.
 
+공급망 보강으로 모든 외부 Action을 공식 저장소에서 확인한 전체 commit SHA에 고정하고 checkout 자격증명 저장을 끈다. 이미지 발행과 서버 접속은 별도 reusable workflow·runner로 분리한다. 빌드는 Environment 없이 Repository의 공개 `STAGING_API_HOST`/`PRODUCTION_API_HOST`만 입력받고 `packages: write`를 사용한다. 배포 credential은 Environment에만 저장하고 빌드 호출에 전달하지 않는다. 배포 runner는 `contents: read`와 신뢰한 commit의 배포 스크립트만 사용한다. 브랜치 보호·계정 MFA 등 외부 설정과 악성 앱 이미지 자체의 위험은 별도 관리한다.
+
 ### CI: GitHub Actions 도입 이력과 현재 상태 (2026-06-22, 2026-08-23 갱신)
 
 **결정: M0 F1을 백엔드 CI부터 구현한다. PR(→main)·main 푸시 시 ruff + format + pytest를 GitHub Actions로 돌린다. CD/배포(F2~F3)와 FE/admin job은 후속.**
