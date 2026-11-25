@@ -1,0 +1,131 @@
+name: ${COMPOSE_PROJECT_NAME:-dweb-staging}
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-api: &api-common
+  image: ${IMAGE_PREFIX:?set IMAGE_PREFIX}/api:${DEPLOY_SHA:?set DEPLOY_SHA}
+  pull_policy: always
+  env_file:
+    - ${BACKEND_ENV_FILE:?set BACKEND_ENV_FILE to an absolute path}
+  environment:
+    ENV: production
+    DEBUG: "false"
+    DATABASE_URL: postgresql+asyncpg://dweb:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/dweb
+    APP_BASE_URL: https://${APP_HOST:?set APP_HOST}
+    ADMIN_BASE_URL: https://${ADMIN_HOST:?set ADMIN_HOST}
+    API_BASE_URL: https://${API_HOST:?set API_HOST}
+    PAYMENT_ENVIRONMENT: ${PAYMENT_ENVIRONMENT:-test}
+    PAYMENTS_ACCEPT_NEW: ${PAYMENTS_ACCEPT_NEW:-false}
+  logging: *default-logging
+
+services:
+  postgres:
+    image: postgres:16.16-alpine
+    environment:
+      POSTGRES_USER: dweb
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: dweb
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dweb -d dweb"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+    logging: *default-logging
+
+  migrate:
+    <<: *api-common
+    command: ["/app/.venv/bin/alembic", "upgrade", "head"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    <<: *api-common
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      default:
+      edge:
+        aliases:
+          - ${EDGE_ALIAS_PREFIX:?set EDGE_ALIAS_PREFIX}-api
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import socket, urllib.request; socket.setdefaulttimeout(3); urllib.request.urlopen('http://localhost:8000/')",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
+  frontend:
+    image: ${IMAGE_PREFIX:?set IMAGE_PREFIX}/frontend:${DEPLOY_SHA:?set DEPLOY_SHA}
+    pull_policy: always
+    environment:
+      API_INTERNAL_URL: http://api:8000
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      default:
+      edge:
+        aliases:
+          - ${EDGE_ALIAS_PREFIX:?set EDGE_ALIAS_PREFIX}-frontend
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:4321/favicon.svg',{signal:AbortSignal.timeout(3000)}).then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+    logging: *default-logging
+
+  admin:
+    image: ${IMAGE_PREFIX:?set IMAGE_PREFIX}/admin:${DEPLOY_SHA:?set DEPLOY_SHA}
+    pull_policy: always
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      default:
+      edge:
+        aliases:
+          - ${EDGE_ALIAS_PREFIX:?set EDGE_ALIAS_PREFIX}-admin
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -T 3 --spider http://127.0.0.1/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    logging: *default-logging
+
+networks:
+  edge:
+    external: true
+    name: ${EDGE_NETWORK:?set EDGE_NETWORK}
+
+volumes:
+  postgres_data:

@@ -85,7 +85,7 @@ M4 (커뮤니티 - 후원 제외)
 ### CI/CD
 - [x] GitHub Actions: backend, frontend, admin lint/test/build job 구현 + PR #123 세 job 실통과 확인
 - [ ] GitHub 기본 브랜치 develop·배포 브랜치 release 전환 (2026-11-23 기본 develop·원격 두 브랜치 존재와 PR #163의 develop squash merge 확인. release 일반 merge·보호 규칙 세부는 미검증)
-- [ ] release 승격 뒤 CI 성공 시 스테이징 자동 배포 (같은 release SHA 수동 빌드 초기 부트스트랩과 deploy 파일은 준비, 레지스트리·CD 자동화는 미구현). [배포 가이드](../guides/GUIDE_DEPLOYMENT.md)
+- [ ] develop CI 성공 시 staging, release CI 성공 시 production 자동 배포 (환경별 opt-in flag 기본 off, VPS·Tunnel·secret 외부 활성화 미완료). [CD 운영 가이드](../guides/GUIDE_CONTINUOUS_DEPLOYMENT.md) · [구현 문서](../MODULES/INFRA/DockerCompose/IMPLEMENTATION_CONTINUOUS_DEPLOYMENT.md)
 - [ ] PR 템플릿/이슈 템플릿 동작 확인
 
 ---

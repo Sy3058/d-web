@@ -1,14 +1,16 @@
-# 첫 VPS 스테이징 배포 설정
+# VPS 배포와 Continuous Deployment 설정
 
-`compose.yml`은 저장소 루트의 로컬 Compose와 합치지 않고 단독으로 사용한다. 이 문서는 설정 준비와 수동 첫 배포 절차다. release CI 성공 후 자동 이미지 발행·배포는 아직 구현하지 않았다.
+`compose.yml`은 저장소 루트의 로컬 Compose와 합치지 않고 단독으로 사용한다. 이 문서는 수동 bootstrap과 현재 CD의 서버 계약을 설명한다. `develop`은 staging, `release`는 production에 매핑되며 opt-in flag는 기본 off다. 실제 VPS·Cloudflare Tunnel·GitHub secret 활성화는 아직 완료하지 않았다. 전체 CD 절차는 [Continuous Deployment 운영 가이드](../docs/guides/GUIDE_CONTINUOUS_DEPLOYMENT.md)를 참조한다.
+
+아래의 기존 단일 staging 수동 절차는 legacy `source`와 `deploy.env`를 보존해야 하는 초기 운영 경로다. 자동 CD를 활성화할 때는 `source.git`와 `staging`·`production`·`edge` 구조 및 환경별 파일을 사용하는 [CD 운영 가이드](../docs/guides/GUIDE_CONTINUOUS_DEPLOYMENT.md)의 계약을 우선한다. 기존 파일과 volume을 자동으로 이동하거나 삭제하지 않는다.
 
 ## 현재 경계
 
-- 배포 대상은 CI를 통과한 같은 저장소 `release` 커밋이다. 작업 브랜치나 develop을 서버에서 실행하지 않는다.
+- staging 배포 대상은 CI를 통과한 같은 저장소 `develop` 커밋이고 production 배포 대상은 CI를 통과한 `release` 커밋이다. 작업 브랜치와 `main`은 서버에서 실행하지 않는다.
 - 세 앱 이미지를 같은 전체 커밋 SHA로 태그한다. `RELEASE_SHA`는 임의 버전 이름이 아니라 실제 `git rev-parse HEAD` 결과다.
 - 외부 공개 포트는 Caddy의 TCP 80/443뿐이다. PostgreSQL·API·Astro·관리자 nginx는 컨테이너 네트워크로 통신한다.
 - `ENV=production`은 Secure 쿠키를 켜기 위한 실행 설정이다. 결제는 별개이며 `PAYMENT_ENVIRONMENT=test`를 고정하고 신규 결제는 기본 차단한다.
-- 처음에는 Cloudflare DNS only로 Caddy의 공개 인증서를 확인한다. 이 설정은 Cloudflare 프록시의 원본 클라이언트 IP 전달을 신뢰하지 않는다.
+- edge Caddy는 staging과 production이 공유하며 환경별 external network의 alias로 앱을 찾는다. 공개 포트는 80/443뿐이다. Cloudflare Tunnel SSH 경로와 공개 HTTPS 활성화는 수동 설정 전까지 미완료다.
 - 원고 R2 버킷은 비공개로 유지한다. 원고를 앱 이미지나 서버의 공개 디렉터리에 복사하지 않는다.
 
 2026-11-23 Astro 이미지 경로 취약점 `GHSA-r3h5-4585-7x3w` 수정은 PR #163으로 develop에 병합됐다. 이 배포 브랜치도 해당 커밋과 `astro@7.4.7` 잠금을 반영했다. 수정된 코드가 포함된 release로 새 이미지를 빌드해야 실제 서버에 적용된다. `@astrojs/node`만 업데이트해서는 해결되지 않는다. [공식 공지](https://github.com/withastro/astro/security/advisories/GHSA-r3h5-4585-7x3w).
@@ -16,14 +18,16 @@
 ## 서버 파일 배치
 
 ```text
-~/d-web-deploy/                 # sy3058 소유, 권한 700
-  deploy.env                   # Compose 변수, 권한 600, Git 밖
-  backend.env                  # API secret, 권한 600, Git 밖
-  backups/                     # DB dump, 권한 700, Git 밖
-  source/                      # 검증된 release 소스
-    deploy/compose.yml
-    deploy/Caddyfile
+~/d-web-deploy/                 # 운영 사용자 소유, 권한 700
+  source.git/                  # bare mirror
+  staging/                     # deploy.env/backend.env/releases/jobs/state
+  production/                  # staging과 별도 secret/DB/R2
+  backups/staging/             # DB dump, 권한 700
+  backups/production/
+  edge/                        # shared Caddy
 ```
+
+기존 `root`, `source`, `backend.env`, `deploy.env`와 legacy volume `dweb-staging_postgres_data`, `dweb-staging_caddy_data`, `dweb-staging_caddy_config`는 삭제·덮어쓰지 않는다. 새 CD 구조는 `source.git`, `staging`, `production`, `backups`, `edge`만 추가한다.
 
 최초 clone·release 전환은 해당 변경의 PR 병합 및 release 승격, 그 SHA의 CI 성공 확인 뒤 수행한다. 저장소 URL과 운영값은 공개 문서에 고정하지 않는다. 원격 release 변경을 fetch한 뒤 실행할 커밋을 확인하고 detached 상태로 고정한다. 변경된 파일이 있다면 전환 전에 원인을 확인하고 보존한다.
 

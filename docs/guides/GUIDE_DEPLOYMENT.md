@@ -1,6 +1,6 @@
 # develop/release 전환과 첫 VPS 배포
 
-2026-11-22 사용자 결정. 작업은 develop에서 시작하고 release에 승격한 코드만 배포한다. 이 문서는 로컬 준비와 실제 GitHub·서버 반영 상태를 구분한다.
+2026-11-22 사용자 결정. 작업은 develop에서 시작하고, develop은 staging, release에 승격한 코드는 production에 배포한다. 이 문서는 로컬 준비와 실제 GitHub·서버 반영 상태를 구분한다.
 
 ## 현재 준비 상태
 
@@ -27,7 +27,8 @@
 origin/develop에서 작업 브랜치 생성
   → 작업 PR → develop (squash merge, CI 통과)
   → develop에서 release로 승격 PR (일반 merge commit, CI 통과)
-  → release 커밋 CI 통과 → 해당 SHA 배포 (CD는 후속 구현)
+  → develop 커밋 CI 통과 → staging opt-in CD
+  → release 커밋 CI 통과 → production opt-in CD
 ```
 
 - 일반 작업 브랜치명은 기존 `{be|fe|admin|common}/{type}/{description}`을 유지한다.
@@ -77,13 +78,13 @@ git switch -c be/feat/example origin/develop
 5. backend의 APP_BASE_URL/ADMIN_BASE_URL/API_BASE_URL, frontend 빌드의 PUBLIC_API_URL, admin 빌드의 VITE_API_URL을 공개 주소로 맞춘다. frontend SSR의 API_INTERNAL_URL은 컨테이너 내부 API 주소로 분리한다. 비밀값을 PUBLIC_/VITE_ 빌드 변수로 넣지 않는다.
 6. 공개 주소에 맞춰 OAuth 콜백, 메일 링크와 PortOne 테스트 웹훅을 등록한다. 제안 기준 결제 복귀는 `https://staging.example.com/payments/return`, 웹훅은 `https://staging-api.example.com/payments/webhooks/portone`이다.
 
-## release 배포 구현 계획
+## CD 구현과 환경 매핑
 
-아래는 후속 구현할 CD 계약이다. 현재 CI 파일은 검사만 하며 이미지 발행·SSH 배포·마이그레이션을 하지 않는다.
+현재 CD workflow와 서버 스크립트는 준비되어 있지만 VPS·Cloudflare Tunnel·GitHub Environment 활성화는 미완료다. 상세 계약은 [Continuous Deployment 운영 가이드](GUIDE_CONTINUOUS_DEPLOYMENT.md)와 [구현 문서](../MODULES/INFRA/DockerCompose/IMPLEMENTATION_CONTINUOUS_DEPLOYMENT.md)를 따른다.
 
-- 배포 시작은 **release push + 해당 커밋 CI 성공**으로 제한한다. develop/main/PR/태그 이벤트에서는 배포 job과 운영 secret을 사용하지 않는다.
-- CI 성공에 의존하는 이미지 빌드·배포 단계를 구성하고 모든 앱을 같은 release 커밋 SHA로 식별한다. 이동 가능한 latest 태그만으로 배포 버전을 결정하지 않는다.
-- 레지스트리는 GHCR을 우선 후보로 두되 아직 설정하지 않았다. 저장소가 공개라고 이미지까지 자동으로 공개하지 않고, 공개 범위·최소 권한을 먼저 결정한다.
+- staging은 `develop` push, production은 `release` push에서만 시작한다. 각각 `STAGING_DEPLOY_ENABLED`, `PRODUCTION_DEPLOY_ENABLED`가 기본 `false`이며 PR·main·태그·작업 브랜치는 배포하지 않는다.
+- CI 성공에 의존하는 이미지 빌드·배포 단계에서 모든 앱을 같은 commit SHA로 식별한다. 이동 가능한 latest 태그만으로 배포 버전을 결정하지 않는다.
+- GHCR, Cloudflare Access service token, known hosts와 SSH forced command를 사용하도록 코드가 준비되어 있으나 실제 secret·Tunnel·키 등록은 미완료다.
 - 최초 배포는 SSH 호스트 키를 검증하고 별도 배포 사용자를 사용한다. 키·서버 환경 파일은 안전한 서버 설정 또는 GitHub secret으로 등록하며 저장소에 commit하지 않는다.
 - 배포를 직렬화하고 진행 중인 DB 마이그레이션을 새 실행으로 임의 중단하지 않는다. DB 백업과 `alembic upgrade head` 후 healthcheck로 확인한다. 실패 시 이전 이미지로 복구할 수 있어야 하며 DB는 forward-only 원칙상 이미지 복구만으로 되돌아간다고 가정하지 않는다.
 - 2 vCore·4GB 서버는 무중단을 약속하지 않고, 첫 테스트 환경은 짧은 중단을 허용하는 안을 우선 검토한다. 실제 중단·복구 절차는 배포 구현 때 확정한다.
@@ -95,7 +96,7 @@ git switch -c be/feat/example origin/develop
 - [ ] develop에서 작업 브랜치 생성 → develop PR CI 통과
 - [ ] 같은 저장소 develop → release PR CI 통과, 작업 브랜치·포크 develop → release 거부
 - [ ] GitHub 기본 브랜치·merge commit·두 통합 브랜치 보호 규칙 실제 반영(2026-11-23 원격 API 미확인)
-- [ ] release의 검증된 SHA로만 배포, 실제 서버의 실행 버전 확인
+- [ ] develop의 검증된 SHA로 staging 배포 및 release의 검증된 SHA로 production 배포, 실제 서버 실행 버전 확인
 - [ ] DB 마이그레이션·healthcheck·백업 복구 확인
 - [ ] 세 공개 주소의 HTTPS와 쿠키 로그인 확인
 - [ ] 사용자가 카드·카카오페이·토스페이 테스트와 모바일 복귀·구매 권한·환불 흐름 확인
