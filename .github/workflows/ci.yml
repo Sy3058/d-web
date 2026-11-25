@@ -1,8 +1,9 @@
 name: CI
 
 # 통합 브랜치 대상 PR과 직접 푸시에서 브랜치 정책과 앱 검사를 돌린다.
-# (CD/배포는 범위 밖 - 이 워크플로는 검증만 한다.)
+# 전체 검증 성공 후 활성화된 환경만 deploy.yml로 배포한다. PR은 배포하지 않는다.
 on:
+  workflow_dispatch:
   push:
     branches: [main, develop, release]
   pull_request:
@@ -10,12 +11,12 @@ on:
     # base를 develop에서 release 등으로 바꾼 PR도 정책을 다시 검사한다.
     types: [opened, synchronize, reopened, edited]
 
-# 같은 브랜치에서 새 푸시가 오면 이전 실행을 취소(Actions 분 절약).
+# PR의 이전 검사는 취소하지만 push 실행은 배포·마이그레이션 중단을 막기 위해 완료시킨다.
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
-# 기본 GITHUB_TOKEN 권한을 읽기 전용으로 좁힌다(이 CI는 쓰기 동작이 없다).
+# 기본 토큰은 읽기 전용이다. 배포 job만 이미지 발행용 packages:write를 추가한다.
 permissions:
   contents: read
 
@@ -29,6 +30,11 @@ jobs:
 
       - name: Test branch policy
         run: sh scripts/test-branch-policy.sh
+
+      - name: Test deployment trust boundaries
+        run: |
+          python3 -m unittest discover -s scripts -p "test_cd_*.py"
+          python3 -m unittest discover -s scripts -p "test_deployment.py"
 
       - name: Validate pull request target
         if: github.event_name == 'pull_request'
@@ -181,3 +187,22 @@ jobs:
 
       - name: Vitest
         run: pnpm --filter admin test
+
+  deploy:
+    needs: [branch-policy, backend, frontend, admin]
+    # Repository variables are opt-in switches. Defaults are disabled until server bootstrap is complete.
+    if: >-
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+      ((github.ref == 'refs/heads/develop' && vars.STAGING_DEPLOY_ENABLED == 'true') ||
+       (github.ref == 'refs/heads/release' && vars.PRODUCTION_DEPLOY_ENABLED == 'true'))
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/deploy.yml
+    with:
+      deployment_environment: ${{ github.ref == 'refs/heads/develop' && 'staging' || 'production' }}
+    secrets:
+      SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+      CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+      CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}

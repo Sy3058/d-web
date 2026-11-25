@@ -651,11 +651,11 @@ bcrypt( base64( hmac_sha384(password, key=PASSWORD_PEPPER) ), gensalt(cost=12) )
 
 ### develop 통합 + release 배포, 영역 prefix 유지 (2026-11-22 변경)
 
-사용자 요청으로 기존 main 중심 GitHub Flow를 대체한다. 모든 신규 작업 브랜치는 최신 `origin/develop`에서 만들고 develop으로 PR한다. release에 승격된 코드만 배포한다. 기존 main은 최초 전환 기준점과 이력 보존용으로 남긴다.
+사용자 요청으로 기존 main 중심 GitHub Flow를 대체한다. 모든 신규 작업 브랜치는 최신 `origin/develop`에서 만들고 develop으로 PR한다. production은 release에 승격된 코드만 배포하며 staging은 후속 CD 결정에 따라 develop에서 opt-in 배포한다. 기존 main은 최초 전환 기준점과 이력 보존용으로 남긴다.
 
 **흐름**
 ```
-develop (기본 브랜치·개발 통합, 직접 배포하지 않음)
+develop (기본 브랜치·개발 통합, CI 성공 후 staging opt-in 배포)
   └── be/feat/auth-jwt
   └── be/fix/payment-webhook
   └── fe/feat/episode-viewer
@@ -665,7 +665,8 @@ develop (기본 브랜치·개발 통합, 직접 배포하지 않음)
   └── common/chore/env-setup
 
 작업 브랜치 -- PR / squash merge --> develop
-develop -- 승격 PR / merge commit --> release -- CI 성공 --> 배포
+develop -- CI + staging opt-in --> staging
+develop -- 승격 PR / merge commit --> release -- CI + production opt-in --> production
 
 main (과거 이력 보존, 최초 전환 PR 이후 신규 작업·배포 대상 아님)
 ```
@@ -676,7 +677,7 @@ main (과거 이력 보존, 최초 전환 PR 이후 신규 작업·배포 대상
 - release 대상 PR은 같은 저장소의 develop만 허용한다. 장기 유지하는 develop → release는 squash/rebase하지 않고 일반 merge commit으로 이력을 보존한다.
 - release 승격은 develop의 누적 변경 전체를 포함한다. 아직 배포하면 안 되는 기능은 작업 브랜치에 두거나 승인된 비활성 상태로 유지한다. 긴급 수정만 release에 cherry-pick하는 별도 경로는 이번 결정에 포함하지 않는다.
 - develop·release·main 직접 push를 로컬 훅에서 차단한다. GitHub 보호 규칙은 별도로 설정하고 CI 성공을 required check로 지정한다. 클라이언트 훅과 CI 파일만으로 서버 보호가 자동 설정되지는 않는다.
-- 배포는 release push에서 해당 커밋의 CI가 통과한 뒤에만 한다. PR·develop·main·태그만으로 배포하지 않는다. 배포 시 커밋 SHA를 이미지와 기록에 남긴다.
+- production 배포는 release push에서 해당 커밋의 CI와 production opt-in이 통과한 뒤에만 한다. staging은 develop push와 staging opt-in에서만 배포한다. PR·main·태그만으로 배포하지 않으며, 배포 시 커밋 SHA를 이미지와 기록에 남긴다. 세부 계약은 [CD 분리 결정](guides/GUIDE_CONTINUOUS_DEPLOYMENT.md)을 따른다.
 - 현재 첫 VPS는 결제 `test` 환경이다. release라는 이름으로 실결제를 켜지 않으며, 정식 운영 DB·secret·작가 계정 분리는 M7에서 확인한다.
 
 **전환 상태와 순서**
@@ -744,17 +745,23 @@ FE는 `tsconfig.json`, Admin은 `tsconfig.app.json`의 `compilerOptions.paths`�
 
 ## CI/CD 결정
 
-### 첫 스테이징 배포 설정 준비 (2026-11-23)
+### 첫 스테이징 배포 설정 준비 (2026-11-23, 당시 결정 이력)
 
 로컬 Compose와 분리한 `deploy/compose.yml`을 사용한다. 외부 포트는 Caddy의 TCP 80/443뿐이며, backend는 비root로 실행하고 같은 이미지의 Alembic migration 성공을 API 기동 조건으로 둔다. 브라우저 API 주소는 frontend/admin 빌드에 주입하고 Astro 내부 API 주소는 런타임에 분리한다. secret 파일은 서버의 저장소 밖에 둔다.
 
 GHCR/CD 구현에 앞서 첫 수동 배포는 CI 성공을 확인한 release의 동일 SHA로 서버에서 세 이미지를 빌드하는 초기 절차를 준비한다. 이는 develop/작업 브랜치 배포를 허용하거나 release CI 성공 조건을 없애는 결정이 아니다. Compose는 SHA의 진위와 GitHub CI 성공을 자동 검증하지 않으므로 작업자가 확인한다. 이후 자동화는 기존 release CI 성공 → 이미지 발행 → VPS 배포 계획을 유지한다. 실제 공개 배포·자동 HTTPS·백업 복구는 미완료다. [실행 절차](../deploy/README.md), [구현·검증](MODULES/INFRA/DockerCompose/IMPLEMENTATION_STAGING_DEPLOYMENT.md).
 
+### 스테이징·운영 CD 분리 (2026-11-25 후속 결정)
+
+후속 구현은 `develop → staging`, `release → production`으로 분리한다. 환경별 GitHub Environment, 별도 DB volume·secret·R2 설정·edge network를 사용하고 shared Caddy edge는 legacy staging Caddy volume을 보존한다. `STAGING_DEPLOY_ENABLED`와 `PRODUCTION_DEPLOY_ENABLED`는 Repository Variables이며 기본 off다. GHCR private image, Cloudflare Access service token과 forced-command SSH, backup·migration·healthcheck 코드는 준비했지만 실제 VPS·Tunnel·키·GitHub 환경 활성화는 미완료다. [CD 운영 가이드](guides/GUIDE_CONTINUOUS_DEPLOYMENT.md), [구현·검증](MODULES/INFRA/DockerCompose/IMPLEMENTATION_CONTINUOUS_DEPLOYMENT.md).
+
+배포 job 이력의 성공은 현재 실행 상태의 증거로 사용하지 않는다. 실행 중인 같은 SHA 요청은 worker를 공유하지만, 완료 후 재요청은 현재 branch HEAD 검증과 실제 배포를 다시 수행한다. 최초 bootstrap은 두 환경 내부 기동 → shared edge 전환 → 브라우저 확인·초기 데이터 준비 → 정기 자동 배포 활성화 순서로 진행한다. 정기 승격의 staging 브라우저 검증 조건을 edge 전환 전 최초 기동에 적용해 순환 조건을 만들지 않는다.
+
 ### CI: GitHub Actions 도입 이력과 현재 상태 (2026-06-22, 2026-08-23 갱신)
 
 **결정: M0 F1을 백엔드 CI부터 구현한다. PR(→main)·main 푸시 시 ruff + format + pytest를 GitHub Actions로 돌린다. CD/배포(F2~F3)와 FE/admin job은 후속.**
 
-**현재 상태 (2026-11-22 로컬 변경)**: `.github/workflows/ci.yml`은 main/develop/release 대상 PR·push에서 branch-policy와 backend/frontend/admin을 검사한다. release PR의 출처는 같은 저장소 develop으로 제한한다. frontend는 lint/astro check/build/test와 SSR 검사, admin은 lint/build/test를 실행한다. GitHub에서 변경된 CI가 실행된 결과는 아직 미검증이며 CD는 미구현이다. 위 main 중심 문장은 단계적 도입 당시 이력이다.
+**당시 상태 (2026-11-22 로컬 변경 기록)**: `.github/workflows/ci.yml`은 main/develop/release 대상 PR·push에서 branch-policy와 backend/frontend/admin을 검사한다. release PR의 출처는 같은 저장소 develop으로 제한한다. frontend는 lint/astro check/build/test와 SSR 검사, admin은 lint/build/test를 실행한다. GitHub에서 변경된 CI가 실행된 결과는 당시 미검증이며 CD 구현 전 기록이다. 현재 CD 상태는 위의 2026-11-25 후속 결정을 따른다. 위 main 중심 문장은 단계적 도입 당시 이력이다.
 
 - **범위 = 백엔드 우선**: 결제·인증·Signed URL 등 데이터 무결성 리스크가 BE에 집중 → 가장 비싼 회귀부터 막는다. FE/admin(eslint+tsc)은 frontend ESLint 셋업 선행 필요라 분리.
 - **도구**: `astral-sh/setup-uv`(캐시) + `uv sync --locked`(lockfile 재현성) + `actions/checkout`. Python은 `uv python install`이 `requires-python`(3.12)으로 자동 설치.

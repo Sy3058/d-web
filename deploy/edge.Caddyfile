@@ -1,0 +1,50 @@
+{
+	email {$ACME_EMAIL}
+}
+
+(content_type_options) {
+	header X-Content-Type-Options "nosniff"
+}
+
+(noindex) {
+	header X-Robots-Tag "noindex, nofollow"
+}
+
+{$STAGING_APP_HOST} {
+	import content_type_options
+	import noindex
+	reverse_proxy staging-frontend:4321
+}
+
+{$STAGING_ADMIN_HOST} {
+	import content_type_options
+	import noindex
+	reverse_proxy staging-admin:80
+}
+
+{$STAGING_API_HOST} {
+	import content_type_options
+	import noindex
+	reverse_proxy staging-api:8000 {
+		header_up X-Forwarded-For {remote_host}
+	}
+}
+
+{$PRODUCTION_APP_HOST} {
+	import content_type_options
+	reverse_proxy production-frontend:4321
+}
+
+{$PRODUCTION_ADMIN_HOST} {
+	import content_type_options
+	import noindex
+	reverse_proxy production-admin:80
+}
+
+{$PRODUCTION_API_HOST} {
+	import content_type_options
+	import noindex
+	reverse_proxy production-api:8000 {
+		header_up X-Forwarded-For {remote_host}
+	}
+}

@@ -222,17 +222,17 @@
 - **frontend ESLint 구현 (2026-08-18)**: ESLint 10 flat config에 JS/TS/Astro recommended와 React Hooks recommended를 적용하고 `.astro`가 포함된 명시적 lint script를 추가했다. frontend CI는 lint를 astro check 앞에서 실행한다. 로컬 전체 gate와 frozen lockfile 설치는 통과했으며 PR의 실제 Actions 통과 확인은 아직 남았다. type-aware lint, Prettier, JSX a11y, import/style 규칙은 제외했다. 상세는 `docs/MODULES/FE/Scaffold/IMPLEMENTATION_FRONTEND_ESLINT.md`.
 - **F1 완료 (2026-08-19)**: PR #123에서 backend, frontend, admin 세 job이 모두 성공했다. frontend ESLint의 실제 Actions 통과까지 확인했으므로 위 "부분 구현"과 "확인 대기" 문구는 도입 이력으로만 남긴다.
 
-### F2. build + push 워크플로우
+### F2. build + push 워크플로우 (CD 구현 준비, 외부 미완료)
 - 선행: F1, D3
-- 산출물: release 승격 커밋의 CI 성공 뒤 BE/FE/관리자 이미지를 같은 SHA로 빌드하고 레지스트리에 푸시. 현재는 같은 release SHA 수동 빌드 초기 부트스트랩을 준비했으며 레지스트리·자동 발행은 미구현.
-- DoD: release SHA와 레지스트리 이미지 식별자가 일치하고 실패한 CI에서는 발행하지 않는다.
-- 2026-11-22 브랜치 전환: 로컬 CI는 develop/release와 최초 전환용 main을 검사하고 release PR은 같은 저장소 develop만 받는다. 원격 브랜치·기본 브랜치·merge 설정·보호 규칙과 실제 Actions 결과는 후속 확인이다. 이미지 발행·CD는 아직 미구현이다.
+- 산출물: develop→staging 또는 release→production 커밋의 CI 성공 뒤 BE/FE/관리자 이미지를 같은 SHA로 빌드하고 GHCR에 푸시. workflow와 private registry 경로는 준비했지만 GitHub 환경·secret·flag 활성화는 미완료.
+- DoD: 해당 환경의 develop/release SHA와 레지스트리 이미지 식별자가 일치하고 실패한 CI에서는 발행하지 않는다.
+- 2026-11-25 CD 준비: `develop` staging, `release` production 매핑과 full SHA image publish를 코드로 준비했다. 실제 Actions·GHCR private pull은 외부 활성화 전이다.
 
-### F3. 스테이징 자동 배포
+### F3. 스테이징·운영 자동 배포 (CD 구현 준비, 외부 미완료)
 - 선행: F2, D4
-- 산출물: release의 검증된 SHA별 이미지로 VPS에 배포. deploy Compose/Caddy·환경 예시·migrate 포함 Dockerfile은 준비했으나 레지스트리·CD 자동화·공개 HTTPS는 미구현이다. [배포 가이드](../guides/GUIDE_DEPLOYMENT.md)를 따른다.
-- DoD: develop → release 일반 merge → 해당 release 커밋 CI 성공 → 스테이징 변경 반영. 배포 실패 시 원인과 복구 결과 확인
-- 결정 필요: 무중단 배포 (rolling vs 짧은 down 허용)
+- 산출물: 검증된 develop SHA를 staging, release SHA를 production VPS에 배포. deploy runtime/edge, 환경 격리, Cloudflare Access SSH, backup·migration·healthcheck를 준비했으나 VPS 적용·공개 HTTPS·복구 검증은 미완료다. [CD 운영 가이드](../guides/GUIDE_CONTINUOUS_DEPLOYMENT.md)를 따른다.
+- DoD: develop push→staging 또는 release 일반 merge→production, 해당 커밋 CI 성공 및 flag 활성화 뒤 변경 반영. 배포 실패 시 원인과 복구 결과 확인
+- 현재 방식: 해당 환경 API의 짧은 중단을 허용하고 migration 뒤 healthcheck로 복귀한다. 무중단 배포는 이번 범위에 포함하지 않는다.
 
 ### F4. PR / 이슈 템플릿 동작 확인
 - 선행: 없음

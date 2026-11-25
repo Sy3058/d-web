@@ -1,0 +1,62 @@
+name: dweb-edge
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    environment:
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL}
+      STAGING_APP_HOST: ${STAGING_APP_HOST:?set STAGING_APP_HOST}
+      STAGING_ADMIN_HOST: ${STAGING_ADMIN_HOST:?set STAGING_ADMIN_HOST}
+      STAGING_API_HOST: ${STAGING_API_HOST:?set STAGING_API_HOST}
+      PRODUCTION_APP_HOST: ${PRODUCTION_APP_HOST:?set PRODUCTION_APP_HOST}
+      PRODUCTION_ADMIN_HOST: ${PRODUCTION_ADMIN_HOST:?set PRODUCTION_ADMIN_HOST}
+      PRODUCTION_API_HOST: ${PRODUCTION_API_HOST:?set PRODUCTION_API_HOST}
+    ports:
+      - target: 80
+        published: "80"
+        protocol: tcp
+      - target: 443
+        published: "443"
+        protocol: tcp
+    volumes:
+      - type: bind
+        source: ./edge.Caddyfile
+        target: /etc/caddy/Caddyfile
+        read_only: true
+        bind:
+          create_host_path: false
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - staging-edge
+      - production-edge
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -T 3 -O /dev/null http://127.0.0.1:2019/config/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+    logging: *default-logging
+
+networks:
+  staging-edge:
+    external: true
+    name: dweb-staging-edge
+  production-edge:
+    external: true
+    name: dweb-production-edge
+
+volumes:
+  caddy_data:
+    external: true
+    name: ${CADDY_DATA_VOLUME:-dweb-staging_caddy_data}
+  caddy_config:
+    external: true
+    name: ${CADDY_CONFIG_VOLUME:-dweb-staging_caddy_config}

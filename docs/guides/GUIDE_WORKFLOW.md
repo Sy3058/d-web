@@ -38,7 +38,7 @@
 6. **통합·승격·배포**: 작업 브랜치 → develop은 squash merge, 같은 저장소의 develop → release는 일반 merge commit을 사용한다. hotfix도 develop에서 분기해 같은 경로로 승격하며 release에서 별도 작업 브랜치를 만들지 않는다. develop/release/main 직접 push·force push·임의 삭제를 금지한다. release는 develop의 누적 변경 전체를 승격하므로 미완성 기능은 작업 브랜치에 남기거나 명시적으로 비활성화한다.
 7. **main 전환**: main은 전환 기준점과 과거 이력 보존용이다. 최초 전환 PR만 main에 반영하고 develop/release를 같은 확정 커밋에서 만든다. GitHub 기본 브랜치를 develop으로 바꾼 뒤 신규 작업·배포에 main을 사용하지 않는다. 원격 브랜치 생성·기본 브랜치·merge 설정·보호 규칙 변경은 구체적인 변경안을 확인받고 수행한다.
 
-브랜치 명명 규칙은 `DECISIONS.md` "브랜치 전략 결정", 최초 전환·배포 순서는 [배포 가이드](GUIDE_DEPLOYMENT.md) 참조.
+브랜치 명명 규칙은 `DECISIONS.md` "브랜치 전략 결정", 최초 전환·수동 배포 순서는 [배포 가이드](GUIDE_DEPLOYMENT.md), develop→staging·release→production CD는 [CD 운영 가이드](GUIDE_CONTINUOUS_DEPLOYMENT.md) 참조.
 
 ---
 
