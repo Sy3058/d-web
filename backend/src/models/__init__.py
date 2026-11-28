@@ -20,6 +20,7 @@ from .payment import (
 from .user import (
     EmailVerification,
     OAuthAccount,
+    PasswordReset,
     RefreshToken,
     RoleEnum,
     SignupEmailVerification,
@@ -39,6 +40,7 @@ __all__ = [
     "User",
     "OAuthAccount",
     "RefreshToken",
+    "PasswordReset",
     "EmailVerification",
     "SignupEmailVerification",
     "UserRead",

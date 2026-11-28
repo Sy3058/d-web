@@ -48,9 +48,12 @@ from src.lib.signup_verification import (
 )
 from src.models.user import User, UserRead
 from src.schemas.auth import (
+    ForgotPasswordRequest,
     LoginRequest,
     MessageResponse,
     ResendVerificationRequest,
+    ResetPasswordRequest,
+    ResetPasswordResponse,
     SignupEmailChallengeResponse,
     SignupEmailRequest,
     SignupEmailVerifyRequest,
@@ -59,7 +62,7 @@ from src.schemas.auth import (
     SignupVerificationResponse,
     VerifyEmailRequest,
 )
-from src.services import auth_service, email_service, signup_service
+from src.services import auth_service, email_service, password_reset_service, signup_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 logger = structlog.get_logger(__name__)
@@ -74,6 +77,67 @@ _UNAUTHORIZED = "인증이 필요합니다"
 _INVALID_VERIFICATION = "유효하지 않거나 만료된 인증 링크입니다"
 # 비열거: 재발송도 회원/인증 여부와 무관하게 동일 응답(M1 E3).
 _RESEND_MESSAGE = "인증 메일을 보냈어요"
+_PASSWORD_RESET_MESSAGE = "입력하신 주소로 비밀번호 재설정 안내를 보냈어요"
+_INVALID_PASSWORD_RESET = "유효하지 않거나 만료된 비밀번호 재설정 링크입니다"
+
+
+@router.post(
+    "/forgot-password",
+    response_model=MessageResponse,
+    dependencies=[Depends(RateLimit("5/minute", scope="forgot-password"))],
+)
+async def forgot_password(
+    body: ForgotPasswordRequest,
+    background_tasks: BackgroundTasks,
+    response: Response,
+    session: SessionDep,
+) -> MessageResponse:
+    await password_reset_service.request_reset(str(body.email), session, background_tasks)
+    response.headers["Cache-Control"] = "no-store"
+    return MessageResponse(message=_PASSWORD_RESET_MESSAGE)
+
+
+@router.post(
+    "/reset-password",
+    response_model=ResetPasswordResponse,
+    dependencies=[Depends(RateLimit("5/minute", scope="reset-password"))],
+)
+async def reset_password(
+    body: ResetPasswordRequest,
+    background_tasks: BackgroundTasks,
+    response: Response,
+    session: SessionDep,
+) -> ResetPasswordResponse:
+    try:
+        result = await password_reset_service.reset_password(body.token, body.new_password, session)
+    except password_reset_service.InvalidPasswordResetError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=_INVALID_PASSWORD_RESET,
+            headers={"Cache-Control": "no-store"},
+        ) from exc
+    except password_reset_service.SamePasswordResetError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="새 비밀번호는 현재 비밀번호와 달라야 합니다",
+            headers={"Cache-Control": "no-store"},
+        ) from exc
+    except PwnedPasswordError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="유출 이력이 있는 비밀번호입니다. 다른 비밀번호를 사용하세요",
+            headers={"Cache-Control": "no-store"},
+        ) from exc
+    response.headers["Cache-Control"] = "no-store"
+    background_tasks.add_task(
+        email_service.send_password_reset_complete_email,
+        result.email,
+        result.login_url,
+    )
+    return ResetPasswordResponse(
+        message="비밀번호가 변경되었습니다. 다시 로그인해 주세요",
+        login_url=result.login_url,
+    )
 
 
 @router.post(

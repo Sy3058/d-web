@@ -80,6 +80,27 @@ email_verifications
 └── used_at    TIMESTAMPTZ            -- NULL = 미사용
 ```
 
+### password_resets
+
+2026-11-26 AUTH-05 이메일 비밀번호 복구용 일회성 토큰이다.
+
+```sql
+password_resets
+├── id             UUID PRIMARY KEY DEFAULT gen_random_uuid()
+├── user_id        UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE
+├── token_hash     VARCHAR(64) NOT NULL  -- HMAC-SHA256, UNIQUE
+├── credential_tag VARCHAR(64) NOT NULL  -- 발급 당시 비밀번호 해시의 목적별 HMAC
+├── expires_at     TIMESTAMPTZ NOT NULL  -- 발급 + 1시간
+├── created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+└── used_at        TIMESTAMPTZ           -- NULL = 미사용
+```
+
+`user_id` 인덱스는 계정별 재발송 제한·이전 링크 폐기에 사용한다. 발급은 User 행 잠금 아래
+60초 간격을 확인하고 이전 미사용 행을 사용됨으로 표시한다. 소비는 최신 계정 자격·태그·만료를 다시 검증한 뒤
+비밀번호 갱신, refresh 삭제와 신뢰 기기 폐기와 함께 계정의 토큰을 모두 삭제한다.
+일반 비밀번호 변경 뒤에는 credential 태그 불일치로 기존 링크를 거부한다.
+만료된 행은 기존 정리 작업이 삭제한다. [구현 계약](MODULES/BE/Auth/IMPLEMENTATION_PASSWORD_RESET.md).
+
 ### signup_email_verifications
 
 2026-11-23 가입 순서 변경. User를 생성하기 전에 Resend로 받은 6자리 인증번호로 이메일

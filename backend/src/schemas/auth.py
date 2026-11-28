@@ -85,8 +85,26 @@ class ResendVerificationRequest(BaseModel):
     email: EmailStr
 
 
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str = Field(min_length=1, max_length=512)
+    new_password: str = Field(min_length=PASSWORD_MIN_LENGTH, max_length=PASSWORD_MAX_LENGTH)
+
+    @field_validator("new_password")
+    @classmethod
+    def _password_policy(cls, value: str) -> str:
+        return validate_password_policy(value)
+
+
 class MessageResponse(BaseModel):
     message: str
+
+
+class ResetPasswordResponse(MessageResponse):
+    login_url: str
 
 
 class TotpConfirmRequest(BaseModel):

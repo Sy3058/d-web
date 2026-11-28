@@ -167,6 +167,26 @@ class RefreshToken(SQLModel, table=True):
     )
 
 
+class PasswordReset(SQLModel, table=True):
+    """일회용 비밀번호 재설정 토큰. 원문 토큰은 저장하지 않는다."""
+
+    __tablename__ = "password_resets"
+    __table_args__ = (
+        Index("idx_password_resets_user_id", "user_id"),
+        Index("uq_password_resets_token_hash", "token_hash", unique=True),
+    )
+
+    id: uuid.UUID | None = Field(default=None, sa_column=_pk_column())
+    user_id: uuid.UUID = Field(sa_column=_fk_user_column())
+    token_hash: str = Field(sa_column=Column(String(64), nullable=False))
+    credential_tag: str = Field(sa_column=Column(String(64), nullable=False))
+    expires_at: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False))
+    created_at: datetime | None = Field(default=None, sa_column=_created_at_column())
+    used_at: datetime | None = Field(
+        default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
+    )
+
+
 class EmailVerification(SQLModel, table=True):
     __tablename__ = "email_verifications"
     __table_args__ = (
