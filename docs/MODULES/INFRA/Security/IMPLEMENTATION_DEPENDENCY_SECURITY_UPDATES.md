@@ -1,5 +1,33 @@
 # 의존성 보안 수정 (2026-11-12)
 
+## 2026-11-28 js-yaml 업데이트
+
+일일 점검에서 확인한 `GHSA-2883-xcg3-v3hh` / `CVE-2026-84375`에 대응한다.
+빈 mapping을 반복 병합하면 `maxTotalMergeKeys` 제한을 우회해 CPU를 소모하는 문제이며,
+공식 수정 버전은 4.x 기준 `4.3.2`다.
+
+- `@astrojs/internal-helpers@0.10.4`의 `js-yaml@4.3.1`과
+  `@redocly/openapi-core@1.34.17`의 `js-yaml@4.2.0`을 `4.3.2`로 통일한다.
+- root `pnpm-workspace.yaml`의 4.x 범위 override와 `pnpm-lock.yaml`을 함께 갱신한다.
+  상위 Astro·OpenAPI 도구나 다른 직접 의존성 버전을 일괄 업데이트하지 않는다.
+- 이 변경은 해당 js-yaml 공지의 취약 버전을 제거하는 작업이다. 일일 보고서에 남은 다른
+  패키지·실제 배포 이미지의 확인 필요 항목까지 해결한 것으로 간주하지 않는다.
+- 운영 반영에는 새 잠금 파일로 이미지 재빌드·재배포가 필요하다.
+
+검증은 Node `24.22.3`과 pnpm `10.24.0`으로 수행했다. `pnpm why js-yaml -r`과
+두 소비자의 실제 module resolution이 모두 `4.3.2`이며, 잠금 파일에는 `4.2.0`·`4.3.1`이
+남아 있지 않다. 다른 패키지 버전은 바뀌지 않았다. 일반 YAML 파싱과, 20개 빈 mapping의
+병합이 `maxTotalMergeKeys: 10`에서 거부되는 작은 입력의 스모크 검사를 통과했다.
+
+Frontend lint·Astro check·409개 테스트·build와 Admin lint·139개 테스트·build를 통과했다.
+Astro check의 기존 unused import hint 1건과 build의 기존 Sentry 토큰 미설정·transitions
+sourcemap 경고는 유지된다. Backend는 변경하지 않아 게이트를 반복하지 않았다.
+커밋·push·배포는 수행하지 않았다.
+
+공식 근거: [보안 공지](https://github.com/advisories/GHSA-2883-xcg3-v3hh),
+[4.3.2 릴리스](https://github.com/nodeca/js-yaml/releases/tag/4.3.2),
+[pnpm 10 overrides](https://pnpm.io/10.x/settings#overrides).
+
 ## 범위
 
 일일 점검에서 확인한 CA 신뢰 bundle과 관리자 에디터 붙여넣기 취약점의 수정 버전을 활성 worktree에 반영한다. 기존 구매 내역·영수증 구현 변경은 파일 해시로 보존을 확인했다. 다른 취약점 후보, 보존용 detached worktree와 복구 snapshot은 이번 업데이트에 포함하지 않는다.

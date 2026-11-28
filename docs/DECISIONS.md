@@ -76,6 +76,7 @@
 - Astro 7의 Rust 컴파일러, `compressHTML: 'jsx'` 기본값, `src/fetch.ts` 예약, Sätteri 기본 Markdown 처리기를 공식 migration 문서와 대조했다. 현재 소스에는 충돌하는 실험 플래그, `src/fetch.ts`, Markdown/MDX, 제거 API가 없다.
 - 인증과 상태는 FastAPI의 HttpOnly 쿠키로 관리하며 Astro 세션을 사용하지 않으므로 `session: false`로 Node adapter의 기본 파일시스템 세션을 끈다.
 - 자동 검증은 frontend lint, Astro check, 테스트, 빌드와 admin lint, 테스트, 빌드를 모두 통과했다. Astro 7의 JSX 공백 처리에 따른 시각 결과는 사용자 브라우저 확인 대상으로 남긴다.
+- 2026-11-28 `js-yaml` 보안 수정은 상위 Astro·OpenAPI 도구의 일괄 업데이트 대신 workspace override로 취약한 4.x 간접 의존성을 `4.3.2`로 통일한다. [적용 근거와 검증](MODULES/INFRA/Security/IMPLEMENTATION_DEPENDENCY_SECURITY_UPDATES.md#2026-11-28-js-yaml-업데이트).
 
 공식 근거: https://astro.build/blog/astro-7/ , https://docs.astro.build/en/guides/upgrade-to/v7/ , https://docs.astro.build/en/guides/sessions/
 
