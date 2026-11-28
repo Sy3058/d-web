@@ -63,6 +63,11 @@ export default function LoginForm({ redirect = redirectToMyPage }: LoginFormProp
         error={errors.password?.message}
         {...register('password')}
       />
+      <div className="text-right">
+        <a href="/auth/forgot-password" className="text-sm text-ink underline underline-offset-4">
+          비밀번호를 잊으셨나요?
+        </a>
+      </div>
       {formError && <FormError message={formError} />}
       {showVerificationHelp && (
         <p className="text-sm text-muted">
