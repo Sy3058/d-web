@@ -30,6 +30,7 @@ from limits import RateLimitItem, parse
 from limits.aio import storage, strategies
 
 _RATE_LIMIT_MESSAGE = "요청이 너무 많습니다. 잠시 후 다시 시도하세요"
+_PASSWORD_RESET_NOTICE_LIMIT: RateLimitItem = parse("1/minute")
 
 
 def _new_limiter() -> tuple[storage.MemoryStorage, strategies.MovingWindowRateLimiter]:
@@ -69,6 +70,15 @@ class RateLimit:
                 detail=_RATE_LIMIT_MESSAGE,
                 headers={"Retry-After": str(self._item.get_expiry())},
             )
+
+
+async def allow_password_reset_notice(target: str) -> bool:
+    """주소 HMAC별 안내 메일을 프로세스당 1분 1회로 제한한다."""
+    return await _limiter.hit(
+        _PASSWORD_RESET_NOTICE_LIMIT,
+        "password-reset-notice",
+        target,
+    )
 
 
 def reset_rate_limits() -> None:

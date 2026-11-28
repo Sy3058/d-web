@@ -207,6 +207,88 @@ async def test_already_registered_email_to_address(monkeypatch, set_api_key):
     assert sent["to"] == "dup@example.com"
 
 
+@pytest.mark.parametrize(
+    "send,alias,variable,path",
+    [
+        (
+            email_service.send_google_registered_email,
+            "gmail-registered",
+            "loginurl",
+            "/auth/login",
+        ),
+        (
+            email_service.send_non_registered_email,
+            "non-registered",
+            "registerurl",
+            "/auth/signup",
+        ),
+    ],
+)
+async def test_password_account_notice_uses_published_template(
+    mock_post, set_api_key, send, alias, variable, path
+):
+    await send("user@example.com")
+
+    payload = mock_post.call_args.kwargs["json"]
+    assert payload == {
+        "to": ["user@example.com"],
+        "template": {
+            "id": alias,
+            "variables": {variable: f"{email_service.settings.app_base_url}{path}"},
+        },
+    }
+    assert not ({"from", "subject", "html", "text", "react"} & payload.keys())
+
+
+async def test_password_reset_email_uses_published_template_and_does_not_log_token(
+    monkeypatch, mock_post, set_api_key
+):
+    mock_logger = MagicMock()
+    monkeypatch.setattr(email_service, "logger", mock_logger)
+    token = "secret-reset-token"
+    await email_service.send_password_reset_email("private@example.com", token)
+
+    payload = mock_post.call_args.kwargs["json"]
+    assert payload == {
+        "to": ["private@example.com"],
+        "template": {
+            "id": "password-reset",
+            "variables": {
+                "reseturl": (
+                    f"{email_service.settings.app_base_url}/auth/reset-password#token={token}"
+                )
+            },
+        },
+    }
+    assert not ({"from", "subject", "html", "text", "react"} & payload.keys())
+    logged = repr(mock_logger.method_calls)
+    assert token not in logged
+    assert "private@example.com" not in logged
+
+
+@pytest.mark.parametrize(
+    "login_url",
+    [None, "https://admin.example.com/login"],
+)
+async def test_password_reset_complete_email_uses_published_template(
+    mock_post, set_api_key, login_url
+):
+    await email_service.send_password_reset_complete_email("user@example.com", login_url)
+
+    payload = mock_post.call_args.kwargs["json"]
+    assert payload == {
+        "to": ["user@example.com"],
+        "template": {
+            "id": "password-reset-complete",
+            "variables": {
+                "loginurl": login_url
+                or f"{email_service.settings.app_base_url.rstrip('/')}/auth/login"
+            },
+        },
+    }
+    assert not ({"from", "subject", "html", "text", "react"} & payload.keys())
+
+
 # ---------------------------------------------------------------------------
 # HTML 이스케이프 (URL 인젝션 방어)
 # ---------------------------------------------------------------------------

@@ -18,6 +18,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from src.lib.scheduler import cleanup_expired_tokens, publish_due_episodes
 from src.models.user import (
     EmailVerification,
+    PasswordReset,
     RefreshToken,
     SignupEmailVerification,
     TrustedDevice,
@@ -234,6 +235,32 @@ async def test_cleanup_covers_trusted_devices_and_email_verifications(
 
     assert deleted["trusted_devices"] == 1
     assert deleted["email_verifications"] == 1
+
+
+async def test_cleanup_password_resets_keeps_unexpired_cooldown_row(
+    db_session: AsyncSession, user: User
+):
+    expired = PasswordReset(
+        user_id=user.id,
+        token_hash=uuid.uuid4().hex + uuid.uuid4().hex,
+        credential_tag=uuid.uuid4().hex + uuid.uuid4().hex,
+        expires_at=_past(),
+        used_at=_past(),
+    )
+    valid = PasswordReset(
+        user_id=user.id,
+        token_hash=uuid.uuid4().hex + uuid.uuid4().hex,
+        credential_tag=uuid.uuid4().hex + uuid.uuid4().hex,
+        expires_at=_future(),
+        used_at=_past(),
+    )
+    db_session.add_all([expired, valid])
+    await db_session.commit()
+
+    deleted = await cleanup_expired_tokens(db_session)
+
+    assert deleted["password_resets"] == 1
+    assert (await db_session.exec(select(PasswordReset))).all() == [valid]
 
 
 def _signup_verification(
