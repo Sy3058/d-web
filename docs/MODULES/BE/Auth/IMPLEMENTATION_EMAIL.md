@@ -5,6 +5,8 @@
 > 문자열 변수 `loginurl`로 발송한다. 두 요청은 `from`·`subject`를 생략해 템플릿 설정을 사용한다.
 > 기존 계정용 인증 링크 재발송 HTML은 `EMAIL_FROM`을 사용하므로 해당 환경변수는 유지한다.
 > 현재 가입 계약은 [가입 전 이메일 인증 구현](./IMPLEMENTATION_SIGNUP_PREVERIFICATION.md)을 따른다.
+> 2026-11-27 사용자가 게시한 alias로 중복 가입 안내를 변경했다. 비밀번호 찾기의
+> Google 전용·미등록 주소 안내와 재설정·완료 메일 계약은 [비밀번호 재설정 구현](./IMPLEMENTATION_PASSWORD_RESET.md)을 따른다.
 
 | 항목 | 내용 |
 |------|------|

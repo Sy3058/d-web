@@ -13,6 +13,8 @@
 
 > **2026-11-23 후속 변경**: 사용자 요청으로 이메일 인증번호 확인 후 계정을 만드는 순서로 변경한다. 비밀번호 재입력(#68)·표시 버튼과 API/독자 도메인 분리 시 로그인 표시도 함께 수정한다. 현재 계약과 검증 범위는 [가입 전 이메일 인증 구현](../MODULES/BE/Auth/IMPLEMENTATION_SIGNUP_PREVERIFICATION.md)을 따른다. 아래 C/E/G의 가입 후 인증 설명은 초기 구현 이력이다.
 
+> **2026-11-27 비밀번호 복구 보완**: 이메일 재설정은 owner도 지원한다. 기존 TOTP를 보존하고 갱신 세션·신뢰 기기를 폐기한다. 독자 사이트에서 재설정하면 owner도 독자 완료 화면과 로그인 안내를 유지한다. 관리자 로그인 시의 TOTP 요구는 유지한다. [구현과 검증](../MODULES/BE/Auth/IMPLEMENTATION_PASSWORD_RESET.md)을 따른다.
+
 ---
 
 ## 선행: 백엔드 스켈레톤 복원
@@ -343,7 +345,7 @@ git stash pop stash@{0}
 | 항목 | 이동처 | 근거 |
 |------|--------|------|
 | 카카오 OAuth (AUTH-03) | M1.5 이후 | 비즈앱 사업자 서류 필요 (Q20) |
-| 비밀번호 재설정 (AUTH-05) | P1 사이클 | PRD 우선순위 |
+| 비밀번호 재설정 (AUTH-05) | 2026-11-26 사용자 요청으로 구현 | [이메일 복구 구현과 검증](../MODULES/BE/Auth/IMPLEMENTATION_PASSWORD_RESET.md), 실제 메일·브라우저 확인 별도 |
 | 회원 탈퇴 (AUTH-07) | P1 사이클 | soft delete + 닉네임 익명화, 결제 5년 보관 연계 |
 | `require_verified_email` 실제 차단 | M3(결제) / M4(댓글) | M1은 가드 함수만 제공 |
 | 알림 설정 UI | M6 | 마이페이지 placeholder만 |

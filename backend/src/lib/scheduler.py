@@ -23,7 +23,13 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.config import settings
 from src.lib.db import async_session_maker
-from src.models.user import EmailVerification, RefreshToken, SignupEmailVerification, TrustedDevice
+from src.models.user import (
+    EmailVerification,
+    PasswordReset,
+    RefreshToken,
+    SignupEmailVerification,
+    TrustedDevice,
+)
 from src.models.work import Episode
 from src.services.payment_reconciliation_service import reconcile_payments
 from src.services.payment_webhook_service import process_webhook_receipts
@@ -37,7 +43,7 @@ PUBLISH_POLL_SECONDS = 60
 # 만료 토큰 정리 주기(시간). 기동 직후 1회 + 이후 24시간마다.
 CLEANUP_INTERVAL_HOURS = 24
 
-_CLEANUP_MODELS = (RefreshToken, TrustedDevice, EmailVerification)
+_CLEANUP_MODELS = (RefreshToken, TrustedDevice, EmailVerification, PasswordReset)
 
 
 async def publish_due_episodes(session: AsyncSession) -> int:
@@ -85,7 +91,7 @@ async def publish_due_episodes(session: AsyncSession) -> int:
 async def cleanup_expired_tokens(session: AsyncSession) -> dict[str, int]:
     """수명이 끝난 토큰과 가입 인증 행 삭제 (#57). 반환 = 테이블별 삭제 행 수.
 
-    기존 세 토큰 테이블은 expires_at 경과 시 삭제한다. revoked_at 행을 만료 전에
+    토큰 테이블은 expires_at 경과 시 삭제한다. revoked_at 행을 만료 전에
     지우면 refresh 회전 재사용 탐지(M1 C4)의 근거가 사라져 세션 전체 revoke가 조용한 401로
     퇴화한다 - 이슈 #57 본문("revoked 삭제")과의 의도적 차이. 만료되면 revoked
     여부와 무관하게 삭제되므로 결국 전부 정리된다.

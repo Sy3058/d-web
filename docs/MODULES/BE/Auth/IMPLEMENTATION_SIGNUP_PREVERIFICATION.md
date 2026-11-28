@@ -56,7 +56,7 @@ REST 요청의 `template.id`에 alias를 넣고 `template.variables.verifycode`�
 전달한다. `verifycode`는 템플릿에서도 String 타입으로 정의해 앞자리 0을 보존한다.
 인증번호 발송에는 별도 `html`·`text`·`react`와 `from`·`subject`를 보내지 않는다.
 발신자와 제목은 게시된 템플릿의 From·Subject를 사용한다. 유효시간 안내는 서버의
-10분 정책에 맞춘다. 중복 가입 안내도 alias `already-registered`와 문자열 변수 `loginurl`로
+10분 정책에 맞춘다. 중복 가입 안내도 현재 alias `already-registered`(2026-11-27 사용자 승인 변경)과 문자열 변수 `loginurl`로
 발송하며 템플릿의 From·Subject를 사용한다. 기존 계정의 인증 링크 재발송은 HTML 메일과
 `EMAIL_FROM`을 계속 사용하므로 환경변수는 유지한다. 템플릿의 From도 Resend에서 검증된
 도메인이어야 한다.
